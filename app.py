@@ -51,6 +51,27 @@ def load_user(user_id):
 with app.app_context():
     db.create_all()
 
+    # ── One-time admin bootstrap (idempotent — safe on every restart) ──
+    _admin_email = os.environ.get("ADMIN_EMAIL")
+    _admin_password = os.environ.get("ADMIN_PASSWORD")
+    if _admin_email and _admin_password and not User.query.filter_by(email=_admin_email).first():
+        _admin = User(
+            first_name=os.environ.get("ADMIN_FIRST_NAME", "Admin"),
+            last_name=os.environ.get("ADMIN_LAST_NAME", "EduPrompt"),
+            email=_admin_email,
+            role="admin",
+        )
+        _admin.set_password(_admin_password)
+        db.session.add(_admin)
+        db.session.flush()
+        db.session.add(Subscription(
+            user_id=_admin.id, plan="premium", status="active",
+            expires_at=datetime.utcnow() + timedelta(days=3650),
+            docs_used=0, docs_limit=999999,
+        ))
+        db.session.commit()
+        print(f"✅ Admin account bootstrapped: {_admin_email}")
+
 
 # ── STATIC REFERENCE DATA ────────────────────────────────────────────────────
 DOCUMENT_TYPES = {
