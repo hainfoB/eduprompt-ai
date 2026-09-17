@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="theme-color" content="#102a53"/>
+<title>{% block title %}EduPrompt AI{% endblock %}</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>"/>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+Arabic:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root{--navy:#102a53;--navy2:#173f6c;--navy3:#0c1f3f;--orange:#f97316;--orange2:#e95e0b;--ivory:#f6f8fc;--paper:#ffffff;--sky:#eaf2fb;--ink:#142a44;--muted:#60758d;--line:#dce6f0;--green:#10b981;--red:#ef4444;--radius:14px;--shadow:0 4px 24px rgba(16,42,83,.10);--shadow2:0 8px 40px rgba(16,42,83,.14);--ease:cubic-bezier(.23,1,.32,1)}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--ivory);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
+
+.topbar{position:sticky;top:0;z-index:100;height:64px;background:rgba(255,255,255,.97);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);box-shadow:0 2px 14px rgba(16,42,83,.06);display:flex;align-items:center;padding:0 max(5vw,20px);justify-content:space-between;gap:16px}
+.brand{display:flex;align-items:center;gap:11px;text-decoration:none;color:inherit}
+.brand-icon{width:42px;height:42px;background:var(--navy);color:var(--orange);border-radius:10px 3px 10px 3px;box-shadow:3px 3px 0 var(--orange);display:grid;place-items:center;font-size:20px;font-weight:900;flex-shrink:0}
+.brand-text{line-height:1.2}
+.brand-text b{display:block;font-size:15px;color:var(--navy)}
+.brand-text small{font-size:10px;color:var(--muted)}
+
+.nav-links{display:flex;align-items:center;gap:6px}
+.nav-link{padding:8px 14px;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted);text-decoration:none;transition:all .18s var(--ease);display:flex;align-items:center;gap:6px}
+.nav-link:hover{background:var(--sky);color:var(--navy)}
+.nav-link.active{background:var(--navy);color:#fff}
+.nav-link.logout{color:var(--red)}
+.nav-link.logout:hover{background:#fef2f2}
+
+@media(max-width:700px){
+  .nav-link span.label{display:none}
+  .topbar{padding:0 12px}
+}
+
+.flash-wrap{max-width:780px;margin:16px auto 0;padding:0 max(4vw,16px)}
+.flash{padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.flash-success{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}
+.flash-error{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5}
+
+.footer{text-align:center;padding:30px 20px;font-size:11px;color:var(--muted);border-top:1px solid var(--line);margin-top:40px}
+</style>
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="{{ url_for('home') }}">
+    <div class="brand-icon">📚</div>
+    <div class="brand-text">
+      <b>EduPrompt AI</b>
+      <small>Plateforme Pédagogique</small>
+    </div>
+  </a>
+  {% if current_user.is_authenticated %}
+  <div class="nav-links">
+    <a class="nav-link {% if request.endpoint=='generator' %}active{% endif %}" href="{{ url_for('generator') }}">
+      <i class="bi bi-stars"></i><span class="label">Générateur</span>
+    </a>
+    <a class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+      <i class="bi bi-speedometer2"></i><span class="label">Tableau de bord</span>
+    </a>
+    {% if current_user.role == 'admin' %}
+    <a class="nav-link {% if request.endpoint=='admin_licenses' %}active{% endif %}" href="{{ url_for('admin_licenses') }}">
+      <i class="bi bi-key-fill"></i><span class="label">Codes</span>
+    </a>
+    {% endif %}
+    <a class="nav-link logout" href="{{ url_for('logout') }}">
+      <i class="bi bi-box-arrow-right"></i><span class="label">Déconnexion</span>
+    </a>
+  </div>
+  {% endif %}
+</header>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-wrap">
+    {% for category, msg in messages %}
+    <div class="flash flash-{{ category }}">
+      <i class="bi {% if category=='success' %}bi-check-circle-fill{% else %}bi-exclamation-circle-fill{% endif %}"></i>
+      {{ msg }}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
+
+{% block content %}{% endblock %}
+
+<footer class="footer">
+  EduPrompt AI · Plateforme d'enseignement par IA
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% block extra_scripts %}{% endblock %}
+</body>
+</html>

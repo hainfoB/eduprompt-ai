@@ -1,0 +1,659 @@
+{% extends "base.html" %}
+{% block title %}Générateur — EduPrompt AI{% endblock %}
+{% block extra_head %}
+<style>
+.main-card{max-width:820px;margin:28px auto 40px;padding:0 max(4vw,16px)}
+.card-shell{background:var(--paper);border-radius:var(--radius);box-shadow:var(--shadow2);overflow:hidden}
+.card-header-bar{background:var(--navy);padding:16px 24px;display:flex;align-items:center;gap:10px;color:#fff}
+.dot{width:10px;height:10px;border-radius:50%}
+.dot-r{background:#ff5f57}.dot-y{background:#febc2e}.dot-g{background:#28c840}
+.card-header-bar span{font-size:12px;color:rgba(255,255,255,.6);margin-inline-start:8px}
+.card-body-inner{padding:26px 26px 30px}
+
+.section-block{margin-bottom:26px;padding-bottom:22px;border-bottom:1px solid var(--line)}
+.section-block:last-of-type{border-bottom:none}
+.section-title{font-size:12px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px;display:flex;align-items:center;gap:7px}
+.section-title i{color:var(--orange)}
+
+.form-group{margin-bottom:16px}
+.form-label{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;display:flex;align-items:center;gap:6px}
+.form-control,.form-select{border:1.5px solid var(--line);border-radius:10px;padding:10px 13px;font-size:14px;width:100%;background:var(--ivory);transition:all .2s}
+.form-control:focus,.form-select:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(249,115,22,.13);outline:none;background:#fff}
+
+.doc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:9px}
+.doc-chip{border:1.5px solid var(--line);border-radius:10px;padding:11px 13px;cursor:pointer;transition:all .18s;background:var(--ivory);display:flex;align-items:center;gap:9px;font-size:12px;font-weight:600;color:var(--muted)}
+.doc-chip:hover{border-color:var(--orange);color:var(--navy);background:#fff}
+.doc-chip.selected{border-color:var(--orange);background:#fff7ed;color:var(--navy);box-shadow:0 2px 10px rgba(249,115,22,.18)}
+.doc-chip i{font-size:17px;color:var(--orange)}
+
+.fmt-toggle{display:flex;gap:8px}
+.fmt-btn{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:10px;background:var(--ivory);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:6px}
+.fmt-btn.active{border-color:var(--navy);background:var(--navy);color:#fff}
+
+/* COLOR PICKERS */
+.color-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.color-item{text-align:center}
+.color-item label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:8px}
+.color-swatch-wrap{position:relative;width:100%;height:52px;border-radius:12px;overflow:hidden;border:2px solid var(--line);cursor:pointer}
+.color-swatch-wrap input[type=color]{position:absolute;inset:-4px;width:calc(100% + 8px);height:calc(100% + 8px);border:none;cursor:pointer;padding:0}
+.color-hex{font-size:10px;color:var(--muted);margin-top:5px;font-family:monospace}
+.color-preview-box{margin-top:18px;border-radius:10px;overflow:hidden;border:1.5px solid var(--line)}
+.cp-header{padding:10px 14px;font-size:11px;font-weight:700;color:#fff;text-align:center}
+.cp-body{padding:14px;background:#fff}
+.cp-h1{font-size:13px;font-weight:800;margin-bottom:6px}
+.cp-text{font-size:11px;line-height:1.5}
+
+/* SOURCES (NotebookLM-style) */
+.source-tabs{display:flex;gap:8px;margin-bottom:14px}
+.source-tab{flex:1;padding:9px;border-radius:9px;border:1.5px solid var(--line);background:var(--ivory);font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;text-align:center}
+.source-tab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+.source-panel{display:none}
+.source-panel.active{display:block}
+.url-input-row{display:flex;gap:8px;margin-bottom:8px}
+.url-input-row input{flex:1}
+.btn-icon{background:var(--sky);border:1.5px solid var(--line);border-radius:9px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--navy);flex-shrink:0}
+.btn-icon:hover{background:var(--navy);color:#fff}
+.btn-icon.remove{color:var(--red)}
+.dropzone{border:2px dashed var(--line);border-radius:12px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;background:var(--ivory)}
+.dropzone:hover,.dropzone.dragover{border-color:var(--orange);background:#fff7ed}
+.dropzone i{font-size:28px;color:var(--orange);margin-bottom:8px}
+.dropzone p{margin:0;font-size:12px;color:var(--muted)}
+.file-list{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.file-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--sky);border-radius:8px;font-size:12px;color:var(--navy)}
+.file-chip i.type-icon{color:var(--orange)}
+.file-chip .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-chip .remove-file{cursor:pointer;color:var(--red)}
+.sources-status{font-size:11px;color:var(--muted);margin-top:8px;display:none}
+.sources-status.visible{display:block}
+
+.quota-banner{background:var(--sky);border:1.5px solid #c8ddf0;border-radius:10px;padding:12px 16px;font-size:12px;color:var(--navy2);margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.quota-banner.low{background:#fff7ed;border-color:#fed7aa;color:#c2410c}
+.quota-banner a{color:inherit;font-weight:700}
+
+.apikey-box{background:linear-gradient(135deg,#eef4fb,#f0f7ff);border:1.5px solid #c8ddf0;border-radius:12px;padding:16px 18px;margin-bottom:22px}
+.apikey-input-wrap{position:relative;display:flex;align-items:center}
+.apikey-input-wrap .form-control{padding-inline-end:44px}
+.apikey-toggle{position:absolute;inset-inline-end:12px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px}
+.apikey-tip{font-size:11px;color:var(--muted);margin-top:8px}
+.apikey-tip a{color:var(--orange);font-weight:600;text-decoration:none}
+
+.error-msg{display:none;background:#fef2f2;border:1.5px solid #fca5a5;color:#991b1b;border-radius:10px;padding:14px 18px;font-size:13px;margin-top:14px;align-items:center;gap:8px}
+.error-msg.visible{display:flex}
+
+.btn-generate{width:100%;background:linear-gradient(135deg,var(--orange),var(--orange2));color:#fff;border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 8px 24px rgba(249,115,22,.3);transition:all .2s;display:flex;align-items:center;justify-content:center;gap:9px}
+.btn-generate:hover:not(:disabled){transform:translateY(-2px)}
+.btn-generate:disabled{opacity:.6;cursor:not-allowed;transform:none}
+
+.result-panel{max-width:820px;margin:0 auto 60px;padding:0 max(4vw,16px);display:none}
+.result-panel.visible{display:block}
+.result-card{background:var(--paper);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.result-header{background:linear-gradient(90deg,var(--navy),var(--navy2));color:#fff;padding:16px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.result-header h3{margin:0;font-size:14px;font-weight:700}
+.btn-download{background:var(--orange);color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px}
+.btn-download:disabled{opacity:.6;cursor:not-allowed}
+
+.loader-wrap{display:none;flex-direction:column;align-items:center;gap:16px;padding:52px;color:var(--muted)}
+.loader-wrap.visible{display:flex}
+.loader-ring{width:52px;height:52px;border:4px solid var(--line);border-top-color:var(--orange);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-text{font-size:13px;font-weight:600;text-align:center}
+
+.result-content{padding:26px;font-size:14px;line-height:1.85;color:var(--ink);max-height:520px;overflow-y:auto}
+.result-content h1{font-size:19px;color:var(--navy);margin:18px 0 8px;font-weight:800;border-bottom:2px solid var(--orange);padding-bottom:6px}
+.result-content h2{font-size:15px;color:var(--navy2);margin:14px 0 6px;font-weight:700}
+.result-content strong{color:var(--navy)}
+.result-content ul{padding-inline-start:22px}
+
+.toast-wrap{position:fixed;bottom:24px;right:24px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast-item{background:var(--navy);color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+
+@media(max-width:600px){
+  .card-body-inner{padding:18px 16px 24px}
+  .color-grid{grid-template-columns:repeat(2,1fr)}
+  .doc-grid{grid-template-columns:1fr 1fr}
+  .result-content{padding:18px;max-height:400px}
+}
+</style>
+{% endblock %}
+{% block content %}
+
+<main class="main-card">
+  <div class="card-shell">
+    <div class="card-header-bar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <span>Nouveau document pédagogique</span>
+    </div>
+    <div class="card-body-inner">
+
+      <!-- QUOTA -->
+      <div class="quota-banner" id="quotaBanner">
+        <span id="quotaText"><i class="bi bi-hourglass-split"></i> Chargement du quota…</span>
+        <a href="{{ url_for('upgrade') }}" id="quotaUpgradeLink" style="display:none">Passer Pro →</a>
+      </div>
+
+      <!-- API KEY -->
+      <div class="apikey-box">
+        <label class="form-label"><i class="bi bi-key-fill"></i> Clé API Gemini</label>
+        <div class="apikey-input-wrap">
+          <input type="password" id="apiKey" class="form-control" placeholder="AIza... ou AQ.Ab8..." autocomplete="off"/>
+          <button class="apikey-toggle" type="button" onclick="toggleApiVis()"><i class="bi bi-eye" id="eyeIcon"></i></button>
+        </div>
+        <div class="apikey-tip">💡 Clé gratuite sur <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a></div>
+      </div>
+
+      <!-- TEACHER INFO -->
+      <div class="section-block">
+        <div class="section-title"><i class="bi bi-person-badge-fill"></i> Informations enseignant</div>
+        <div class="row g-2">
+          <div class="col-sm-6">
+            <div class="form-group mb-0">
+              <label class="form-label">Prénom</label>
+              <input type="text" id="teacherFirst" class="form-control" value="{{ current_user.first_name }}"/>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-group mb-0">
+              <label class="form-label">Nom</label>
+              <input type="text" id="teacherLast" class="form-control" value="{{ current_user.last_name }}"/>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LESSON INFO -->
+      <div class="section-block">
+        <div class="section-title"><i class="bi bi-mortarboard-fill"></i> Détails de la leçon</div>
+        <div class="row g-2 mb-3">
+          <div class="col-sm-6">
+            <div class="form-group mb-0">
+              <label class="form-label">Niveau</label>
+              <select id="levelSel" class="form-select">
+                <option value="">-- Sélectionner --</option>
+                {% for l in levels['fr'] %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="form-group mb-0">
+              <label class="form-label">Palier / Année</label>
+              <input type="text" id="palierInput" class="form-control" placeholder="Ex. : 3ème année"/>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Matière</label>
+          <select id="subjectSel" class="form-select">
+            <option value="">-- Sélectionner --</option>
+            {% for s in subjects['fr'] %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Sujet de la leçon</label>
+          <input type="text" id="lessonInput" class="form-control" placeholder="Ex. : Les fractions — comparer et représenter"/>
+        </div>
+      </div>
+
+      <!-- DOC TYPE -->
+      <div class="section-block">
+        <div class="section-title"><i class="bi bi-file-earmark-richtext-fill"></i> Type de document</div>
+        <div class="doc-grid" id="docGrid"></div>
+      </div>
+
+      <!-- SOURCES (NotebookLM style) -->
+      <div class="section-block">
+        <div class="section-title"><i class="bi bi-collection-fill"></i> Sources (optionnel — style NotebookLM)</div>
+        <div class="source-tabs">
+          <div class="source-tab active" data-tab="links" onclick="switchSourceTab('links')"><i class="bi bi-link-45deg"></i> Liens</div>
+          <div class="source-tab" data-tab="files" onclick="switchSourceTab('files')"><i class="bi bi-file-earmark-arrow-up"></i> Fichiers</div>
+        </div>
+
+        <div class="source-panel active" id="panel-links">
+          <div id="urlList"></div>
+          <button type="button" class="btn-icon" onclick="addUrlField()" style="width:auto;padding:0 14px;gap:6px;font-size:12px;font-weight:700">
+            <i class="bi bi-plus-lg"></i> Ajouter un lien
+          </button>
+        </div>
+
+        <div class="source-panel" id="panel-files">
+          <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+            <i class="bi bi-cloud-arrow-up-fill"></i>
+            <p><strong>Cliquez</strong> ou glissez vos fichiers ici<br>PDF, Word (.docx), TXT — 15 Mo max</p>
+          </div>
+          <input type="file" id="fileInput" multiple accept=".pdf,.docx,.txt,.md" style="display:none"/>
+          <div class="file-list" id="fileList"></div>
+        </div>
+
+        <div class="sources-status" id="sourcesStatus"></div>
+      </div>
+
+      <!-- COLORS -->
+      <div class="section-block">
+        <div class="section-title"><i class="bi bi-palette-fill"></i> Design du document (jusqu'à 3 couleurs)</div>
+        <div class="color-grid">
+          <div class="color-item">
+            <label>Couleur 1 — En-tête</label>
+            <div class="color-swatch-wrap" style="background:#102a53">
+              <input type="color" id="colorC1" value="#102a53" oninput="updateColorPreview()"/>
+            </div>
+            <div class="color-hex" id="hexC1">#102a53</div>
+          </div>
+          <div class="color-item">
+            <label>Couleur 2 — Titres</label>
+            <div class="color-swatch-wrap" style="background:#f97316">
+              <input type="color" id="colorC2" value="#f97316" oninput="updateColorPreview()"/>
+            </div>
+            <div class="color-hex" id="hexC2">#f97316</div>
+          </div>
+          <div class="color-item">
+            <label>Couleur 3 — Accents</label>
+            <div class="color-swatch-wrap" style="background:#173f6c">
+              <input type="color" id="colorC3" value="#173f6c" oninput="updateColorPreview()"/>
+            </div>
+            <div class="color-hex" id="hexC3">#173f6c</div>
+          </div>
+          <div class="color-item">
+            <label>Texte du corps</label>
+            <div class="color-swatch-wrap" style="background:#1a1a1a">
+              <input type="color" id="colorText" value="#1a1a1a" oninput="updateColorPreview()"/>
+            </div>
+            <div class="color-hex" id="hexText">#1a1a1a</div>
+          </div>
+        </div>
+
+        <div class="color-preview-box">
+          <div class="cp-header" id="cpHeader" style="background:#102a53">Enseignant(e) · Niveau · Palier · Matière</div>
+          <div class="cp-body">
+            <div class="cp-h1" id="cpH1" style="color:#f97316">Titre de section</div>
+            <div class="cp-text" id="cpText" style="color:#1a1a1a">Aperçu du texte du corps de votre document avec la couleur choisie.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- FORMAT -->
+      <div class="section-block">
+        <div class="section-title"><i class="bi bi-download"></i> Format du fichier</div>
+        <div class="fmt-toggle">
+          <button class="fmt-btn active" data-fmt="docx" onclick="setFmt(this)"><i class="bi bi-file-word-fill"></i> Word (.docx)</button>
+          <button class="fmt-btn" data-fmt="pdf" onclick="setFmt(this)"><i class="bi bi-file-pdf-fill"></i> PDF</button>
+        </div>
+      </div>
+
+      <div class="error-msg" id="errorMsg"><i class="bi bi-exclamation-circle-fill"></i><span id="errorText"></span></div>
+
+      <button class="btn-generate" id="generateBtn" onclick="generate()">
+        <i class="bi bi-stars"></i> Générer le document
+      </button>
+    </div>
+  </div>
+</main>
+
+<section class="result-panel" id="resultPanel">
+  <div class="result-card">
+    <div class="result-header">
+      <h3><i class="bi bi-file-text-fill me-2"></i>Aperçu du document</h3>
+      <button class="btn-download" id="downloadBtn" onclick="downloadDoc()"><i class="bi bi-download"></i> Télécharger</button>
+    </div>
+    <div class="loader-wrap" id="loaderWrap">
+      <div class="loader-ring"></div>
+      <div class="loader-text" id="loaderText">Génération en cours…</div>
+    </div>
+    <div class="result-content" id="resultContent"></div>
+  </div>
+</section>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+// ── DATA ──────────────────────────────────────────────────────────────────────
+const DOC_TYPES_FR = {{ doc_types['fr'] | tojson }};
+const DOC_ICONS = {
+  lesson_plan:"bi-journal-text", activity:"bi-pencil", quiz:"bi-check2-square",
+  rubric:"bi-grid-3x3-gap-fill", differentiated:"bi-layers-fill",
+  summary:"bi-card-text", course_plan:"bi-calendar3", homework:"bi-house-fill"
+};
+
+let docType="lesson_plan", fmt="docx", lastContent="", sourcesContext="";
+let uploadedFiles=[];
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+buildDocGrid();
+addUrlField();
+loadQuota();
+
+function buildDocGrid(){
+  const grid=document.getElementById("docGrid");
+  grid.innerHTML="";
+  DOC_TYPES_FR.forEach(dt=>{
+    const icon=DOC_ICONS[dt.id]||"bi-file-earmark";
+    const c=document.createElement("div");
+    c.className="doc-chip"+(dt.id===docType?" selected":"");
+    c.innerHTML=`<i class="bi ${icon}"></i><span>${dt.label}</span>`;
+    c.onclick=()=>{document.querySelectorAll(".doc-chip").forEach(x=>x.classList.remove("selected"));c.classList.add("selected");docType=dt.id};
+    grid.appendChild(c);
+  });
+}
+
+// ── QUOTA ─────────────────────────────────────────────────────────────────────
+async function loadQuota(){
+  try{
+    const res=await fetch("/api/check-quota");
+    const data=await res.json();
+    const banner=document.getElementById("quotaBanner");
+    const text=document.getElementById("quotaText");
+    const link=document.getElementById("quotaUpgradeLink");
+    if(data.plan==="trial"){
+      text.innerHTML=`<i class="bi bi-hourglass-split"></i> Forfait ${data.plan_label} — <strong>${data.remaining}</strong> document(s) restant(s)`;
+      link.style.display="inline";
+      if(data.remaining<=1) banner.classList.add("low");
+    } else {
+      text.innerHTML=`<i class="bi bi-star-fill"></i> Forfait ${data.plan_label} — Génération illimitée`;
+      link.style.display="none";
+    }
+    if(!data.allowed){
+      document.getElementById("generateBtn").disabled=true;
+      showError("Quota épuisé. Passez au forfait Pro pour continuer.");
+    }
+  }catch(e){}
+}
+
+// ── COLORS ────────────────────────────────────────────────────────────────────
+function updateColorPreview(){
+  const c1=document.getElementById("colorC1").value;
+  const c2=document.getElementById("colorC2").value;
+  const c3=document.getElementById("colorC3").value;
+  const ct=document.getElementById("colorText").value;
+
+  document.getElementById("hexC1").textContent=c1;
+  document.getElementById("hexC2").textContent=c2;
+  document.getElementById("hexC3").textContent=c3;
+  document.getElementById("hexText").textContent=ct;
+
+  document.querySelectorAll(".color-swatch-wrap")[0].style.background=c1;
+  document.querySelectorAll(".color-swatch-wrap")[1].style.background=c2;
+  document.querySelectorAll(".color-swatch-wrap")[2].style.background=c3;
+  document.querySelectorAll(".color-swatch-wrap")[3].style.background=ct;
+
+  document.getElementById("cpHeader").style.background=c1;
+  document.getElementById("cpH1").style.color=c2;
+  document.getElementById("cpText").style.color=ct;
+}
+
+function getColors(){
+  return {
+    c1: document.getElementById("colorC1").value,
+    c2: document.getElementById("colorC2").value,
+    c3: document.getElementById("colorC3").value,
+    text: document.getElementById("colorText").value,
+  };
+}
+
+// ── SOURCES: TABS ─────────────────────────────────────────────────────────────
+function switchSourceTab(tab){
+  document.querySelectorAll(".source-tab").forEach(t=>t.classList.toggle("active", t.dataset.tab===tab));
+  document.querySelectorAll(".source-panel").forEach(p=>p.classList.remove("active"));
+  document.getElementById("panel-"+tab).classList.add("active");
+}
+
+// ── SOURCES: URLs ─────────────────────────────────────────────────────────────
+function addUrlField(){
+  const wrap=document.getElementById("urlList");
+  const row=document.createElement("div");
+  row.className="url-input-row";
+  row.innerHTML=`
+    <input type="url" class="form-control url-field" placeholder="https://exemple.com/article"/>
+    <button type="button" class="btn-icon remove" onclick="this.parentElement.remove()"><i class="bi bi-trash"></i></button>
+  `;
+  wrap.appendChild(row);
+}
+
+// ── SOURCES: FILES ────────────────────────────────────────────────────────────
+const dropzone=document.getElementById("dropzone");
+const fileInput=document.getElementById("fileInput");
+
+fileInput.addEventListener("change", e=>addFiles(e.target.files));
+dropzone.addEventListener("dragover", e=>{e.preventDefault();dropzone.classList.add("dragover")});
+dropzone.addEventListener("dragleave", ()=>dropzone.classList.remove("dragover"));
+dropzone.addEventListener("drop", e=>{
+  e.preventDefault();
+  dropzone.classList.remove("dragover");
+  addFiles(e.dataTransfer.files);
+});
+
+function addFiles(fileListObj){
+  Array.from(fileListObj).forEach(f=>uploadedFiles.push(f));
+  renderFileList();
+}
+function removeFile(idx){
+  uploadedFiles.splice(idx,1);
+  renderFileList();
+}
+function renderFileList(){
+  const list=document.getElementById("fileList");
+  list.innerHTML="";
+  uploadedFiles.forEach((f,idx)=>{
+    const icon = f.name.endsWith(".pdf") ? "bi-file-earmark-pdf-fill" :
+                 f.name.endsWith(".docx") ? "bi-file-earmark-word-fill" : "bi-file-earmark-text-fill";
+    const chip=document.createElement("div");
+    chip.className="file-chip";
+    chip.innerHTML=`<i class="bi ${icon} type-icon"></i><span class="fname">${f.name}</span><i class="bi bi-x-circle-fill remove-file" onclick="removeFile(${idx})"></i>`;
+    list.appendChild(chip);
+  });
+}
+
+// ── SOURCES: EXTRACT (called before generation) ───────────────────────────────
+async function extractSources(){
+  const urls = Array.from(document.querySelectorAll(".url-field")).map(i=>i.value.trim()).filter(Boolean);
+  if(uploadedFiles.length===0 && urls.length===0) return "";
+
+  const statusEl=document.getElementById("sourcesStatus");
+  statusEl.classList.add("visible");
+  statusEl.innerHTML=`<i class="bi bi-arrow-repeat"></i> Extraction des sources en cours…`;
+
+  const formData=new FormData();
+  uploadedFiles.forEach(f=>formData.append("files", f));
+  formData.append("urls", urls.join("\n"));
+
+  try{
+    const res=await fetch("/api/extract-sources", {method:"POST", body:formData});
+    const data=await res.json();
+    if(data.warnings && data.warnings.length){
+      statusEl.innerHTML=`⚠️ ${data.warnings.join(" · ")}`;
+    } else {
+      statusEl.innerHTML=`✅ ${urls.length+uploadedFiles.length} source(s) intégrée(s) au contexte`;
+    }
+    return data.context || "";
+  }catch(e){
+    statusEl.innerHTML=`⚠️ Erreur lors de l'extraction des sources`;
+    return "";
+  }
+}
+
+// ── UI HELPERS ────────────────────────────────────────────────────────────────
+function setFmt(btn){document.querySelectorAll(".fmt-btn").forEach(b=>b.classList.remove("active"));btn.classList.add("active");fmt=btn.dataset.fmt}
+function showError(msg){const e=document.getElementById("errorMsg");if(msg){document.getElementById("errorText").textContent=msg;e.classList.add("visible")}else e.classList.remove("visible")}
+function toggleApiVis(){const i=document.getElementById("apiKey");const eye=document.getElementById("eyeIcon");if(i.type==="password"){i.type="text";eye.className="bi bi-eye-slash"}else{i.type="password";eye.className="bi bi-eye"}}
+function toast(msg){const w=document.getElementById("toastWrap");const t=document.createElement("div");t.className="toast-item";t.textContent=msg;w.appendChild(t);setTimeout(()=>t.remove(),3500)}
+function updateLoaderMsg(msg){const el=document.getElementById("loaderText");if(el) el.textContent=msg}
+
+// ── PROMPT BUILDER ────────────────────────────────────────────────────────────
+function buildPrompt(level, palier, subject, lesson, dt, ctx){
+  const docLabels={}; DOC_TYPES_FR.forEach(d=>docLabels[d.id]=d.label);
+  const docLabel=docLabels[dt]||dt;
+
+  let sourceBlock = "";
+  if(ctx && ctx.trim()){
+    sourceBlock = `\n\nSOURCES FOURNIES PAR L'ENSEIGNANT (à utiliser comme référence principale, dans le style NotebookLM — base ton contenu sur ces sources autant que possible) :\n${ctx}\n`;
+  }
+
+  return `Tu es un expert pédagogique spécialisé dans le curriculum algérien officiel.
+Niveau : ${level} | Palier : ${palier} | Matière : ${subject} | Leçon : ${lesson}
+Crée un document de type : ${docLabel}
+${sourceBlock}
+Instructions :
+- Respecte le programme officiel algérien et les compétences visées
+- Si des sources sont fournies ci-dessus, base ton contenu sur elles en priorité
+- Rédige en français pédagogique clair et structuré
+- Structure avec des titres clairs (# pour titres principaux, ## pour sous-titres)
+- Inclus : compétences visées, objectifs, ressources, évaluation
+- Rends le document directement exploitable en classe
+- Ne répète pas les informations d'en-tête (nom, niveau, matière) dans le corps — elles sont déjà affichées séparément
+- Document complet, détaillé et professionnel
+
+Génère le document maintenant :`;
+}
+
+// ── GEMINI CALL (multi-model + retry) ─────────────────────────────────────────
+const GEMINI_MODELS = ["gemini-2.5-flash-preview-05-20","gemini-2.5-flash","gemini-2.0-flash","gemini-1.5-flash","gemini-1.5-pro"];
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+async function callOneModel(apiKey, model, prompt, retries=3){
+  for(let attempt=0; attempt<retries; attempt++){
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    let res;
+    try{
+      res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:4096,temperature:0.7}})});
+    }catch(e){ throw {type:"network", msg:e.message}; }
+
+    if(res.ok){
+      const data=await res.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    }
+    const errData=await res.json().catch(()=>({error:{message:"HTTP "+res.status}}));
+    const msg=errData.error?.message || "HTTP "+res.status;
+
+    if(res.status===404 || msg.includes("no longer available") || msg.includes("not found"))
+      throw {type:"skip", msg};
+    if(res.status===429 || res.status===503 || msg.includes("high demand") || msg.includes("overloaded") || msg.includes("quota")){
+      const wait=(attempt+1)*4000;
+      updateLoaderMsg(`⏳ Modèle surchargé, nouvelle tentative dans ${wait/1000}s…`);
+      await sleep(wait);
+      continue;
+    }
+    if(res.status===400 || res.status===401 || res.status===403) throw {type:"auth", msg};
+    throw {type:"skip", msg};
+  }
+  throw {type:"skip", msg:"Max retries reached on "+model};
+}
+
+async function callGemini(apiKey, prompt){
+  let lastMsg="";
+  for(const model of GEMINI_MODELS){
+    updateLoaderMsg(`🤖 Essai du modèle ${model}…`);
+    try{ return await callOneModel(apiKey, model, prompt); }
+    catch(e){
+      if(e.type==="auth") throw new Error(e.msg);
+      if(e.type==="network") throw new Error(e.msg);
+      lastMsg=e.msg;
+    }
+  }
+  throw new Error("Tous les modèles sont indisponibles. "+lastMsg);
+}
+
+// ── GENERATE ──────────────────────────────────────────────────────────────────
+async function generate(){
+  showError(null);
+  const apiKey=document.getElementById("apiKey").value.trim();
+  const level=document.getElementById("levelSel").value;
+  const palier=document.getElementById("palierInput").value.trim();
+  const subject=document.getElementById("subjectSel").value;
+  const lesson=document.getElementById("lessonInput").value.trim();
+
+  if(!apiKey) return showError("Veuillez entrer une clé API");
+  if(!level) return showError("Veuillez sélectionner un niveau");
+  if(!subject) return showError("Veuillez sélectionner une matière");
+  if(!lesson) return showError("Veuillez saisir le sujet de la leçon");
+
+  // Quota check
+  const quotaRes=await fetch("/api/check-quota");
+  const quotaData=await quotaRes.json();
+  if(!quotaData.allowed){
+    return showError("Quota épuisé. Passez au forfait Pro pour continuer à générer des documents.");
+  }
+
+  const btn=document.getElementById("generateBtn");
+  btn.disabled=true;
+
+  const panel=document.getElementById("resultPanel");
+  panel.classList.add("visible");
+  setTimeout(()=>panel.scrollIntoView({behavior:"smooth",block:"start"}),80);
+  document.getElementById("loaderWrap").classList.add("visible");
+  document.getElementById("resultContent").innerHTML="";
+  document.getElementById("downloadBtn").disabled=true;
+
+  try{
+    updateLoaderMsg("📚 Lecture des sources…");
+    sourcesContext = await extractSources();
+
+    updateLoaderMsg("✍️ Génération du contenu…");
+    const prompt=buildPrompt(level, palier, subject, lesson, docType, sourcesContext);
+    const text=await callGemini(apiKey, prompt);
+    lastContent=text;
+
+    document.getElementById("loaderWrap").classList.remove("visible");
+    renderContent(text);
+    document.getElementById("downloadBtn").disabled=false;
+
+    // Log usage
+    await fetch("/api/log-usage",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({lesson,subject,level,palier,doc_type:docType,format:fmt})});
+    loadQuota();
+    toast("✅ Document généré !");
+  }catch(e){
+    document.getElementById("loaderWrap").classList.remove("visible");
+    panel.classList.remove("visible");
+    showError("Erreur API — Vérifiez votre clé et réessayez. ("+e.message+")");
+  }finally{
+    btn.disabled=false;
+  }
+}
+
+function renderContent(text){
+  const el=document.getElementById("resultContent");
+  let html=text
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/^### (.+)$/gm,"<h3>$1</h3>")
+    .replace(/^## (.+)$/gm,"<h2>$1</h2>")
+    .replace(/^# (.+)$/gm,"<h1>$1</h1>")
+    .replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")
+    .replace(/^[-•] (.+)$/gm,"<li>$1</li>")
+    .replace(/(<li>[\s\S]*?<\/li>)/g,"<ul>$1</ul>")
+    .replace(/\n\n/g,"<br><br>").replace(/\n/g,"<br>");
+  el.innerHTML=html;
+}
+
+// ── DOWNLOAD ──────────────────────────────────────────────────────────────────
+async function downloadDoc(){
+  if(!lastContent) return;
+  const btn=document.getElementById("downloadBtn");
+  btn.disabled=true;
+  try{
+    const res=await fetch("/api/download",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        content:lastContent, lang:"fr", format:fmt,
+        teacher_first:document.getElementById("teacherFirst").value,
+        teacher_last:document.getElementById("teacherLast").value,
+        level:document.getElementById("levelSel").value,
+        palier:document.getElementById("palierInput").value,
+        subject:document.getElementById("subjectSel").value,
+        lesson:document.getElementById("lessonInput").value,
+        colors:getColors(),
+      })});
+    if(!res.ok) throw new Error("Download failed");
+    const blob=await res.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=document.getElementById("lessonInput").value.slice(0,40).replace(/\s+/g,"_")+"."+fmt;
+    a.click();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    showError("Erreur téléchargement: "+e.message);
+  }finally{
+    btn.disabled=false;
+  }
+}
+</script>
+{% endblock %}

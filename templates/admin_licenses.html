@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Codes de licence — Admin{% endblock %}
+{% block extra_head %}
+<style>
+.adm-wrap{max-width:800px;margin:32px auto;padding:0 max(4vw,16px)}
+.adm-header h1{font-size:22px;font-weight:800;color:var(--navy);margin:0 0 20px}
+.gen-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:22px;margin-bottom:28px}
+.gen-form{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.gen-form .form-group{flex:1;min-width:140px}
+.form-label{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:6px;display:block}
+.form-select,.form-control{border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;width:100%;background:var(--ivory)}
+.btn-gen{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:11px 20px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+
+.codes-table{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.code-row{display:grid;grid-template-columns:1.5fr 80px 80px 90px 1fr;gap:10px;padding:12px 18px;align-items:center;border-bottom:1px solid var(--line);font-size:12px}
+.code-row.header{background:var(--navy);color:#fff;font-weight:700;text-transform:uppercase;font-size:10px}
+.code-val{font-family:monospace;font-weight:700;color:var(--navy)}
+.status-used{color:var(--muted)}
+.status-avail{color:var(--green);font-weight:700}
+</style>
+{% endblock %}
+{% block content %}
+<div class="adm-wrap">
+  <div class="adm-header"><h1>🔑 Gestion des codes de licence</h1></div>
+
+  <div class="gen-card">
+    <form method="POST" class="gen-form">
+      <div class="form-group">
+        <label class="form-label">Forfait</label>
+        <select name="plan" class="form-select">
+          <option value="pro">Pro</option>
+          <option value="premium">Premium</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Durée (jours)</label>
+        <input type="number" name="days" class="form-control" value="365"/>
+      </div>
+      <button type="submit" class="btn-gen"><i class="bi bi-plus-circle-fill"></i> Générer un code</button>
+    </form>
+  </div>
+
+  <div class="codes-table">
+    <div class="code-row header">
+      <div>Code</div><div>Forfait</div><div>Durée</div><div>Statut</div><div>Utilisé par</div>
+    </div>
+    {% for c in codes %}
+    <div class="code-row">
+      <div class="code-val">{{ c.code }}</div>
+      <div>{{ c.plan }}</div>
+      <div>{{ c.duration_days }}j</div>
+      <div class="{% if c.used %}status-used{% else %}status-avail{% endif %}">
+        {{ "Utilisé" if c.used else "Disponible" }}
+      </div>
+      <div>{{ c.used_by if c.used_by else "—" }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

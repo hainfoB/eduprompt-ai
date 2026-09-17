@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Mise à niveau — EduPrompt AI{% endblock %}
+{% block extra_head %}
+<style>
+.up-wrap{max-width:640px;margin:40px auto;padding:0 max(4vw,16px)}
+.up-header{text-align:center;margin-bottom:28px}
+.up-header h1{font-size:24px;font-weight:800;color:var(--navy);margin:0 0 8px}
+.up-header p{font-size:13px;color:var(--muted)}
+
+.plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px}
+.plan-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:24px;text-align:center;border:2px solid transparent}
+.plan-card.featured{border-color:var(--orange)}
+.plan-card .badge-top{background:var(--orange);color:#fff;font-size:10px;font-weight:800;padding:3px 10px;border-radius:99px;display:inline-block;margin-bottom:10px}
+.plan-card h3{font-size:16px;font-weight:800;color:var(--navy);margin:0 0 6px}
+.plan-card .price{font-size:28px;font-weight:800;color:var(--ink);margin:10px 0}
+.plan-card .price small{font-size:12px;font-weight:500;color:var(--muted)}
+.plan-card ul{list-style:none;padding:0;margin:16px 0;text-align:left;font-size:13px;color:var(--muted)}
+.plan-card ul li{padding:6px 0;display:flex;align-items:center;gap:8px}
+.plan-card ul li i{color:var(--green)}
+
+.activate-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:28px}
+.activate-card h3{font-size:15px;font-weight:800;color:var(--navy);margin:0 0 6px}
+.activate-card p{font-size:12px;color:var(--muted);margin:0 0 18px}
+.form-control{border:1.5px solid var(--line);border-radius:10px;padding:11px 14px;font-size:14px;width:100%;background:var(--ivory);text-transform:uppercase;letter-spacing:1px;text-align:center;font-weight:700}
+.btn-activate{width:100%;background:linear-gradient(135deg,var(--orange),var(--orange2));color:#fff;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;margin-top:14px}
+
+.contact-note{background:var(--sky);border-radius:10px;padding:14px 18px;font-size:12px;color:var(--navy2);margin-top:18px;display:flex;gap:8px;align-items:flex-start}
+</style>
+{% endblock %}
+{% block content %}
+<div class="up-wrap">
+  <div class="up-header">
+    <h1>Passez au niveau supérieur</h1>
+    <p>Débloquez la génération illimitée de documents pédagogiques</p>
+  </div>
+
+  <div class="plan-grid">
+    <div class="plan-card">
+      <h3>Pro</h3>
+      <div class="price">2500 DA <small>/ an</small></div>
+      <ul>
+        <li><i class="bi bi-check-circle-fill"></i> Documents illimités</li>
+        <li><i class="bi bi-check-circle-fill"></i> Toutes les couleurs personnalisées</li>
+        <li><i class="bi bi-check-circle-fill"></i> Sources illimitées</li>
+        <li><i class="bi bi-check-circle-fill"></i> Export Word + PDF</li>
+      </ul>
+    </div>
+    <div class="plan-card featured">
+      <span class="badge-top">POPULAIRE</span>
+      <h3>Premium</h3>
+      <div class="price">4500 DA <small>/ an</small></div>
+      <ul>
+        <li><i class="bi bi-check-circle-fill"></i> Tout Pro inclus</li>
+        <li><i class="bi bi-check-circle-fill"></i> Support prioritaire</li>
+        <li><i class="bi bi-check-circle-fill"></i> Modèles de documents exclusifs</li>
+        <li><i class="bi bi-check-circle-fill"></i> Accès anticipé aux nouveautés</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="activate-card">
+    <h3><i class="bi bi-key-fill"></i> Activer un code de licence</h3>
+    <p>Vous avez reçu un code après votre paiement ? Entrez-le ci-dessous.</p>
+    <form method="POST">
+      <input type="text" name="code" class="form-control" placeholder="XXXXXXXXXXXX" required maxlength="40"/>
+      <button type="submit" class="btn-activate"><i class="bi bi-unlock-fill"></i> Activer mon compte</button>
+    </form>
+    <div class="contact-note">
+      <i class="bi bi-info-circle-fill"></i>
+      <div>Pas encore de code ? Contactez-nous par WhatsApp ou email pour effectuer le paiement (virement bancaire, CCP) et recevoir votre code d'activation instantanément.</div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Créer un compte — EduPrompt AI{% endblock %}
+{% block extra_head %}
+<style>
+.auth-wrap{max-width:460px;margin:50px auto;padding:0 20px}
+.auth-card{background:var(--paper);border-radius:var(--radius);box-shadow:var(--shadow2);padding:36px 32px}
+.auth-header{text-align:center;margin-bottom:28px}
+.auth-header .icon{width:56px;height:56px;background:var(--navy);border-radius:14px;display:grid;place-items:center;margin:0 auto 16px;font-size:26px}
+.auth-header h2{font-size:20px;font-weight:800;color:var(--navy);margin:0 0 6px}
+.auth-header p{font-size:13px;color:var(--muted);margin:0}
+.form-group{margin-bottom:16px}
+.form-label{font-size:12px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;display:block}
+.form-control{border:1.5px solid var(--line);border-radius:10px;padding:11px 14px;font-size:14px;width:100%;background:var(--ivory);transition:all .2s}
+.form-control:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(249,115,22,.13);outline:none;background:#fff}
+.btn-auth{width:100%;background:linear-gradient(135deg,var(--orange),var(--orange2));color:#fff;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 8px 24px rgba(249,115,22,.3);transition:all .2s;margin-top:6px}
+.btn-auth:hover{transform:translateY(-2px)}
+.auth-switch{text-align:center;margin-top:20px;font-size:13px;color:var(--muted)}
+.auth-switch a{color:var(--orange);font-weight:700;text-decoration:none}
+.trial-badge{background:var(--sky);border:1px solid #c8ddf0;border-radius:10px;padding:10px 14px;font-size:12px;color:var(--navy2);margin-bottom:20px;display:flex;align-items:center;gap:8px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="icon">📝</div>
+      <h2>Créer un compte</h2>
+      <p>Commencez gratuitement dès aujourd'hui</p>
+    </div>
+    <div class="trial-badge">
+      <i class="bi bi-gift-fill"></i>
+      14 jours d'essai gratuit — 5 documents inclus
+    </div>
+    <form method="POST">
+      <div class="row g-2">
+        <div class="col-6">
+          <div class="form-group">
+            <label class="form-label">Prénom</label>
+            <input type="text" name="first_name" class="form-control" required autofocus/>
+          </div>
+        </div>
+        <div class="col-6">
+          <div class="form-group">
+            <label class="form-label">Nom</label>
+            <input type="text" name="last_name" class="form-control" required/>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" name="email" class="form-control" placeholder="vous@exemple.com" required/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mot de passe</label>
+        <input type="password" name="password" class="form-control" placeholder="Min. 6 caractères" required/>
+      </div>
+      <button type="submit" class="btn-auth"><i class="bi bi-rocket-takeoff-fill"></i> Créer mon compte</button>
+    </form>
+    <div class="auth-switch">
+      Déjà un compte ? <a href="{{ url_for('login') }}">Se connecter</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
