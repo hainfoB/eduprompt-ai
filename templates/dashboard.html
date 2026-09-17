@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Tableau de bord — EduPrompt AI{% endblock %}
+{% block title %}{{ t.nav_dashboard }} — EduPrompt AI{% endblock %}
 {% block extra_head %}
 <style>
 .dash-wrap{max-width:900px;margin:32px auto;padding:0 max(4vw,16px)}
@@ -46,67 +46,64 @@
 {% block content %}
 <div class="dash-wrap">
   <div class="dash-header">
-    <h1>Bonjour, {{ current_user.first_name }} 👋</h1>
-    <p>Voici un aperçu de votre compte et de votre activité</p>
+    <h1>{{ t.dash_hello }}, {{ current_user.first_name }} 👋</h1>
+    <p>{{ t.dash_subtitle }}</p>
   </div>
 
-  <!-- STATS -->
   <div class="stat-grid">
     <div class="stat-card">
-      <div class="label">Forfait actuel</div>
+      <div class="label">{{ t.stat_plan }}</div>
       <div class="value">
         <span class="plan-badge plan-{{ sub.plan }}">
           <i class="bi bi-star-fill"></i> {{ sub.plan_label() }}
         </span>
       </div>
       {% if sub.expires_at %}
-      <div class="sub">Expire le {{ sub.expires_at.strftime('%d/%m/%Y') }}</div>
+      <div class="sub">{{ t.expires_on }} {{ sub.expires_at.strftime('%d/%m/%Y') }}</div>
       {% endif %}
     </div>
 
     <div class="stat-card">
-      <div class="label">Documents restants</div>
+      <div class="label">{{ t.stat_docs_remaining }}</div>
       <div class="value">{{ sub.remaining() }}</div>
       {% if sub.plan == 'trial' %}
       <div class="progress-bar-wrap">
         <div class="progress-bar-fill" style="width:{{ (sub.docs_used / sub.docs_limit * 100) if sub.docs_limit else 0 }}%"></div>
       </div>
-      <div class="sub">{{ sub.docs_used }} / {{ sub.docs_limit }} utilisés</div>
+      <div class="sub">{{ sub.docs_used }} / {{ sub.docs_limit }} {{ t.stat_docs_used }}</div>
       {% else %}
-      <div class="sub">Génération illimitée</div>
+      <div class="sub">{{ t.plan_unlimited }}</div>
       {% endif %}
     </div>
 
     <div class="stat-card">
-      <div class="label">Documents créés</div>
+      <div class="label">{{ t.stat_docs_created }}</div>
       <div class="value">{{ docs|length }}</div>
-      <div class="sub">Historique récent</div>
+      <div class="sub">{{ t.stat_recent }}</div>
     </div>
   </div>
 
-  <!-- UPGRADE CTA -->
   {% if sub.plan == 'trial' %}
   <div class="upgrade-cta">
     <div>
-      <h3>🚀 Passez à la version Pro</h3>
-      <p>Documents illimités, sans restriction de temps</p>
+      <h3>{{ t.upgrade_title }}</h3>
+      <p>{{ t.upgrade_subtitle }}</p>
     </div>
     <a href="{{ url_for('upgrade') }}" class="btn-upgrade">
-      <i class="bi bi-arrow-up-circle-fill"></i> Mettre à niveau
+      <i class="bi bi-arrow-up-circle-fill"></i> {{ t.btn_upgrade }}
     </a>
   </div>
   {% endif %}
 
-  <!-- DOCUMENT HISTORY -->
-  <div class="section-title"><i class="bi bi-clock-history"></i> Historique des documents</div>
+  <div class="section-title"><i class="bi bi-clock-history"></i> {{ t.history_title }}</div>
   <div class="doc-table">
     {% if docs %}
     <div class="doc-row header">
-      <div>Leçon</div><div>Matière</div><div>Niveau</div><div>Type</div><div>Format</div>
+      <div>{{ t.table_lesson }}</div><div>{{ t.table_subject }}</div><div>{{ t.table_level }}</div><div>{{ t.table_type }}</div><div>{{ t.table_format }}</div>
     </div>
     {% for d in docs %}
     <div class="doc-row">
-      <div class="doc-title">{{ d.title or "Sans titre" }}</div>
+      <div class="doc-title">{{ d.title or t.no_title }}</div>
       <div class="doc-meta">{{ d.subject }}</div>
       <div class="doc-meta">{{ d.level }}</div>
       <div class="doc-meta">{{ d.doc_type }}</div>
@@ -116,8 +113,8 @@
     {% else %}
     <div class="empty-state">
       <i class="bi bi-inbox" style="font-size:32px;opacity:.3"></i>
-      <p style="margin-top:10px">Aucun document généré pour le moment.</p>
-      <a href="{{ url_for('generator') }}" style="color:var(--orange);font-weight:700;text-decoration:none">Créer votre premier document →</a>
+      <p style="margin-top:10px">{{ t.empty_docs }}</p>
+      <a href="{{ url_for('generator') }}" style="color:var(--orange);font-weight:700;text-decoration:none">{{ t.create_first_doc }}</a>
     </div>
     {% endif %}
   </div>

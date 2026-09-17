@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Codes de licence — Admin{% endblock %}
+{% block title %}{{ t.admin_lic_title }}{% endblock %}
 {% block extra_head %}
 <style>
 .adm-wrap{max-width:800px;margin:32px auto;padding:0 max(4vw,16px)}
@@ -21,28 +21,28 @@
 {% endblock %}
 {% block content %}
 <div class="adm-wrap">
-  <div class="adm-header"><h1>🔑 Gestion des codes de licence</h1></div>
+  <div class="adm-header"><h1>{{ t.admin_lic_title }}</h1></div>
 
   <div class="gen-card">
     <form method="POST" class="gen-form">
       <div class="form-group">
-        <label class="form-label">Forfait</label>
+        <label class="form-label">{{ t.label_plan }}</label>
         <select name="plan" class="form-select">
-          <option value="pro">Pro</option>
-          <option value="premium">Premium</option>
+          <option value="pro">{{ t.plan_pro_name }}</option>
+          <option value="premium">{{ t.plan_premium_name }}</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Durée (jours)</label>
+        <label class="form-label">{{ t.label_days }}</label>
         <input type="number" name="days" class="form-control" value="365"/>
       </div>
-      <button type="submit" class="btn-gen"><i class="bi bi-plus-circle-fill"></i> Générer un code</button>
+      <button type="submit" class="btn-gen"><i class="bi bi-plus-circle-fill"></i> {{ t.btn_generate_code }}</button>
     </form>
   </div>
 
   <div class="codes-table">
     <div class="code-row header">
-      <div>Code</div><div>Forfait</div><div>Durée</div><div>Statut</div><div>Utilisé par</div>
+      <div>{{ t.table_code }}</div><div>{{ t.label_plan }}</div><div>{{ t.table_duration }}</div><div>{{ t.table_status }}</div><div>{{ t.table_used_by }}</div>
     </div>
     {% for c in codes %}
     <div class="code-row">
@@ -50,7 +50,7 @@
       <div>{{ c.plan }}</div>
       <div>{{ c.duration_days }}j</div>
       <div class="{% if c.used %}status-used{% else %}status-avail{% endif %}">
-        {{ "Utilisé" if c.used else "Disponible" }}
+        {{ t.status_used if c.used else t.status_available }}
       </div>
       <div>{{ c.used_by if c.used_by else "—" }}</div>
     </div>

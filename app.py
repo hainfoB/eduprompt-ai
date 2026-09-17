@@ -1,9 +1,12 @@
 import os
 import re
 import io
+import secrets
+import string
 from datetime import datetime, timedelta
 
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, flash
+from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, flash, session
+
 from flask_login import (LoginManager, login_user, logout_user, login_required,
                           current_user)
 
@@ -23,6 +26,19 @@ from reportlab.lib.enums import TA_RIGHT, TA_CENTER, TA_LEFT
 
 from models import db, User, Subscription, Document, LicenseCode, create_trial_subscription
 from utils import build_sources_context
+from translations import get_translations, TRANSLATIONS
+
+SUPPORTED_LANGS = ("ar", "fr", "en")
+
+
+def current_lang():
+    return session.get("lang", "fr")
+
+
+def tr(key, **kwargs):
+    """Translate a key for the current session language, with optional .format() args."""
+    text = get_translations(current_lang()).get(key, key)
+    return text.format(**kwargs) if kwargs else text
 
 # ── APP SETUP ──────────────────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -40,12 +56,32 @@ db.init_app(app)
 
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
-login_manager.login_message = "Veuillez vous connecter pour accéder à cette page."
 
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+
+@app.before_request
+def ensure_lang():
+    if "lang" not in session:
+        best = request.accept_languages.best_match(SUPPORTED_LANGS)
+        session["lang"] = best or "fr"
+    login_manager.login_message = tr("login_required_message")
+
+
+@app.context_processor
+def inject_i18n():
+    lang = current_lang()
+    return dict(lang=lang, t=get_translations(lang), is_rtl=(lang == "ar"))
+
+
+@app.route("/set-lang/<lang>")
+def set_lang(lang):
+    if lang in SUPPORTED_LANGS:
+        session["lang"] = lang
+    return redirect(request.referrer or url_for("home"))
 
 
 with app.app_context():
@@ -140,15 +176,15 @@ def register():
         password   = request.form.get("password", "")
 
         if not all([first_name, last_name, email, password]):
-            flash("Tous les champs sont obligatoires.", "error")
+            flash(tr("flash_all_fields_required"), "error")
             return render_template("register.html")
 
         if len(password) < 6:
-            flash("Le mot de passe doit contenir au moins 6 caractères.", "error")
+            flash(tr("flash_password_min_length"), "error")
             return render_template("register.html")
 
         if User.query.filter_by(email=email).first():
-            flash("Un compte existe déjà avec cet email.", "error")
+            flash(tr("flash_email_exists"), "error")
             return render_template("register.html")
 
         user = User(first_name=first_name, last_name=last_name, email=email)
@@ -159,7 +195,7 @@ def register():
         db.session.commit()
 
         login_user(user)
-        flash("Bienvenue ! Votre essai gratuit de 14 jours a commencé.", "success")
+        flash(tr("flash_welcome_trial"), "success")
         return redirect(url_for("generator"))
 
     return render_template("register.html")
@@ -178,7 +214,7 @@ def login():
         if user and user.check_password(password):
             login_user(user, remember=True)
             return redirect(url_for("generator"))
-        flash("Email ou mot de passe incorrect.", "error")
+        flash(tr("flash_wrong_credentials"), "error")
 
     return render_template("login.html")
 
@@ -207,7 +243,7 @@ def upgrade():
         lic = LicenseCode.query.filter_by(code=code_str, used=False).first()
 
         if not lic:
-            flash("Code invalide ou déjà utilisé.", "error")
+            flash(tr("flash_invalid_code"), "error")
             return render_template("upgrade.html")
 
         sub = current_user.subscription
@@ -222,7 +258,7 @@ def upgrade():
         lic.used_at = datetime.utcnow()
 
         db.session.commit()
-        flash(f"🎉 Compte mis à niveau vers {sub.plan_label()} !", "success")
+        flash(tr("flash_upgraded", plan=sub.plan_label()), "success")
         return redirect(url_for("dashboard"))
 
     return render_template("upgrade.html")
@@ -233,7 +269,7 @@ def upgrade():
 @login_required
 def admin_licenses():
     if current_user.role != "admin":
-        flash("Accès réservé aux administrateurs.", "error")
+        flash(tr("flash_admin_only"), "error")
         return redirect(url_for("dashboard"))
 
     if request.method == "POST":
@@ -242,10 +278,92 @@ def admin_licenses():
         lic = LicenseCode(plan=plan, duration_days=days)
         db.session.add(lic)
         db.session.commit()
-        flash(f"Code généré : {lic.code}", "success")
+        flash(tr("flash_license_generated", code=lic.code), "success")
 
     codes = LicenseCode.query.order_by(LicenseCode.created_at.desc()).limit(50).all()
     return render_template("admin_licenses.html", codes=codes)
+
+
+def generate_password(length=12):
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+# ── ADMIN: create & manage teacher accounts ──────────────────────────────────
+@app.route("/admin/teachers", methods=["GET", "POST"])
+@login_required
+def admin_teachers():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    generated = None  # (email, password) shown once after creation
+
+    if request.method == "POST":
+        first_name = request.form.get("first_name", "").strip()
+        last_name  = request.form.get("last_name", "").strip()
+        email      = request.form.get("email", "").strip().lower()
+        plan       = request.form.get("plan", "trial")
+        custom_pw  = request.form.get("password", "").strip()
+
+        if not all([first_name, last_name, email]):
+            flash(tr("flash_teacher_fields_required"), "error")
+        elif User.query.filter_by(email=email).first():
+            flash(tr("flash_email_exists"), "error")
+        else:
+            password = custom_pw or generate_password()
+            user = User(first_name=first_name, last_name=last_name, email=email)
+            user.set_password(password)
+            db.session.add(user)
+            db.session.flush()
+
+            if plan == "trial":
+                create_trial_subscription(user)
+            else:
+                db.session.add(Subscription(
+                    user_id=user.id, plan=plan, status="active",
+                    expires_at=datetime.utcnow() + timedelta(days=365),
+                    docs_used=0, docs_limit=999999,
+                ))
+
+            db.session.commit()
+            generated = (email, password)
+            flash(tr("flash_teacher_created", name=f"{first_name} {last_name}"), "success")
+
+    teachers = User.query.filter_by(role="user").order_by(User.created_at.desc()).all()
+    return render_template("admin_teachers.html", teachers=teachers, generated=generated)
+
+
+@app.route("/admin/teachers/<int:user_id>/reset-password", methods=["POST"])
+@login_required
+def admin_reset_password(user_id):
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    user = User.query.get_or_404(user_id)
+    new_password = generate_password()
+    user.set_password(new_password)
+    db.session.commit()
+    flash(tr("flash_password_reset", email=user.email, password=new_password), "success")
+    return redirect(url_for("admin_teachers"))
+
+
+@app.route("/admin/teachers/<int:user_id>/delete", methods=["POST"])
+@login_required
+def admin_delete_teacher(user_id):
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    user = User.query.get_or_404(user_id)
+    if user.role == "admin":
+        flash(tr("flash_admin_delete_protected"), "error")
+    else:
+        db.session.delete(user)
+        db.session.commit()
+        flash(tr("flash_teacher_deleted", email=user.email), "success")
+    return redirect(url_for("admin_teachers"))
 
 
 # ── MAIN GENERATOR PAGE ───────────────────────────────────────────────────────
@@ -323,7 +441,14 @@ def set_cell_background(cell, hex_color):
     cell._tc.get_or_add_tcPr().append(shd)
 
 
-def make_docx(content, meta, colors_cfg):
+HEADER_LABELS = {
+    "fr": ["Enseignant(e)", "Niveau", "Palier", "Matière"],
+    "en": ["Teacher", "Level", "Grade", "Subject"],
+    "ar": ["الأستاذ(ة)", "المستوى", "الطور", "المادة"],
+}
+
+
+def make_docx(content, meta, colors_cfg, lang="fr"):
     """
     meta: dict with teacher_first, teacher_last, level, palier, subject, lesson
     colors_cfg: dict with c1 (header bg), c2 (H1), c3 (accent/H2), text (body text)
@@ -354,7 +479,7 @@ def make_docx(content, meta, colors_cfg):
     table.style = "Table Grid"
     table.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    headers = ["Enseignant(e)", "Niveau", "Palier", "Matière"]
+    headers = HEADER_LABELS.get(lang, HEADER_LABELS["fr"])
     values  = [
         f"{meta.get('teacher_first','')} {meta.get('teacher_last','')}".strip() or "—",
         meta.get("level", "—"),
@@ -471,7 +596,7 @@ def make_pdf(content, meta, colors_cfg, lang="fr"):
 
     teacher = f"{meta.get('teacher_first','')} {meta.get('teacher_last','')}".strip() or "—"
     table_data = [
-        ["Enseignant(e)", "Niveau", "Palier", "Matière"],
+        HEADER_LABELS.get(lang, HEADER_LABELS["fr"]),
         [teacher, meta.get("level","—"), meta.get("palier","—"), meta.get("subject","—")],
     ]
     tbl = Table(table_data, colWidths=[4.2*cm]*4)
@@ -536,7 +661,7 @@ def download():
         return send_file(buf, as_attachment=True, download_name=f"{safe_name}.pdf",
                          mimetype="application/pdf")
     else:
-        buf = make_docx(content, meta, colors_cfg)
+        buf = make_docx(content, meta, colors_cfg, lang)
         return send_file(buf, as_attachment=True, download_name=f"{safe_name}.docx",
                          mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 

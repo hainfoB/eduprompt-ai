@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}{{ t.admin_teach_title }}{% endblock %}
+{% block extra_head %}
+<style>
+.adm-wrap{max-width:900px;margin:32px auto;padding:0 max(4vw,16px)}
+.adm-header h1{font-size:22px;font-weight:800;color:var(--navy);margin:0 0 20px}
+
+.create-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:22px;margin-bottom:24px}
+.create-card h3{font-size:14px;font-weight:800;color:var(--navy);margin:0 0 16px;display:flex;align-items:center;gap:8px}
+.form-label{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:6px;display:block}
+.form-control,.form-select{border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;width:100%;background:var(--ivory)}
+.btn-create{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:11px 22px;font-size:13px;font-weight:700;cursor:pointer;margin-top:6px}
+.hint{font-size:11px;color:var(--muted);margin-top:5px}
+
+.credentials-box{background:#ecfdf5;border:1.5px solid #a7f3d0;border-radius:12px;padding:18px 20px;margin-bottom:24px}
+.credentials-box h4{margin:0 0 10px;font-size:13px;font-weight:800;color:#065f46;display:flex;align-items:center;gap:7px}
+.cred-row{display:flex;justify-content:space-between;align-items:center;background:#fff;border-radius:8px;padding:10px 14px;margin-bottom:6px;font-size:13px}
+.cred-row span:first-child{color:var(--muted);font-weight:600}
+.cred-row span:last-child{font-family:monospace;font-weight:700;color:var(--navy)}
+.credentials-warn{font-size:11px;color:#92400e;background:#fffbeb;border-radius:8px;padding:8px 12px;margin-top:8px}
+
+.teachers-table{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.t-row{display:grid;grid-template-columns:1.6fr 1.8fr 100px 130px 90px 90px;gap:10px;padding:12px 18px;align-items:center;border-bottom:1px solid var(--line);font-size:12px}
+.t-row.header{background:var(--navy);color:#fff;font-weight:700;text-transform:uppercase;font-size:10px}
+.t-name{font-weight:700;color:var(--ink)}
+.t-email{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-tag{padding:3px 8px;border-radius:6px;font-size:10px;font-weight:800;text-align:center}
+.plan-trial{background:#fff7ed;color:#c2410c}
+.plan-pro{background:#ecfdf5;color:#065f46}
+.plan-premium{background:#f5f3ff;color:#6d28d9}
+.btn-mini{border:none;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer}
+.btn-reset{background:var(--sky);color:var(--navy)}
+.btn-delete{background:#fef2f2;color:var(--red)}
+.empty-state{text-align:center;padding:32px;color:var(--muted);font-size:13px}
+
+@media(max-width:700px){
+  .t-row{grid-template-columns:1fr;gap:4px}
+  .t-row.header{display:none}
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="adm-wrap">
+  <div class="adm-header"><h1>{{ t.admin_teach_title }}</h1></div>
+
+  {% if generated %}
+  <div class="credentials-box">
+    <h4><i class="bi bi-check-circle-fill"></i> {{ t.credentials_title }}</h4>
+    <div class="cred-row"><span>{{ t.label_email }}</span><span>{{ generated[0] }}</span></div>
+    <div class="cred-row"><span>{{ t.label_password }}</span><span>{{ generated[1] }}</span></div>
+    <div class="credentials-warn">
+      <i class="bi bi-exclamation-triangle-fill"></i>
+      {{ t.credentials_warn }}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="create-card">
+    <h3><i class="bi bi-person-plus-fill"></i> {{ t.create_teacher_title }}</h3>
+    <form method="POST">
+      <div class="row g-2 mb-2">
+        <div class="col-sm-6">
+          <label class="form-label">{{ t.label_first_name }}</label>
+          <input type="text" name="first_name" class="form-control" required/>
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">{{ t.label_last_name }}</label>
+          <input type="text" name="last_name" class="form-control" required/>
+        </div>
+      </div>
+      <div class="row g-2 mb-2">
+        <div class="col-sm-6">
+          <label class="form-label">{{ t.label_email }}</label>
+          <input type="email" name="email" class="form-control" required/>
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">{{ t.label_plan }}</label>
+          <select name="plan" class="form-select">
+            <option value="trial">{{ t.plan_trial_option }}</option>
+            <option value="pro">{{ t.plan_pro_option }}</option>
+            <option value="premium">{{ t.plan_premium_option }}</option>
+          </select>
+        </div>
+      </div>
+      <label class="form-label">{{ t.label_password_optional }}</label>
+      <input type="text" name="password" class="form-control" placeholder="—"/>
+      <div class="hint">{{ t.password_hint }}</div>
+      <button type="submit" class="btn-create"><i class="bi bi-plus-circle-fill"></i> {{ t.btn_create_account }}</button>
+    </form>
+  </div>
+
+  <div class="teachers-table">
+    {% if teachers %}
+    <div class="t-row header">
+      <div>{{ t.table_name }}</div><div>{{ t.label_email }}</div><div>{{ t.label_plan }}</div><div>{{ t.table_created }}</div><div></div><div></div>
+    </div>
+    {% for tch in teachers %}
+    <div class="t-row">
+      <div class="t-name">{{ tch.full_name }}</div>
+      <div class="t-email">{{ tch.email }}</div>
+      <div><span class="plan-tag plan-{{ tch.subscription.plan if tch.subscription else 'trial' }}">{{ tch.subscription.plan_label() if tch.subscription else '—' }}</span></div>
+      <div>{{ tch.created_at.strftime('%d/%m/%Y') }}</div>
+      <div>
+        <form method="POST" action="{{ url_for('admin_reset_password', user_id=tch.id) }}" onsubmit="return confirm('{{ t.confirm_reset_pw }} {{ tch.email }} ?')">
+          <button type="submit" class="btn-mini btn-reset"><i class="bi bi-key-fill"></i></button>
+        </form>
+      </div>
+      <div>
+        <form method="POST" action="{{ url_for('admin_delete_teacher', user_id=tch.id) }}" onsubmit="return confirm('{{ t.confirm_delete }} {{ tch.email }} ?')">
+          <button type="submit" class="btn-mini btn-delete"><i class="bi bi-trash-fill"></i></button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">{{ t.empty_teachers }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

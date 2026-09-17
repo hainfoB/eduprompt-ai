@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Mise à niveau — EduPrompt AI{% endblock %}
+{% block title %}{{ t.upgrade_page_title }} — EduPrompt AI{% endblock %}
 {% block extra_head %}
 <style>
 .up-wrap{max-width:640px;margin:40px auto;padding:0 max(4vw,16px)}
@@ -14,7 +14,7 @@
 .plan-card h3{font-size:16px;font-weight:800;color:var(--navy);margin:0 0 6px}
 .plan-card .price{font-size:28px;font-weight:800;color:var(--ink);margin:10px 0}
 .plan-card .price small{font-size:12px;font-weight:500;color:var(--muted)}
-.plan-card ul{list-style:none;padding:0;margin:16px 0;text-align:left;font-size:13px;color:var(--muted)}
+.plan-card ul{list-style:none;padding:0;margin:16px 0;text-align:start;font-size:13px;color:var(--muted)}
 .plan-card ul li{padding:6px 0;display:flex;align-items:center;gap:8px}
 .plan-card ul li i{color:var(--green)}
 
@@ -30,44 +30,44 @@
 {% block content %}
 <div class="up-wrap">
   <div class="up-header">
-    <h1>Passez au niveau supérieur</h1>
-    <p>Débloquez la génération illimitée de documents pédagogiques</p>
+    <h1>{{ t.upgrade_page_title }}</h1>
+    <p>{{ t.upgrade_page_subtitle }}</p>
   </div>
 
   <div class="plan-grid">
     <div class="plan-card">
-      <h3>Pro</h3>
-      <div class="price">2500 DA <small>/ an</small></div>
+      <h3>{{ t.plan_pro_name }}</h3>
+      <div class="price">2500 DA <small>{{ t.per_year }}</small></div>
       <ul>
-        <li><i class="bi bi-check-circle-fill"></i> Documents illimités</li>
-        <li><i class="bi bi-check-circle-fill"></i> Toutes les couleurs personnalisées</li>
-        <li><i class="bi bi-check-circle-fill"></i> Sources illimitées</li>
-        <li><i class="bi bi-check-circle-fill"></i> Export Word + PDF</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_unlimited_docs }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_colors }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_sources }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_export }}</li>
       </ul>
     </div>
     <div class="plan-card featured">
-      <span class="badge-top">POPULAIRE</span>
-      <h3>Premium</h3>
-      <div class="price">4500 DA <small>/ an</small></div>
+      <span class="badge-top">{{ t.popular_badge }}</span>
+      <h3>{{ t.plan_premium_name }}</h3>
+      <div class="price">4500 DA <small>{{ t.per_year }}</small></div>
       <ul>
-        <li><i class="bi bi-check-circle-fill"></i> Tout Pro inclus</li>
-        <li><i class="bi bi-check-circle-fill"></i> Support prioritaire</li>
-        <li><i class="bi bi-check-circle-fill"></i> Modèles de documents exclusifs</li>
-        <li><i class="bi bi-check-circle-fill"></i> Accès anticipé aux nouveautés</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_pro_all }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_priority_support }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_exclusive_templates }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_early_access }}</li>
       </ul>
     </div>
   </div>
 
   <div class="activate-card">
-    <h3><i class="bi bi-key-fill"></i> Activer un code de licence</h3>
-    <p>Vous avez reçu un code après votre paiement ? Entrez-le ci-dessous.</p>
+    <h3><i class="bi bi-key-fill"></i> {{ t.activate_title }}</h3>
+    <p>{{ t.activate_subtitle }}</p>
     <form method="POST">
       <input type="text" name="code" class="form-control" placeholder="XXXXXXXXXXXX" required maxlength="40"/>
-      <button type="submit" class="btn-activate"><i class="bi bi-unlock-fill"></i> Activer mon compte</button>
+      <button type="submit" class="btn-activate"><i class="bi bi-unlock-fill"></i> {{ t.btn_activate }}</button>
     </form>
     <div class="contact-note">
       <i class="bi bi-info-circle-fill"></i>
-      <div>Pas encore de code ? Contactez-nous par WhatsApp ou email pour effectuer le paiement (virement bancaire, CCP) et recevoir votre code d'activation instantanément.</div>
+      <div>{{ t.contact_note }}</div>
     </div>
   </div>
 </div>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Générateur — EduPrompt AI{% endblock %}
+{% block title %}{{ t.nav_generator }} — EduPrompt AI{% endblock %}
 {% block extra_head %}
 <style>
 .main-card{max-width:820px;margin:28px auto 40px;padding:0 max(4vw,16px)}
@@ -30,7 +30,6 @@
 .fmt-btn{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:10px;background:var(--ivory);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:6px}
 .fmt-btn.active{border-color:var(--navy);background:var(--navy);color:#fff}
 
-/* COLOR PICKERS */
 .color-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .color-item{text-align:center}
 .color-item label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:8px}
@@ -43,14 +42,13 @@
 .cp-h1{font-size:13px;font-weight:800;margin-bottom:6px}
 .cp-text{font-size:11px;line-height:1.5}
 
-/* SOURCES (NotebookLM-style) */
 .source-tabs{display:flex;gap:8px;margin-bottom:14px}
 .source-tab{flex:1;padding:9px;border-radius:9px;border:1.5px solid var(--line);background:var(--ivory);font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;text-align:center}
 .source-tab.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 .source-panel{display:none}
 .source-panel.active{display:block}
 .url-input-row{display:flex;gap:8px;margin-bottom:8px}
-.url-input-row input{flex:1}
+.url-input-row input{flex:1;direction:ltr;text-align:left}
 .btn-icon{background:var(--sky);border:1.5px solid var(--line);border-radius:9px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--navy);flex-shrink:0}
 .btn-icon:hover{background:var(--navy);color:#fff}
 .btn-icon.remove{color:var(--red)}
@@ -72,7 +70,7 @@
 
 .apikey-box{background:linear-gradient(135deg,#eef4fb,#f0f7ff);border:1.5px solid #c8ddf0;border-radius:12px;padding:16px 18px;margin-bottom:22px}
 .apikey-input-wrap{position:relative;display:flex;align-items:center}
-.apikey-input-wrap .form-control{padding-inline-end:44px}
+.apikey-input-wrap .form-control{padding-inline-end:44px;direction:ltr;text-align:left}
 .apikey-toggle{position:absolute;inset-inline-end:12px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px}
 .apikey-tip{font-size:11px;color:var(--muted);margin-top:8px}
 .apikey-tip a{color:var(--orange);font-weight:600;text-decoration:none}
@@ -104,7 +102,7 @@
 .result-content strong{color:var(--navy)}
 .result-content ul{padding-inline-start:22px}
 
-.toast-wrap{position:fixed;bottom:24px;right:24px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast-wrap{position:fixed;bottom:24px;inset-inline-end:24px;z-index:999;display:flex;flex-direction:column;gap:8px}
 .toast-item{background:var(--navy);color:#fff;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 6px 20px rgba(0,0,0,.2)}
 
 @media(max-width:600px){
@@ -121,103 +119,106 @@
   <div class="card-shell">
     <div class="card-header-bar">
       <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-      <span>Nouveau document pédagogique</span>
+      <span>{{ t.gen_card_header }}</span>
     </div>
     <div class="card-body-inner">
 
-      <!-- QUOTA -->
       <div class="quota-banner" id="quotaBanner">
-        <span id="quotaText"><i class="bi bi-hourglass-split"></i> Chargement du quota…</span>
-        <a href="{{ url_for('upgrade') }}" id="quotaUpgradeLink" style="display:none">Passer Pro →</a>
+        <span id="quotaText"><i class="bi bi-hourglass-split"></i> {{ t.quota_loading }}</span>
+        <a href="{{ url_for('upgrade') }}" id="quotaUpgradeLink" style="display:none">{{ t.quota_upgrade_link }}</a>
       </div>
 
-      <!-- API KEY -->
       <div class="apikey-box">
-        <label class="form-label"><i class="bi bi-key-fill"></i> Clé API Gemini</label>
+        <label class="form-label"><i class="bi bi-key-fill"></i> {{ t.apikey_label }}</label>
         <div class="apikey-input-wrap">
-          <input type="password" id="apiKey" class="form-control" placeholder="AIza... ou AQ.Ab8..." autocomplete="off"/>
+          <input type="password" id="apiKey" class="form-control" placeholder="AIza... / AQ.Ab8..." autocomplete="off"/>
           <button class="apikey-toggle" type="button" onclick="toggleApiVis()"><i class="bi bi-eye" id="eyeIcon"></i></button>
         </div>
-        <div class="apikey-tip">💡 Clé gratuite sur <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a></div>
+        <div class="apikey-tip">💡 {{ t.apikey_tip }} <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a></div>
       </div>
 
-      <!-- TEACHER INFO -->
       <div class="section-block">
-        <div class="section-title"><i class="bi bi-person-badge-fill"></i> Informations enseignant</div>
+        <div class="section-title"><i class="bi bi-person-badge-fill"></i> {{ t.section_teacher }}</div>
         <div class="row g-2">
           <div class="col-sm-6">
             <div class="form-group mb-0">
-              <label class="form-label">Prénom</label>
+              <label class="form-label">{{ t.label_first_name }}</label>
               <input type="text" id="teacherFirst" class="form-control" value="{{ current_user.first_name }}"/>
             </div>
           </div>
           <div class="col-sm-6">
             <div class="form-group mb-0">
-              <label class="form-label">Nom</label>
+              <label class="form-label">{{ t.label_last_name }}</label>
               <input type="text" id="teacherLast" class="form-control" value="{{ current_user.last_name }}"/>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- LESSON INFO -->
       <div class="section-block">
-        <div class="section-title"><i class="bi bi-mortarboard-fill"></i> Détails de la leçon</div>
+        <div class="section-title"><i class="bi bi-mortarboard-fill"></i> {{ t.section_lesson }}</div>
+        <div class="form-group">
+          <label class="form-label"><i class="bi bi-translate"></i> {{ t.label_doc_lang }}</label>
+          <select id="docLangSel" class="form-select" onchange="onDocLangChange()">
+            <option value="ar" {% if lang=='ar' %}selected{% endif %}>العربية</option>
+            <option value="fr" {% if lang=='fr' %}selected{% endif %}>Français</option>
+            <option value="en" {% if lang=='en' %}selected{% endif %}>English</option>
+          </select>
+          <div class="hint" style="font-size:11px;color:var(--muted);margin-top:5px">{{ t.doc_lang_hint }}</div>
+        </div>
         <div class="row g-2 mb-3">
           <div class="col-sm-6">
             <div class="form-group mb-0">
-              <label class="form-label">Niveau</label>
+              <label class="form-label">{{ t.label_level }}</label>
               <select id="levelSel" class="form-select">
-                <option value="">-- Sélectionner --</option>
-                {% for l in levels['fr'] %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+                <option value="">--</option>
+                {% for l in levels[lang] %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
               </select>
             </div>
           </div>
           <div class="col-sm-6">
             <div class="form-group mb-0">
-              <label class="form-label">Palier / Année</label>
-              <input type="text" id="palierInput" class="form-control" placeholder="Ex. : 3ème année"/>
+              <label class="form-label">{{ t.label_palier }}</label>
+              <input type="text" id="palierInput" class="form-control" placeholder="{{ t.palier_ph }}"/>
             </div>
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Matière</label>
+          <label class="form-label">{{ t.label_subject }}</label>
           <select id="subjectSel" class="form-select">
-            <option value="">-- Sélectionner --</option>
-            {% for s in subjects['fr'] %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+            <option value="">--</option>
+            {% for s in subjects[lang] %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Sujet de la leçon</label>
-          <input type="text" id="lessonInput" class="form-control" placeholder="Ex. : Les fractions — comparer et représenter"/>
+          <label class="form-label">{{ t.label_lesson }}</label>
+          <input type="text" id="lessonInput" class="form-control" placeholder="{{ t.lesson_ph }}"/>
         </div>
       </div>
 
-      <!-- DOC TYPE -->
       <div class="section-block">
-        <div class="section-title"><i class="bi bi-file-earmark-richtext-fill"></i> Type de document</div>
+        <div class="section-title"><i class="bi bi-file-earmark-richtext-fill"></i> {{ t.section_doctype }}</div>
         <div class="doc-grid" id="docGrid"></div>
       </div>
 
-      <!-- SOURCES (NotebookLM style) -->
       <div class="section-block">
-        <div class="section-title"><i class="bi bi-collection-fill"></i> Sources (optionnel — style NotebookLM)</div>
+        <div class="section-title"><i class="bi bi-collection-fill"></i> {{ t.section_sources }}</div>
         <div class="source-tabs">
-          <div class="source-tab active" data-tab="links" onclick="switchSourceTab('links')"><i class="bi bi-link-45deg"></i> Liens</div>
-          <div class="source-tab" data-tab="files" onclick="switchSourceTab('files')"><i class="bi bi-file-earmark-arrow-up"></i> Fichiers</div>
+          <div class="source-tab active" data-tab="links" onclick="switchSourceTab('links')"><i class="bi bi-link-45deg"></i> {{ t.tab_links }}</div>
+          <div class="source-tab" data-tab="files" onclick="switchSourceTab('files')"><i class="bi bi-file-earmark-arrow-up"></i> {{ t.tab_files }}</div>
         </div>
 
         <div class="source-panel active" id="panel-links">
           <div id="urlList"></div>
           <button type="button" class="btn-icon" onclick="addUrlField()" style="width:auto;padding:0 14px;gap:6px;font-size:12px;font-weight:700">
-            <i class="bi bi-plus-lg"></i> Ajouter un lien
+            <i class="bi bi-plus-lg"></i> {{ t.add_link_btn }}
           </button>
         </div>
 
         <div class="source-panel" id="panel-files">
           <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
             <i class="bi bi-cloud-arrow-up-fill"></i>
-            <p><strong>Cliquez</strong> ou glissez vos fichiers ici<br>PDF, Word (.docx), TXT — 15 Mo max</p>
+            <p><strong>{{ t.dropzone_text }}</strong><br>{{ t.dropzone_formats }}</p>
           </div>
           <input type="file" id="fileInput" multiple accept=".pdf,.docx,.txt,.md" style="display:none"/>
           <div class="file-list" id="fileList"></div>
@@ -226,33 +227,32 @@
         <div class="sources-status" id="sourcesStatus"></div>
       </div>
 
-      <!-- COLORS -->
       <div class="section-block">
-        <div class="section-title"><i class="bi bi-palette-fill"></i> Design du document (jusqu'à 3 couleurs)</div>
+        <div class="section-title"><i class="bi bi-palette-fill"></i> {{ t.section_colors }}</div>
         <div class="color-grid">
           <div class="color-item">
-            <label>Couleur 1 — En-tête</label>
+            <label>{{ t.color1_label }}</label>
             <div class="color-swatch-wrap" style="background:#102a53">
               <input type="color" id="colorC1" value="#102a53" oninput="updateColorPreview()"/>
             </div>
             <div class="color-hex" id="hexC1">#102a53</div>
           </div>
           <div class="color-item">
-            <label>Couleur 2 — Titres</label>
+            <label>{{ t.color2_label }}</label>
             <div class="color-swatch-wrap" style="background:#f97316">
               <input type="color" id="colorC2" value="#f97316" oninput="updateColorPreview()"/>
             </div>
             <div class="color-hex" id="hexC2">#f97316</div>
           </div>
           <div class="color-item">
-            <label>Couleur 3 — Accents</label>
+            <label>{{ t.color3_label }}</label>
             <div class="color-swatch-wrap" style="background:#173f6c">
               <input type="color" id="colorC3" value="#173f6c" oninput="updateColorPreview()"/>
             </div>
             <div class="color-hex" id="hexC3">#173f6c</div>
           </div>
           <div class="color-item">
-            <label>Texte du corps</label>
+            <label>{{ t.color_text_label }}</label>
             <div class="color-swatch-wrap" style="background:#1a1a1a">
               <input type="color" id="colorText" value="#1a1a1a" oninput="updateColorPreview()"/>
             </div>
@@ -261,17 +261,16 @@
         </div>
 
         <div class="color-preview-box">
-          <div class="cp-header" id="cpHeader" style="background:#102a53">Enseignant(e) · Niveau · Palier · Matière</div>
+          <div class="cp-header" id="cpHeader" style="background:#102a53">{{ t.preview_header_sample }}</div>
           <div class="cp-body">
-            <div class="cp-h1" id="cpH1" style="color:#f97316">Titre de section</div>
-            <div class="cp-text" id="cpText" style="color:#1a1a1a">Aperçu du texte du corps de votre document avec la couleur choisie.</div>
+            <div class="cp-h1" id="cpH1" style="color:#f97316">{{ t.preview_title_sample }}</div>
+            <div class="cp-text" id="cpText" style="color:#1a1a1a">{{ t.preview_text_sample }}</div>
           </div>
         </div>
       </div>
 
-      <!-- FORMAT -->
       <div class="section-block">
-        <div class="section-title"><i class="bi bi-download"></i> Format du fichier</div>
+        <div class="section-title"><i class="bi bi-download"></i> {{ t.section_format }}</div>
         <div class="fmt-toggle">
           <button class="fmt-btn active" data-fmt="docx" onclick="setFmt(this)"><i class="bi bi-file-word-fill"></i> Word (.docx)</button>
           <button class="fmt-btn" data-fmt="pdf" onclick="setFmt(this)"><i class="bi bi-file-pdf-fill"></i> PDF</button>
@@ -281,7 +280,7 @@
       <div class="error-msg" id="errorMsg"><i class="bi bi-exclamation-circle-fill"></i><span id="errorText"></span></div>
 
       <button class="btn-generate" id="generateBtn" onclick="generate()">
-        <i class="bi bi-stars"></i> Générer le document
+        <i class="bi bi-stars"></i> {{ t.btn_generate }}
       </button>
     </div>
   </div>
@@ -290,12 +289,12 @@
 <section class="result-panel" id="resultPanel">
   <div class="result-card">
     <div class="result-header">
-      <h3><i class="bi bi-file-text-fill me-2"></i>Aperçu du document</h3>
-      <button class="btn-download" id="downloadBtn" onclick="downloadDoc()"><i class="bi bi-download"></i> Télécharger</button>
+      <h3><i class="bi bi-file-text-fill me-2"></i>{{ t.result_preview_title }}</h3>
+      <button class="btn-download" id="downloadBtn" onclick="downloadDoc()"><i class="bi bi-download"></i> {{ t.btn_download }}</button>
     </div>
     <div class="loader-wrap" id="loaderWrap">
       <div class="loader-ring"></div>
-      <div class="loader-text" id="loaderText">Génération en cours…</div>
+      <div class="loader-text" id="loaderText">{{ t.loader_default }}</div>
     </div>
     <div class="result-content" id="resultContent"></div>
   </div>
@@ -307,25 +306,70 @@
 {% block extra_scripts %}
 <script>
 // ── DATA ──────────────────────────────────────────────────────────────────────
-const DOC_TYPES_FR = {{ doc_types['fr'] | tojson }};
+const CURRENT_LANG = {{ lang | tojson }};
+const ALL_LEVELS = {{ levels | tojson }};
+const ALL_SUBJECTS = {{ subjects | tojson }};
+const ALL_DOC_TYPES = {{ doc_types | tojson }};
+let docLang = CURRENT_LANG;
 const DOC_ICONS = {
   lesson_plan:"bi-journal-text", activity:"bi-pencil", quiz:"bi-check2-square",
   rubric:"bi-grid-3x3-gap-fill", differentiated:"bi-layers-fill",
   summary:"bi-card-text", course_plan:"bi-calendar3", homework:"bi-house-fill"
 };
 
+const UI = {
+  err_need_apikey:  {{ t.err_need_apikey | tojson }},
+  err_need_level:   {{ t.err_need_level | tojson }},
+  err_need_subject: {{ t.err_need_subject | tojson }},
+  err_need_lesson:  {{ t.err_need_lesson | tojson }},
+  err_api_prefix:   {{ t.err_api_prefix | tojson }},
+  toast_generated:  {{ t.toast_generated | tojson }},
+  sources_extracting: {{ t.sources_extracting | tojson }},
+  sources_integrated_suffix: {{ t.sources_integrated_suffix | tojson }},
+  sources_extract_error: {{ t.sources_extract_error | tojson }},
+  loader_sources: {{ t.loader_sources | tojson }},
+  loader_writing: {{ t.loader_writing | tojson }},
+  loader_overload: {{ t.loader_overload | tojson }},
+  loader_trying_model: {{ t.loader_trying_model | tojson }},
+  quota_loading: {{ t.quota_loading | tojson }},
+  quota_label_prefix: {{ t.quota_label_prefix | tojson }},
+  quota_remaining_suffix: {{ t.quota_remaining_suffix | tojson }},
+  quota_unlimited: {{ t.quota_unlimited | tojson }},
+  quota_exceeded: {{ t.quota_exceeded | tojson }},
+};
+
 let docType="lesson_plan", fmt="docx", lastContent="", sourcesContext="";
 let uploadedFiles=[];
 
-// ── INIT ──────────────────────────────────────────────────────────────────────
 buildDocGrid();
+buildLevelSubjectSelects();
 addUrlField();
 loadQuota();
+
+function onDocLangChange(){
+  docLang = document.getElementById("docLangSel").value;
+  // Reset selections since option values change language
+  docType = "lesson_plan";
+  document.getElementById("levelSel").value = "";
+  document.getElementById("subjectSel").value = "";
+  buildDocGrid();
+  buildLevelSubjectSelects();
+}
+
+function buildLevelSubjectSelects(){
+  const levelSel = document.getElementById("levelSel");
+  const subjectSel = document.getElementById("subjectSel");
+  const placeholder = "--";
+  levelSel.innerHTML = `<option value="">${placeholder}</option>` +
+    ALL_LEVELS[docLang].map(l=>`<option value="${l}">${l}</option>`).join("");
+  subjectSel.innerHTML = `<option value="">${placeholder}</option>` +
+    ALL_SUBJECTS[docLang].map(s=>`<option value="${s}">${s}</option>`).join("");
+}
 
 function buildDocGrid(){
   const grid=document.getElementById("docGrid");
   grid.innerHTML="";
-  DOC_TYPES_FR.forEach(dt=>{
+  ALL_DOC_TYPES[docLang].forEach(dt=>{
     const icon=DOC_ICONS[dt.id]||"bi-file-earmark";
     const c=document.createElement("div");
     c.className="doc-chip"+(dt.id===docType?" selected":"");
@@ -335,7 +379,6 @@ function buildDocGrid(){
   });
 }
 
-// ── QUOTA ─────────────────────────────────────────────────────────────────────
 async function loadQuota(){
   try{
     const res=await fetch("/api/check-quota");
@@ -344,21 +387,20 @@ async function loadQuota(){
     const text=document.getElementById("quotaText");
     const link=document.getElementById("quotaUpgradeLink");
     if(data.plan==="trial"){
-      text.innerHTML=`<i class="bi bi-hourglass-split"></i> Forfait ${data.plan_label} — <strong>${data.remaining}</strong> document(s) restant(s)`;
+      text.innerHTML=`<i class="bi bi-hourglass-split"></i> ${UI.quota_label_prefix} ${data.plan_label} — <strong>${data.remaining}</strong> ${UI.quota_remaining_suffix}`;
       link.style.display="inline";
       if(data.remaining<=1) banner.classList.add("low");
     } else {
-      text.innerHTML=`<i class="bi bi-star-fill"></i> Forfait ${data.plan_label} — Génération illimitée`;
+      text.innerHTML=`<i class="bi bi-star-fill"></i> ${UI.quota_label_prefix} ${data.plan_label} — ${UI.quota_unlimited}`;
       link.style.display="none";
     }
     if(!data.allowed){
       document.getElementById("generateBtn").disabled=true;
-      showError("Quota épuisé. Passez au forfait Pro pour continuer.");
+      showError(UI.quota_exceeded);
     }
   }catch(e){}
 }
 
-// ── COLORS ────────────────────────────────────────────────────────────────────
 function updateColorPreview(){
   const c1=document.getElementById("colorC1").value;
   const c2=document.getElementById("colorC2").value;
@@ -389,14 +431,12 @@ function getColors(){
   };
 }
 
-// ── SOURCES: TABS ─────────────────────────────────────────────────────────────
 function switchSourceTab(tab){
   document.querySelectorAll(".source-tab").forEach(t=>t.classList.toggle("active", t.dataset.tab===tab));
   document.querySelectorAll(".source-panel").forEach(p=>p.classList.remove("active"));
   document.getElementById("panel-"+tab).classList.add("active");
 }
 
-// ── SOURCES: URLs ─────────────────────────────────────────────────────────────
 function addUrlField(){
   const wrap=document.getElementById("urlList");
   const row=document.createElement("div");
@@ -408,7 +448,6 @@ function addUrlField(){
   wrap.appendChild(row);
 }
 
-// ── SOURCES: FILES ────────────────────────────────────────────────────────────
 const dropzone=document.getElementById("dropzone");
 const fileInput=document.getElementById("fileInput");
 
@@ -442,14 +481,13 @@ function renderFileList(){
   });
 }
 
-// ── SOURCES: EXTRACT (called before generation) ───────────────────────────────
 async function extractSources(){
   const urls = Array.from(document.querySelectorAll(".url-field")).map(i=>i.value.trim()).filter(Boolean);
   if(uploadedFiles.length===0 && urls.length===0) return "";
 
   const statusEl=document.getElementById("sourcesStatus");
   statusEl.classList.add("visible");
-  statusEl.innerHTML=`<i class="bi bi-arrow-repeat"></i> Extraction des sources en cours…`;
+  statusEl.innerHTML=`<i class="bi bi-arrow-repeat"></i> ${UI.sources_extracting}`;
 
   const formData=new FormData();
   uploadedFiles.forEach(f=>formData.append("files", f));
@@ -461,50 +499,78 @@ async function extractSources(){
     if(data.warnings && data.warnings.length){
       statusEl.innerHTML=`⚠️ ${data.warnings.join(" · ")}`;
     } else {
-      statusEl.innerHTML=`✅ ${urls.length+uploadedFiles.length} source(s) intégrée(s) au contexte`;
+      statusEl.innerHTML=`✅ ${urls.length+uploadedFiles.length} ${UI.sources_integrated_suffix}`;
     }
     return data.context || "";
   }catch(e){
-    statusEl.innerHTML=`⚠️ Erreur lors de l'extraction des sources`;
+    statusEl.innerHTML=`⚠️ ${UI.sources_extract_error}`;
     return "";
   }
 }
 
-// ── UI HELPERS ────────────────────────────────────────────────────────────────
 function setFmt(btn){document.querySelectorAll(".fmt-btn").forEach(b=>b.classList.remove("active"));btn.classList.add("active");fmt=btn.dataset.fmt}
 function showError(msg){const e=document.getElementById("errorMsg");if(msg){document.getElementById("errorText").textContent=msg;e.classList.add("visible")}else e.classList.remove("visible")}
 function toggleApiVis(){const i=document.getElementById("apiKey");const eye=document.getElementById("eyeIcon");if(i.type==="password"){i.type="text";eye.className="bi bi-eye-slash"}else{i.type="password";eye.className="bi bi-eye"}}
 function toast(msg){const w=document.getElementById("toastWrap");const t=document.createElement("div");t.className="toast-item";t.textContent=msg;w.appendChild(t);setTimeout(()=>t.remove(),3500)}
 function updateLoaderMsg(msg){const el=document.getElementById("loaderText");if(el) el.textContent=msg}
 
-// ── PROMPT BUILDER ────────────────────────────────────────────────────────────
 function buildPrompt(level, palier, subject, lesson, dt, ctx){
-  const docLabels={}; DOC_TYPES_FR.forEach(d=>docLabels[d.id]=d.label);
+  const docLabels={}; ALL_DOC_TYPES[docLang].forEach(d=>docLabels[d.id]=d.label);
   const docLabel=docLabels[dt]||dt;
 
-  let sourceBlock = "";
-  if(ctx && ctx.trim()){
-    sourceBlock = `\n\nSOURCES FOURNIES PAR L'ENSEIGNANT (à utiliser comme référence principale, dans le style NotebookLM — base ton contenu sur ces sources autant que possible) :\n${ctx}\n`;
-  }
+  const sourceBlocks = {
+    ar: ctx && ctx.trim() ? `\n\nمصادر قدمها الأستاذ (استخدمها كمرجع أساسي، على غرار NotebookLM):\n${ctx}\n` : "",
+    fr: ctx && ctx.trim() ? `\n\nSOURCES FOURNIES PAR L'ENSEIGNANT (à utiliser comme référence principale, style NotebookLM) :\n${ctx}\n` : "",
+    en: ctx && ctx.trim() ? `\n\nSOURCES PROVIDED BY THE TEACHER (use as primary reference, NotebookLM style):\n${ctx}\n` : "",
+  };
 
-  return `Tu es un expert pédagogique spécialisé dans le curriculum algérien officiel.
+  const prompts = {
+    ar: `أنت خبير تربوي متخصص في المنهاج الجزائري الرسمي.
+المستوى: ${level} | الطور: ${palier} | المادة: ${subject} | الموضوع: ${lesson}
+أنشئ وثيقة من نوع: ${docLabel}
+${sourceBlocks.ar}
+التعليمات:
+- اتبع المنهج الجزائري الرسمي والكفاءات المستهدفة
+- إذا توفرت مصادر أعلاه، اعتمد عليها بشكل أساسي
+- استخدم لغة عربية فصحى واضحة ومهيكلة
+- استخدم # للعناوين الرئيسية و## للعناوين الفرعية
+- أضف: الكفاءات المستهدفة، الأهداف، الموارد، التقييم
+- لا تكرر معلومات الترويسة (الاسم، المستوى، المادة) في المحتوى
+- وثيقة كاملة، مفصلة واحترافية
+
+أنشئ الوثيقة الآن:`,
+    fr: `Tu es un expert pédagogique spécialisé dans le curriculum algérien officiel.
 Niveau : ${level} | Palier : ${palier} | Matière : ${subject} | Leçon : ${lesson}
 Crée un document de type : ${docLabel}
-${sourceBlock}
+${sourceBlocks.fr}
 Instructions :
 - Respecte le programme officiel algérien et les compétences visées
 - Si des sources sont fournies ci-dessus, base ton contenu sur elles en priorité
 - Rédige en français pédagogique clair et structuré
 - Structure avec des titres clairs (# pour titres principaux, ## pour sous-titres)
 - Inclus : compétences visées, objectifs, ressources, évaluation
-- Rends le document directement exploitable en classe
-- Ne répète pas les informations d'en-tête (nom, niveau, matière) dans le corps — elles sont déjà affichées séparément
+- Ne répète pas les informations d'en-tête (nom, niveau, matière) dans le corps
 - Document complet, détaillé et professionnel
 
-Génère le document maintenant :`;
+Génère le document maintenant :`,
+    en: `You are a pedagogical expert specializing in the Algerian official curriculum.
+Level: ${level} | Grade: ${palier} | Subject: ${subject} | Lesson: ${lesson}
+Create a document of type: ${docLabel}
+${sourceBlocks.en}
+Instructions:
+- Follow the official Algerian curriculum and targeted competencies
+- If sources are provided above, base your content on them primarily
+- Write in clear, structured pedagogical English
+- Structure with clear headings (# for main headings, ## for sub-headings)
+- Include: targeted competencies, objectives, resources, assessment
+- Do not repeat header info (name, level, subject) in the body
+- Complete, detailed and professional document
+
+Generate the document now:`,
+  };
+  return prompts[docLang] || prompts.fr;
 }
 
-// ── GEMINI CALL (multi-model + retry) ─────────────────────────────────────────
 const GEMINI_MODELS = ["gemini-2.5-flash-preview-05-20","gemini-2.5-flash","gemini-2.0-flash","gemini-1.5-flash","gemini-1.5-pro"];
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 
@@ -528,7 +594,7 @@ async function callOneModel(apiKey, model, prompt, retries=3){
       throw {type:"skip", msg};
     if(res.status===429 || res.status===503 || msg.includes("high demand") || msg.includes("overloaded") || msg.includes("quota")){
       const wait=(attempt+1)*4000;
-      updateLoaderMsg(`⏳ Modèle surchargé, nouvelle tentative dans ${wait/1000}s…`);
+      updateLoaderMsg(`⏳ ${UI.loader_overload} ${wait/1000}s…`);
       await sleep(wait);
       continue;
     }
@@ -541,7 +607,7 @@ async function callOneModel(apiKey, model, prompt, retries=3){
 async function callGemini(apiKey, prompt){
   let lastMsg="";
   for(const model of GEMINI_MODELS){
-    updateLoaderMsg(`🤖 Essai du modèle ${model}…`);
+    updateLoaderMsg(`${UI.loader_trying_model} ${model}…`);
     try{ return await callOneModel(apiKey, model, prompt); }
     catch(e){
       if(e.type==="auth") throw new Error(e.msg);
@@ -549,10 +615,9 @@ async function callGemini(apiKey, prompt){
       lastMsg=e.msg;
     }
   }
-  throw new Error("Tous les modèles sont indisponibles. "+lastMsg);
+  throw new Error(lastMsg);
 }
 
-// ── GENERATE ──────────────────────────────────────────────────────────────────
 async function generate(){
   showError(null);
   const apiKey=document.getElementById("apiKey").value.trim();
@@ -561,16 +626,15 @@ async function generate(){
   const subject=document.getElementById("subjectSel").value;
   const lesson=document.getElementById("lessonInput").value.trim();
 
-  if(!apiKey) return showError("Veuillez entrer une clé API");
-  if(!level) return showError("Veuillez sélectionner un niveau");
-  if(!subject) return showError("Veuillez sélectionner une matière");
-  if(!lesson) return showError("Veuillez saisir le sujet de la leçon");
+  if(!apiKey) return showError(UI.err_need_apikey);
+  if(!level) return showError(UI.err_need_level);
+  if(!subject) return showError(UI.err_need_subject);
+  if(!lesson) return showError(UI.err_need_lesson);
 
-  // Quota check
   const quotaRes=await fetch("/api/check-quota");
   const quotaData=await quotaRes.json();
   if(!quotaData.allowed){
-    return showError("Quota épuisé. Passez au forfait Pro pour continuer à générer des documents.");
+    return showError(UI.quota_exceeded);
   }
 
   const btn=document.getElementById("generateBtn");
@@ -584,10 +648,10 @@ async function generate(){
   document.getElementById("downloadBtn").disabled=true;
 
   try{
-    updateLoaderMsg("📚 Lecture des sources…");
+    updateLoaderMsg(UI.loader_sources);
     sourcesContext = await extractSources();
 
-    updateLoaderMsg("✍️ Génération du contenu…");
+    updateLoaderMsg(UI.loader_writing);
     const prompt=buildPrompt(level, palier, subject, lesson, docType, sourcesContext);
     const text=await callGemini(apiKey, prompt);
     lastContent=text;
@@ -596,15 +660,14 @@ async function generate(){
     renderContent(text);
     document.getElementById("downloadBtn").disabled=false;
 
-    // Log usage
     await fetch("/api/log-usage",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({lesson,subject,level,palier,doc_type:docType,format:fmt})});
     loadQuota();
-    toast("✅ Document généré !");
+    toast(UI.toast_generated);
   }catch(e){
     document.getElementById("loaderWrap").classList.remove("visible");
     panel.classList.remove("visible");
-    showError("Erreur API — Vérifiez votre clé et réessayez. ("+e.message+")");
+    showError(UI.err_api_prefix+" ("+e.message+")");
   }finally{
     btn.disabled=false;
   }
@@ -624,7 +687,6 @@ function renderContent(text){
   el.innerHTML=html;
 }
 
-// ── DOWNLOAD ──────────────────────────────────────────────────────────────────
 async function downloadDoc(){
   if(!lastContent) return;
   const btn=document.getElementById("downloadBtn");
@@ -632,7 +694,7 @@ async function downloadDoc(){
   try{
     const res=await fetch("/api/download",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
-        content:lastContent, lang:"fr", format:fmt,
+        content:lastContent, lang:docLang, format:fmt,
         teacher_first:document.getElementById("teacherFirst").value,
         teacher_last:document.getElementById("teacherLast").value,
         level:document.getElementById("levelSel").value,
@@ -650,7 +712,7 @@ async function downloadDoc(){
     a.click();
     URL.revokeObjectURL(url);
   }catch(e){
-    showError("Erreur téléchargement: "+e.message);
+    showError("Error: "+e.message);
   }finally{
     btn.disabled=false;
   }
