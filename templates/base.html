@@ -58,6 +58,17 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
 .flash-error{background:#fef2f2;color:#991b1b;border:1px solid #fca5a5}
 
 .footer{text-align:center;padding:30px 20px;font-size:11px;color:var(--muted);border-top:1px solid var(--line);margin-top:40px}
+
+.bell-wrap{position:relative}
+.bell-btn{background:var(--sky);border:none;width:38px;height:38px;border-radius:10px;display:grid;place-items:center;color:var(--navy);font-size:15px;cursor:pointer;position:relative;flex-shrink:0}
+.bell-badge{position:absolute;top:-4px;inset-inline-end:-4px;background:var(--red);color:#fff;font-size:9px;font-weight:800;min-width:16px;height:16px;border-radius:99px;display:grid;place-items:center;padding:0 3px;line-height:1}
+.bell-menu{position:absolute;top:48px;inset-inline-end:0;min-width:270px;max-width:90vw;background:#fff;border-radius:12px;box-shadow:var(--shadow2);padding:8px;display:none;z-index:200;border:1px solid var(--line)}
+.bell-menu.show{display:block}
+.bell-item{display:flex;align-items:center;gap:9px;padding:11px 12px;border-radius:8px;font-size:12.5px;font-weight:600;color:var(--ink);text-decoration:none}
+.bell-item:hover{background:var(--sky)}
+.bell-item i{color:var(--orange);font-size:14px;flex-shrink:0}
+.bell-empty{padding:16px;text-align:center;color:var(--muted);font-size:12px}
+.nav-badge{background:var(--red);color:#fff;font-size:9px;font-weight:800;min-width:16px;height:16px;border-radius:99px;display:inline-grid;place-items:center;padding:0 3px;margin-inline-start:2px}
 </style>
 {% block extra_head %}{% endblock %}
 </head>
@@ -86,26 +97,65 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
     </div>
     {% if current_user.is_authenticated %}
     <div class="nav-links">
+      {% if current_user.role != 'admin' %}
       <a class="nav-link {% if request.endpoint=='generator' %}active{% endif %}" href="{{ url_for('generator') }}">
         <i class="bi bi-stars"></i><span class="label">{{ t.nav_generator }}</span>
       </a>
       <a class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
         <i class="bi bi-speedometer2"></i><span class="label">{{ t.nav_dashboard }}</span>
       </a>
-      <a class="nav-link {% if request.endpoint=='profile' %}active{% endif %}" href="{{ url_for('profile') }}">
-        <i class="bi bi-person-circle"></i><span class="label">{{ t.nav_profile }}</span>
-      </a>
+      {% endif %}
       {% if current_user.role == 'admin' %}
       <a class="nav-link {% if request.endpoint=='admin_stats' %}active{% endif %}" href="{{ url_for('admin_stats') }}">
         <i class="bi bi-graph-up"></i><span class="label">{{ t.nav_stats }}</span>
       </a>
-      <a class="nav-link {% if request.endpoint=='admin_teachers' %}active{% endif %}" href="{{ url_for('admin_teachers') }}">
+      <a class="nav-link {% if request.endpoint=='admin_teachers' or request.endpoint=='admin_teacher_detail' %}active{% endif %}" href="{{ url_for('admin_teachers') }}">
         <i class="bi bi-people-fill"></i><span class="label">{{ t.nav_teachers }}</span>
+      </a>
+      <a class="nav-link {% if request.endpoint=='admin_documents' %}active{% endif %}" href="{{ url_for('admin_documents') }}">
+        <i class="bi bi-file-earmark-text-fill"></i><span class="label">{{ t.nav_documents }}</span>
       </a>
       <a class="nav-link {% if request.endpoint=='admin_licenses' %}active{% endif %}" href="{{ url_for('admin_licenses') }}">
         <i class="bi bi-key-fill"></i><span class="label">{{ t.nav_codes }}</span>
       </a>
       {% endif %}
+      <a class="nav-link {% if request.endpoint in ['messages','admin_messages','admin_message_thread'] %}active{% endif %}"
+         href="{{ url_for('admin_messages') if current_user.role=='admin' else url_for('messages') }}">
+        <i class="bi bi-chat-dots-fill"></i><span class="label">{{ t.nav_messages }}</span>
+        {% if notif_unread_msgs %}<span class="nav-badge">{{ notif_unread_msgs }}</span>{% endif %}
+      </a>
+      <a class="nav-link {% if request.endpoint=='profile' %}active{% endif %}" href="{{ url_for('profile') }}">
+        <i class="bi bi-person-circle"></i><span class="label">{{ t.nav_profile }}</span>
+      </a>
+
+      <div class="bell-wrap">
+        <button class="bell-btn" type="button" onclick="haithemToggleBell(event)" aria-label="Notifications">
+          <i class="bi bi-bell-fill"></i>
+          {% set bell_count = notif_unread_msgs + notif_expiring + (1 if notif_reminder else 0) %}
+          {% if bell_count %}<span class="bell-badge">{{ bell_count }}</span>{% endif %}
+        </button>
+        <div class="bell-menu" id="haithemBellMenu">
+          {% if notif_unread_msgs %}
+          <a class="bell-item" href="{{ url_for('admin_messages') if current_user.role=='admin' else url_for('messages') }}">
+            <i class="bi bi-chat-dots-fill"></i> {{ t.bell_unread_msgs.format(count=notif_unread_msgs) }}
+          </a>
+          {% endif %}
+          {% if current_user.role == 'admin' and notif_expiring %}
+          <a class="bell-item" href="{{ url_for('admin_stats') }}">
+            <i class="bi bi-alarm-fill"></i> {{ t.bell_expiring.format(count=notif_expiring) }}
+          </a>
+          {% endif %}
+          {% if notif_reminder %}
+          <a class="bell-item" href="{{ url_for('dashboard') }}">
+            <i class="bi bi-exclamation-triangle-fill"></i> {{ t.bell_reminder }}
+          </a>
+          {% endif %}
+          {% if not bell_count %}
+          <div class="bell-empty">{{ t.bell_empty }}</div>
+          {% endif %}
+        </div>
+      </div>
+
       <a class="nav-link logout" href="{{ url_for('logout') }}">
         <i class="bi bi-box-arrow-right"></i><span class="label">{{ t.nav_logout }}</span>
       </a>
@@ -143,6 +193,17 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function haithemToggleBell(e){
+  e.stopPropagation();
+  var m = document.getElementById('haithemBellMenu');
+  if(m) m.classList.toggle('show');
+}
+document.addEventListener('click', function(){
+  var m = document.getElementById('haithemBellMenu');
+  if(m) m.classList.remove('show');
+});
+</script>
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

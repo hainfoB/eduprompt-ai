@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ teacher.full_name }} — {{ t.nav_messages }}{% endblock %}
+{% block extra_head %}
+<style>
+.msg-wrap{max-width:700px;margin:32px auto;padding:0 max(4vw,16px)}
+.back-link{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--muted);text-decoration:none;margin-bottom:14px}
+.back-link:hover{color:var(--navy)}
+.thread-header{background:var(--paper);border-radius:14px 14px 0 0;box-shadow:var(--shadow);padding:16px 20px;border-bottom:1px solid var(--line)}
+.thread-header h1{font-size:16px;font-weight:800;color:var(--navy);margin:0}
+.thread-header .muted{font-size:12px;color:var(--muted)}
+.thread-body{background:var(--ivory);padding:20px;min-height:300px;max-height:520px;overflow-y:auto;box-shadow:var(--shadow)}
+.bubble{max-width:75%;padding:10px 14px;border-radius:14px;margin-bottom:10px;font-size:13px;line-height:1.5;white-space:pre-wrap}
+.bubble.teacher{background:#fff;color:var(--ink);border:1px solid var(--line);margin-inline-end:auto}
+.bubble.admin{background:var(--navy);color:#fff;margin-inline-start:auto}
+.bubble .meta{font-size:10px;opacity:.6;margin-top:4px;display:block}
+.compose-card{background:var(--paper);border-radius:0 0 14px 14px;box-shadow:var(--shadow);padding:16px 20px;display:flex;gap:10px}
+.compose-card textarea{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;resize:vertical;min-height:44px;font-family:inherit}
+.btn-send{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:0 20px;font-size:13px;font-weight:700;cursor:pointer}
+.empty-state{text-align:center;padding:40px;color:var(--muted);font-size:13px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="msg-wrap">
+  <a href="{{ url_for('admin_messages') }}" class="back-link"><i class="bi bi-arrow-{{ 'right' if is_rtl else 'left' }}"></i> {{ t.nav_messages }}</a>
+
+  <div class="thread-header">
+    <h1>{{ teacher.full_name }}</h1>
+    <div class="muted">{{ teacher.email }} · <a href="{{ url_for('admin_teacher_detail', user_id=teacher.id) }}" style="color:var(--navy);font-weight:700;text-decoration:none">{{ t.btn_view_details }}</a></div>
+  </div>
+
+  <div class="thread-body" id="threadBody">
+    {% if thread %}
+    {% for m in thread %}
+    <div class="bubble {{ m.sender }}">
+      {{ m.body }}
+      <span class="meta">{{ m.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">{{ t.empty_thread }}</div>
+    {% endif %}
+  </div>
+
+  <form class="compose-card" method="POST">
+    <textarea name="body" placeholder="{{ t.msg_placeholder }}" required></textarea>
+    <button type="submit" class="btn-send"><i class="bi bi-send-fill"></i></button>
+  </form>
+</div>
+<script>
+var tb = document.getElementById('threadBody');
+if (tb) tb.scrollTop = tb.scrollHeight;
+</script>
+{% endblock %}

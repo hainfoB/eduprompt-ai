@@ -15,11 +15,12 @@
 .st-section h3{font-size:14px;font-weight:800;color:var(--navy);margin:0 0 16px;display:flex;align-items:center;gap:8px}
 .chart-wrap{position:relative;height:220px}
 
-.pay-row{display:grid;grid-template-columns:1fr 1.4fr 90px 90px;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:12px}
+.pay-row{display:grid;grid-template-columns:32px 1fr 1.4fr 90px 90px;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:12px}
 .pay-row.header{font-weight:700;color:var(--muted);text-transform:uppercase;font-size:10px}
 .pay-row:last-child{border-bottom:none}
+.row-num{color:var(--muted);font-weight:700}
 
-.exp-row{display:grid;grid-template-columns:1.4fr 90px 100px;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:12px;align-items:center}
+.exp-row{display:grid;grid-template-columns:32px 1.4fr 90px 100px;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);font-size:12px;align-items:center}
 .exp-row.header{font-weight:700;color:var(--muted);text-transform:uppercase;font-size:10px}
 .exp-badge{background:#fff7ed;color:#c2410c;font-weight:700;padding:2px 8px;border-radius:6px;font-size:11px;display:inline-block}
 .empty-state{text-align:center;padding:24px;color:var(--muted);font-size:13px}
@@ -58,16 +59,22 @@
   </div>
 
   <div class="st-section">
-    <h3><i class="bi bi-bar-chart-fill"></i> {{ t.stats_docs_last_14 }}</h3>
+    <h3 style="justify-content:space-between">
+      <span><i class="bi bi-bar-chart-fill"></i> {{ t.stats_docs_last_14 }}</span>
+      <a href="{{ url_for('admin_documents') }}" style="font-size:11px;font-weight:700;color:var(--navy);text-decoration:none;background:var(--sky);padding:6px 12px;border-radius:8px">
+        <i class="bi bi-search"></i> {{ t.stats_view_all_docs }}
+      </a>
+    </h3>
     <div class="chart-wrap"><canvas id="docsChart"></canvas></div>
   </div>
 
   <div class="st-section">
     <h3><i class="bi bi-alarm-fill"></i> {{ t.stats_expiring_title }}</h3>
     {% if expiring %}
-    <div class="exp-row header"><div>{{ t.table_teacher }}</div><div>{{ t.label_plan }}</div><div>{{ t.table_expires_in }}</div></div>
+    <div class="exp-row header"><div>#</div><div>{{ t.table_teacher }}</div><div>{{ t.label_plan }}</div><div>{{ t.table_expires_in }}</div></div>
     {% for sub in expiring %}
     <div class="exp-row">
+      <div class="row-num">{{ loop.index }}</div>
       <div>{{ sub.user.full_name }} ({{ sub.user.email }})</div>
       <div>{{ sub.plan_label() }}</div>
       <div><span class="exp-badge">{{ sub.days_until_expiry() }} {{ t.days_suffix }}</span></div>
@@ -81,9 +88,10 @@
   <div class="st-section">
     <h3><i class="bi bi-receipt"></i> {{ t.stats_payments_title }}</h3>
     {% if recent_payments %}
-    <div class="pay-row header"><div>{{ t.table_date }}</div><div>{{ t.table_teacher }}</div><div>{{ t.label_plan }}</div><div>{{ t.table_amount }}</div></div>
+    <div class="pay-row header"><div>#</div><div>{{ t.table_date }}</div><div>{{ t.table_teacher }}</div><div>{{ t.label_plan }}</div><div>{{ t.table_amount }}</div></div>
     {% for p in recent_payments %}
     <div class="pay-row">
+      <div class="row-num">{{ loop.index }}</div>
       <div>{{ p.created_at.strftime('%d/%m/%Y') }}</div>
       <div>{{ p.user.full_name if p.user else '—' }}</div>
       <div>{{ p.plan }}</div>

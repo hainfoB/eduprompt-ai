@@ -11,12 +11,26 @@
 .form-select,.form-control{border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;width:100%;background:var(--ivory)}
 .btn-gen{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:11px 20px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
 
+.search-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:16px 18px;margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.search-card .form-group{flex:1;min-width:160px}
+.btn-search{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.btn-clear{background:var(--sky);color:var(--navy);border:none;border-radius:10px;padding:10px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center}
+
 .codes-table{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
-.code-row{display:grid;grid-template-columns:1.5fr 80px 80px 90px 1fr;gap:10px;padding:12px 18px;align-items:center;border-bottom:1px solid var(--line);font-size:12px}
+.code-row{display:grid;grid-template-columns:40px 1.5fr 80px 80px 90px 1fr;gap:10px;padding:12px 18px;align-items:center;border-bottom:1px solid var(--line);font-size:12px}
 .code-row.header{background:var(--navy);color:#fff;font-weight:700;text-transform:uppercase;font-size:10px}
+.code-num{color:var(--muted);font-weight:700}
 .code-val{font-family:monospace;font-weight:700;color:var(--navy)}
 .status-used{color:var(--muted)}
 .status-avail{color:var(--green);font-weight:700}
+.pager{display:flex;justify-content:center;gap:6px;padding:16px;flex-wrap:wrap}
+.pager a,.pager span{padding:7px 12px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;color:var(--navy);background:var(--sky)}
+.pager .current{background:var(--navy);color:#fff}
+
+@media(max-width:650px){
+  .code-row{grid-template-columns:1fr;gap:4px}
+  .code-row.header{display:none}
+}
 </style>
 {% endblock %}
 {% block content %}
@@ -40,21 +54,51 @@
     </form>
   </div>
 
+  <form class="search-card" method="GET">
+    <div class="form-group">
+      <label class="form-label">{{ t.search_label }}</label>
+      <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="{{ t.search_placeholder_code }}"/>
+    </div>
+    <div class="form-group" style="flex:0 0 160px">
+      <label class="form-label">{{ t.table_status }}</label>
+      <select name="status" class="form-select">
+        <option value="">{{ t.filter_all_status }}</option>
+        <option value="available" {% if status_filter=='available' %}selected{% endif %}>{{ t.status_available }}</option>
+        <option value="used" {% if status_filter=='used' %}selected{% endif %}>{{ t.status_used }}</option>
+      </select>
+    </div>
+    <button type="submit" class="btn-search"><i class="bi bi-search"></i> {{ t.btn_search }}</button>
+    {% if q or status_filter %}<a href="{{ url_for('admin_licenses') }}" class="btn-clear"><i class="bi bi-x-lg"></i></a>{% endif %}
+  </form>
+
   <div class="codes-table">
+    {% if codes %}
     <div class="code-row header">
-      <div>{{ t.table_code }}</div><div>{{ t.label_plan }}</div><div>{{ t.table_duration }}</div><div>{{ t.table_status }}</div><div>{{ t.table_used_by }}</div>
+      <div>#</div><div>{{ t.table_code }}</div><div>{{ t.label_plan }}</div><div>{{ t.table_duration }}</div><div>{{ t.table_status }}</div><div>{{ t.table_used_by }}</div>
     </div>
     {% for c in codes %}
     <div class="code-row">
+      <div class="code-num">{{ (pager.page - 1) * pager.per_page + loop.index }}</div>
       <div class="code-val">{{ c.code }}</div>
       <div>{{ c.plan }}</div>
       <div>{{ c.duration_days }}j</div>
       <div class="{% if c.used %}status-used{% else %}status-avail{% endif %}">
         {{ t.status_used if c.used else t.status_available }}
       </div>
-      <div>{{ c.used_by if c.used_by else "—" }}</div>
+      <div>{{ c.used_by_user.full_name if c.used_by_user else "—" }}</div>
     </div>
     {% endfor %}
+    {% if pager.pages > 1 %}
+    <div class="pager">
+      {% for p in range(1, pager.pages + 1) %}
+        {% if p == pager.page %}<span class="current">{{ p }}</span>
+        {% else %}<a href="{{ url_for('admin_licenses', q=q, status=status_filter, page=p) }}">{{ p }}</a>{% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">{{ t.empty_codes }}</div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

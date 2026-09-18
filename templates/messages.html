@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ t.nav_messages }} — HaithemEduAI{% endblock %}
+{% block extra_head %}
+<style>
+.msg-wrap{max-width:700px;margin:32px auto;padding:0 max(4vw,16px)}
+.thread-header{background:var(--paper);border-radius:14px 14px 0 0;box-shadow:var(--shadow);padding:16px 20px;border-bottom:1px solid var(--line)}
+.thread-header h1{font-size:18px;font-weight:800;color:var(--navy);margin:0 0 4px}
+.thread-header p{font-size:12.5px;color:var(--muted);margin:0}
+.thread-body{background:var(--ivory);padding:20px;min-height:320px;max-height:520px;overflow-y:auto;box-shadow:var(--shadow)}
+.bubble{max-width:75%;padding:10px 14px;border-radius:14px;margin-bottom:10px;font-size:13px;line-height:1.5;white-space:pre-wrap}
+.bubble.teacher{background:var(--navy);color:#fff;margin-inline-start:auto}
+.bubble.admin{background:#fff;color:var(--ink);border:1px solid var(--line);margin-inline-end:auto}
+.bubble .meta{font-size:10px;opacity:.6;margin-top:4px;display:block}
+.compose-card{background:var(--paper);border-radius:0 0 14px 14px;box-shadow:var(--shadow);padding:16px 20px;display:flex;gap:10px}
+.compose-card textarea{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;resize:vertical;min-height:44px;font-family:inherit}
+.btn-send{background:var(--orange);color:#fff;border:none;border-radius:10px;padding:0 20px;font-size:13px;font-weight:700;cursor:pointer}
+.empty-state{text-align:center;padding:40px;color:var(--muted);font-size:13px}
+.free-badge{display:inline-flex;align-items:center;gap:6px;background:#ecfdf5;color:#065f46;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;margin-top:8px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="msg-wrap">
+  <div class="thread-header">
+    <h1><i class="bi bi-chat-dots-fill"></i> {{ t.msg_title }}</h1>
+    <p>{{ t.msg_subtitle }}</p>
+    <span class="free-badge"><i class="bi bi-check-circle-fill"></i> {{ t.msg_free_unlimited }}</span>
+  </div>
+
+  <div class="thread-body" id="threadBody">
+    {% if thread %}
+    {% for m in thread %}
+    <div class="bubble {{ m.sender }}">
+      {{ m.body }}
+      <span class="meta">{{ m.created_at.strftime('%d/%m/%Y %H:%M') }}</span>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">{{ t.empty_thread_teacher }}</div>
+    {% endif %}
+  </div>
+
+  <form class="compose-card" method="POST">
+    <textarea name="body" placeholder="{{ t.msg_placeholder }}" required></textarea>
+    <button type="submit" class="btn-send"><i class="bi bi-send-fill"></i></button>
+  </form>
+</div>
+<script>
+var tb = document.getElementById('threadBody');
+if (tb) tb.scrollTop = tb.scrollHeight;
+</script>
+{% endblock %}

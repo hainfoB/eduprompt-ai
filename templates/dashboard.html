@@ -26,9 +26,18 @@
 .btn-upgrade{background:var(--orange);color:#fff;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .btn-upgrade:hover{background:var(--orange2);color:#fff}
 
-.section-title{font-size:15px;font-weight:800;color:var(--navy);margin:0 0 14px;display:flex;align-items:center;gap:8px}
+.section-title{font-size:15px;font-weight:800;color:var(--navy);margin:0 0 14px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.section-title .see-all{font-size:11px;font-weight:700;color:var(--navy);text-decoration:none;background:var(--sky);padding:6px 12px;border-radius:8px}
 .doc-table{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
-.doc-row{display:grid;grid-template-columns:2fr 1fr 1fr 90px 70px;gap:10px;padding:14px 18px;align-items:center;border-bottom:1px solid var(--line);font-size:13px}
+.doc-row{display:grid;grid-template-columns:34px 2fr 1fr 1fr 90px 70px;gap:10px;padding:14px 18px;align-items:center;border-bottom:1px solid var(--line);font-size:13px}
+.doc-num{color:var(--muted);font-weight:700;font-size:12px}
+
+.msg-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:20px;margin-bottom:28px}
+.msg-preview{padding:10px 0;border-bottom:1px solid var(--line);font-size:12.5px}
+.msg-preview:last-child{border-bottom:none}
+.msg-preview .who{font-weight:700;color:var(--navy);font-size:11px;text-transform:uppercase;margin-bottom:3px}
+.msg-preview .body-txt{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-msg{background:var(--orange);color:#fff;border:none;border-radius:10px;padding:9px 16px;font-size:12.5px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:6px;margin-top:10px}
 .doc-row:last-child{border-bottom:none}
 .doc-row.header{background:var(--navy);color:#fff;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
 .doc-title{font-weight:600;color:var(--ink)}
@@ -107,14 +116,32 @@
   </div>
   {% endif %}
 
+  <div class="msg-card">
+    <div class="section-title" style="margin-bottom:12px">
+      <span><i class="bi bi-chat-dots-fill"></i> {{ t.dash_messages_title }}{% if unread_admin_msgs %} <span style="background:var(--red);color:#fff;font-size:10px;padding:2px 7px;border-radius:99px;margin-inline-start:6px">{{ unread_admin_msgs }}</span>{% endif %}</span>
+    </div>
+    {% if recent_messages %}
+      {% for m in recent_messages %}
+      <div class="msg-preview">
+        <div class="who">{{ t.msg_from_admin if m.sender == 'admin' else t.msg_from_you }}</div>
+        <div class="body-txt">{{ m.body }}</div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p style="color:var(--muted);font-size:12.5px;margin:0">{{ t.dash_messages_empty }}</p>
+    {% endif %}
+    <a href="{{ url_for('messages') }}" class="btn-msg"><i class="bi bi-send-fill"></i> {{ t.dash_messages_cta }}</a>
+  </div>
+
   <div class="section-title"><i class="bi bi-clock-history"></i> {{ t.history_title }}</div>
   <div class="doc-table">
     {% if docs %}
     <div class="doc-row header">
-      <div>{{ t.table_lesson }}</div><div>{{ t.table_subject }}</div><div>{{ t.table_level }}</div><div>{{ t.table_type }}</div><div>{{ t.table_format }}</div>
+      <div>#</div><div>{{ t.table_lesson }}</div><div>{{ t.table_subject }}</div><div>{{ t.table_level }}</div><div>{{ t.table_type }}</div><div>{{ t.table_format }}</div>
     </div>
     {% for d in docs %}
     <div class="doc-row">
+      <div class="doc-num">{{ loop.index }}</div>
       <div class="doc-title">{{ d.title or t.no_title }}</div>
       <div class="doc-meta">{{ d.subject }}</div>
       <div class="doc-meta">{{ d.level }}</div>

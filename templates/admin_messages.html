@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ t.nav_messages }} — HaithemEduAI{% endblock %}
+{% block extra_head %}
+<style>
+.adm-wrap{max-width:820px;margin:32px auto;padding:0 max(4vw,16px)}
+.adm-header h1{font-size:22px;font-weight:800;color:var(--navy);margin:0 0 20px}
+.search-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:14px 16px;margin-bottom:20px;display:flex;gap:10px}
+.search-card input{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px}
+.btn-search{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer}
+
+.thread-list{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.thread-row{display:grid;grid-template-columns:36px 1fr 2fr 90px 60px;gap:12px;padding:14px 18px;align-items:center;border-bottom:1px solid var(--line);text-decoration:none;color:inherit}
+.thread-row:hover{background:var(--sky)}
+.thread-row:last-child{border-bottom:none}
+.thread-row.unread{background:#fff7ed}
+.t-num{color:var(--muted);font-weight:700;font-size:12px}
+.t-name{font-weight:700;color:var(--ink);font-size:13px}
+.t-snippet{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t-date{color:var(--muted);font-size:11px}
+.unread-badge{background:var(--red);color:#fff;font-size:10px;font-weight:800;min-width:20px;height:20px;border-radius:99px;display:grid;place-items:center;padding:0 5px}
+.empty-state{text-align:center;padding:40px;color:var(--muted);font-size:13px}
+.pager{display:flex;justify-content:center;gap:6px;padding:16px;flex-wrap:wrap}
+.pager a,.pager span{padding:7px 12px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;color:var(--navy);background:var(--sky)}
+.pager .current{background:var(--navy);color:#fff}
+
+@media(max-width:650px){
+  .thread-row{grid-template-columns:1fr 40px;grid-template-areas:"name badge" "snippet snippet" "date date"}
+  .t-num{display:none}
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="adm-wrap">
+  <div class="adm-header"><h1><i class="bi bi-chat-dots-fill"></i> {{ t.nav_messages }}</h1></div>
+
+  <form class="search-card" method="GET">
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ t.search_placeholder_teacher }}"/>
+    <button type="submit" class="btn-search"><i class="bi bi-search"></i></button>
+  </form>
+
+  <div class="thread-list">
+    {% if threads %}
+    {% for th in threads %}
+    <a href="{{ url_for('admin_message_thread', user_id=th.teacher.id) }}" class="thread-row {% if th.unread %}unread{% endif %}">
+      <div class="t-num">{{ (page - 1) * 15 + loop.index }}</div>
+      <div class="t-name">{{ th.teacher.full_name }}</div>
+      <div class="t-snippet">{% if th.last.sender == 'admin' %}<i class="bi bi-reply-fill"></i> {% endif %}{{ th.last.body }}</div>
+      <div class="t-date">{{ th.last.created_at.strftime('%d/%m %H:%M') }}</div>
+      <div>{% if th.unread %}<span class="unread-badge">{{ th.unread }}</span>{% endif %}</div>
+    </a>
+    {% endfor %}
+    {% if total_pages > 1 %}
+    <div class="pager">
+      {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}<span class="current">{{ p }}</span>
+        {% else %}<a href="{{ url_for('admin_messages', q=q, page=p) }}">{{ p }}</a>{% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">{{ t.empty_messages }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

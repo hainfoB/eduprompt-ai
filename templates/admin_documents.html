@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ t.nav_documents }} — HaithemEduAI{% endblock %}
+{% block extra_head %}
+<style>
+.adm-wrap{max-width:1080px;margin:32px auto;padding:0 max(4vw,16px)}
+.adm-header h1{font-size:22px;font-weight:800;color:var(--navy);margin:0 0 20px}
+.search-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:16px 18px;margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.search-card .form-group{flex:1;min-width:180px}
+.form-label{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:6px;display:block}
+.form-control,.form-select{border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;width:100%;background:var(--ivory)}
+.btn-search{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:11px 20px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.btn-clear{background:var(--sky);color:var(--navy);border:none;border-radius:10px;padding:11px 14px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center}
+
+.doc-table{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.doc-row{display:grid;grid-template-columns:40px 1.6fr 1.6fr 1fr 1fr 100px 70px 130px;gap:10px;padding:12px 18px;align-items:center;border-bottom:1px solid var(--line);font-size:12.5px}
+.doc-row.header{background:var(--navy);color:#fff;font-weight:700;text-transform:uppercase;font-size:10px}
+.doc-row:last-child{border-bottom:none}
+.doc-num{color:var(--muted);font-weight:700}
+.t-link{color:var(--navy);font-weight:700;text-decoration:none}
+.t-link:hover{text-decoration:underline}
+.fmt-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;background:var(--sky);color:var(--navy)}
+.empty-state{text-align:center;padding:32px;color:var(--muted);font-size:13px}
+.pager{display:flex;justify-content:center;gap:6px;padding:16px;flex-wrap:wrap}
+.pager a,.pager span{padding:7px 12px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;color:var(--navy);background:var(--sky)}
+.pager .current{background:var(--navy);color:#fff}
+
+@media(max-width:800px){
+  .doc-row{grid-template-columns:1fr;gap:4px}
+  .doc-row.header{display:none}
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="adm-wrap">
+  <div class="adm-header"><h1><i class="bi bi-file-earmark-text-fill"></i> {{ t.nav_documents }}</h1></div>
+
+  <form class="search-card" method="GET">
+    <div class="form-group">
+      <label class="form-label">{{ t.search_label }}</label>
+      <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="{{ t.search_placeholder_alldoc }}"/>
+    </div>
+    <div class="form-group" style="flex:0 0 200px">
+      <label class="form-label">{{ t.table_type }}</label>
+      <select name="doc_type" class="form-select">
+        <option value="">{{ t.filter_all_types }}</option>
+        {% for dt in doc_type_options %}
+        <option value="{{ dt }}" {% if dt==doc_type %}selected{% endif %}>{{ dt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn-search"><i class="bi bi-search"></i> {{ t.btn_search }}</button>
+    {% if q or doc_type %}<a href="{{ url_for('admin_documents') }}" class="btn-clear"><i class="bi bi-x-lg"></i></a>{% endif %}
+  </form>
+
+  <div class="doc-table">
+    {% if pager.items %}
+    <div class="doc-row header">
+      <div>#</div><div>{{ t.table_teacher }}</div><div>{{ t.table_lesson }}</div><div>{{ t.table_subject }}</div><div>{{ t.table_type }}</div><div>{{ t.table_format }}</div><div>{{ t.table_date }}</div><div></div>
+    </div>
+    {% for d in pager.items %}
+    <div class="doc-row">
+      <div class="doc-num">{{ (pager.page - 1) * pager.per_page + loop.index }}</div>
+      <div><a href="{{ url_for('admin_teacher_detail', user_id=d.user_id) }}" class="t-link">{{ d.user.full_name if d.user else '—' }}</a></div>
+      <div>{{ d.title or t.no_title }}</div>
+      <div>{{ d.subject }}</div>
+      <div>{{ d.doc_type }}</div>
+      <div><span class="fmt-tag"><i class="bi bi-file-earmark"></i> {{ d.fmt|upper }}</span></div>
+      <div>{{ d.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
+      <div><a href="{{ url_for('admin_teacher_detail', user_id=d.user_id) }}" class="t-link"><i class="bi bi-eye-fill"></i></a></div>
+    </div>
+    {% endfor %}
+    {% if pager.pages > 1 %}
+    <div class="pager">
+      {% for p in range(1, pager.pages + 1) %}
+        {% if p == pager.page %}<span class="current">{{ p }}</span>
+        {% else %}<a href="{{ url_for('admin_documents', q=q, doc_type=doc_type, page=p) }}">{{ p }}</a>{% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">{{ t.empty_docs }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

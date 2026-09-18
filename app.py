@@ -24,7 +24,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_RIGHT, TA_CENTER, TA_LEFT
 
-from models import db, User, Subscription, Document, LicenseCode, Payment, PLAN_PRICES, create_trial_subscription
+from models import db, User, Subscription, Document, LicenseCode, Payment, Message, PLAN_PRICES, create_trial_subscription
 from utils import build_sources_context
 from translations import get_translations, TRANSLATIONS
 from notifications import check_and_send_expiry_reminders, send_email
@@ -78,6 +78,42 @@ def ensure_lang():
 def inject_i18n():
     lang = current_lang()
     return dict(lang=lang, t=get_translations(lang), is_rtl=(lang == "ar"), contact_email=CONTACT_EMAIL)
+
+
+@app.context_processor
+def inject_notifications():
+    """Feeds the navbar notification bell for both teachers and admins."""
+    if not current_user.is_authenticated:
+        return dict(notif_unread_msgs=0, notif_expiring=0, notif_reminder=False)
+
+    if current_user.role == "admin":
+        unread_msgs = Message.query.filter_by(sender="teacher", read_by_admin=False).count()
+        now = datetime.utcnow()
+        soon = now + timedelta(days=5)
+        expiring = Subscription.query.filter(
+            Subscription.status == "active",
+            Subscription.expires_at.isnot(None),
+            Subscription.expires_at >= now,
+            Subscription.expires_at <= soon,
+        ).count()
+        return dict(notif_unread_msgs=unread_msgs, notif_expiring=expiring, notif_reminder=False)
+    else:
+        unread_msgs = Message.query.filter_by(user_id=current_user.id, sender="admin",
+                                               read_by_teacher=False).count()
+        sub = current_user.subscription
+        days_left = sub.days_until_expiry() if sub else None
+        reminder = days_left is not None and 0 <= days_left <= 5
+        return dict(notif_unread_msgs=unread_msgs, notif_expiring=0, notif_reminder=reminder)
+
+
+def paginate_list(items, page, per_page=15):
+    """Manual pagination for plain Python lists (used where results are assembled
+    in Python rather than as a single SQLAlchemy Query)."""
+    total = len(items)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    start = (page - 1) * per_page
+    return items[start:start + per_page], page, total_pages, total
 
 
 @app.route("/set-lang/<lang>")
@@ -303,7 +339,12 @@ def logout():
 def dashboard():
     sub = current_user.subscription
     recent_docs = current_user.documents[:10]
-    return render_template("dashboard.html", sub=sub, docs=recent_docs)
+    recent_messages = Message.query.filter_by(user_id=current_user.id) \
+        .order_by(Message.created_at.desc()).limit(3).all()
+    unread_admin_msgs = Message.query.filter_by(user_id=current_user.id, sender="admin",
+                                                 read_by_teacher=False).count()
+    return render_template("dashboard.html", sub=sub, docs=recent_docs,
+                            recent_messages=recent_messages, unread_admin_msgs=unread_admin_msgs)
 
 
 # ── PROFILE (self-service) ───────────────────────────────────────────────────
@@ -405,8 +446,23 @@ def admin_licenses():
         db.session.commit()
         flash(tr("flash_license_generated", code=lic.code), "success")
 
-    codes = LicenseCode.query.order_by(LicenseCode.created_at.desc()).limit(50).all()
-    return render_template("admin_licenses.html", codes=codes)
+    q = request.args.get("q", "").strip()
+    status_filter = request.args.get("status", "").strip()
+    page = request.args.get("page", 1, type=int)
+
+    query = LicenseCode.query
+    if q:
+        query = query.filter(LicenseCode.code.ilike(f"%{q}%"))
+    if status_filter == "used":
+        query = query.filter(LicenseCode.used.is_(True))
+    elif status_filter == "available":
+        query = query.filter(LicenseCode.used.is_(False))
+
+    query = query.order_by(LicenseCode.created_at.desc())
+    pager = query.paginate(page=page, per_page=20, error_out=False)
+
+    return render_template("admin_licenses.html", codes=pager.items, pager=pager,
+                            q=q, status_filter=status_filter)
 
 
 # ── ADMIN: advanced statistics dashboard ─────────────────────────────────────
@@ -519,8 +575,209 @@ def admin_teachers():
             generated = (email, password)
             flash(tr("flash_teacher_created", name=f"{first_name} {last_name}"), "success")
 
-    teachers = User.query.filter_by(role="user").order_by(User.created_at.desc()).all()
-    return render_template("admin_teachers.html", teachers=teachers, generated=generated)
+    q = request.args.get("q", "").strip()
+    plan_filter = request.args.get("plan", "").strip()
+    page = request.args.get("page", 1, type=int)
+
+    query = User.query.filter_by(role="user")
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(User.first_name.ilike(like),
+                                     User.last_name.ilike(like),
+                                     User.email.ilike(like)))
+    if plan_filter:
+        query = query.join(Subscription).filter(Subscription.plan == plan_filter)
+
+    query = query.order_by(User.created_at.desc())
+    pager = query.paginate(page=page, per_page=15, error_out=False)
+
+    return render_template("admin_teachers.html", teachers=pager.items, pager=pager,
+                            q=q, plan_filter=plan_filter, generated=generated)
+
+
+@app.route("/admin/teachers/<int:user_id>")
+@login_required
+def admin_teacher_detail(user_id):
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    teacher = User.query.get_or_404(user_id)
+    sub = teacher.subscription
+
+    q = request.args.get("q", "").strip()
+    page = request.args.get("page", 1, type=int)
+
+    doc_query = Document.query.filter_by(user_id=teacher.id)
+    if q:
+        like = f"%{q}%"
+        doc_query = doc_query.filter(db.or_(Document.title.ilike(like),
+                                             Document.subject.ilike(like),
+                                             Document.doc_type.ilike(like),
+                                             Document.level.ilike(like)))
+    doc_query = doc_query.order_by(Document.created_at.desc())
+    docs_pager = doc_query.paginate(page=page, per_page=10, error_out=False)
+
+    payments = Payment.query.filter_by(user_id=teacher.id).order_by(Payment.created_at.desc()).all()
+    total_docs = Document.query.filter_by(user_id=teacher.id).count()
+
+    return render_template("admin_teacher_detail.html", teacher=teacher, sub=sub,
+                            docs_pager=docs_pager, payments=payments, q=q,
+                            total_docs=total_docs)
+
+
+@app.route("/admin/teachers/<int:user_id>/reset-quota", methods=["POST"])
+@login_required
+def admin_reset_quota(user_id):
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    teacher = User.query.get_or_404(user_id)
+    sub = teacher.subscription
+    if sub:
+        sub.docs_used_today = 0
+        sub.docs_used = 0
+        sub.last_reset_date = None
+        db.session.commit()
+        flash(tr("flash_quota_reset", name=teacher.full_name), "success")
+    return redirect(url_for("admin_teacher_detail", user_id=user_id))
+
+
+@app.route("/admin/teachers/<int:user_id>/extend", methods=["POST"])
+@login_required
+def admin_extend_subscription(user_id):
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    teacher = User.query.get_or_404(user_id)
+    sub = teacher.subscription
+    days = request.form.get("days", 30, type=int)
+    if sub:
+        base = sub.expires_at if (sub.expires_at and sub.expires_at > datetime.utcnow()) else datetime.utcnow()
+        sub.expires_at = base + timedelta(days=days)
+        sub.status = "active"
+        sub.expiry_reminder_sent = False
+        db.session.commit()
+        flash(tr("flash_subscription_extended", name=teacher.full_name, days=days), "success")
+    return redirect(url_for("admin_teacher_detail", user_id=user_id))
+
+
+# ── ADMIN: cross-teacher document search ─────────────────────────────────────
+@app.route("/admin/documents")
+@login_required
+def admin_documents():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    q = request.args.get("q", "").strip()
+    doc_type = request.args.get("doc_type", "").strip()
+    page = request.args.get("page", 1, type=int)
+
+    query = Document.query.join(User, Document.user_id == User.id)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(Document.title.ilike(like),
+                                     Document.subject.ilike(like),
+                                     Document.level.ilike(like),
+                                     User.first_name.ilike(like),
+                                     User.last_name.ilike(like),
+                                     User.email.ilike(like)))
+    if doc_type:
+        query = query.filter(Document.doc_type == doc_type)
+
+    query = query.order_by(Document.created_at.desc())
+    pager = query.paginate(page=page, per_page=20, error_out=False)
+
+    doc_type_options = [row[0] for row in
+                         db.session.query(Document.doc_type).distinct().all() if row[0]]
+
+    return render_template("admin_documents.html", pager=pager, q=q,
+                            doc_type=doc_type, doc_type_options=doc_type_options)
+
+
+# ── MESSAGING: teacher <-> admin, free & unlimited ───────────────────────────
+@app.route("/messages", methods=["GET", "POST"])
+@login_required
+def messages():
+    if current_user.role == "admin":
+        return redirect(url_for("admin_messages"))
+
+    if request.method == "POST":
+        body = request.form.get("body", "").strip()
+        if body:
+            db.session.add(Message(user_id=current_user.id, sender="teacher", body=body,
+                                    read_by_teacher=True, read_by_admin=False))
+            db.session.commit()
+        return redirect(url_for("messages"))
+
+    # Mark admin's replies as read now that the teacher is viewing the thread
+    Message.query.filter_by(user_id=current_user.id, sender="admin", read_by_teacher=False) \
+        .update({"read_by_teacher": True})
+    db.session.commit()
+
+    thread = Message.query.filter_by(user_id=current_user.id).order_by(Message.created_at.asc()).all()
+    return render_template("messages.html", thread=thread)
+
+
+@app.route("/admin/messages")
+@login_required
+def admin_messages():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    q = request.args.get("q", "").strip()
+    page = request.args.get("page", 1, type=int)
+
+    teachers_query = User.query.filter_by(role="user")
+    if q:
+        like = f"%{q}%"
+        teachers_query = teachers_query.filter(db.or_(User.first_name.ilike(like),
+                                                        User.last_name.ilike(like),
+                                                        User.email.ilike(like)))
+    teachers = teachers_query.all()
+
+    threads = []
+    for t in teachers:
+        last = Message.query.filter_by(user_id=t.id).order_by(Message.created_at.desc()).first()
+        unread = Message.query.filter_by(user_id=t.id, sender="teacher", read_by_admin=False).count()
+        if last:  # only list teachers who have exchanged at least one message
+            threads.append({"teacher": t, "last": last, "unread": unread})
+
+    threads.sort(key=lambda x: (x["unread"] == 0, -x["last"].created_at.timestamp()))
+
+    page_items, page, total_pages, total = paginate_list(threads, page, per_page=15)
+
+    return render_template("admin_messages.html", threads=page_items, q=q,
+                            page=page, total_pages=total_pages, total=total)
+
+
+@app.route("/admin/messages/<int:user_id>", methods=["GET", "POST"])
+@login_required
+def admin_message_thread(user_id):
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    teacher = User.query.get_or_404(user_id)
+
+    if request.method == "POST":
+        body = request.form.get("body", "").strip()
+        if body:
+            db.session.add(Message(user_id=teacher.id, sender="admin", body=body,
+                                    read_by_admin=True, read_by_teacher=False))
+            db.session.commit()
+        return redirect(url_for("admin_message_thread", user_id=user_id))
+
+    Message.query.filter_by(user_id=teacher.id, sender="teacher", read_by_admin=False) \
+        .update({"read_by_admin": True})
+    db.session.commit()
+
+    thread = Message.query.filter_by(user_id=teacher.id).order_by(Message.created_at.asc()).all()
+    return render_template("admin_message_thread.html", teacher=teacher, thread=thread)
 
 
 @app.route("/admin/teachers/<int:user_id>/edit", methods=["GET", "POST"])

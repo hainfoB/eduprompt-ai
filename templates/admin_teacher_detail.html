@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}{{ teacher.full_name }} — HaithemEduAI{% endblock %}
+{% block extra_head %}
+<style>
+.adm-wrap{max-width:960px;margin:32px auto;padding:0 max(4vw,16px)}
+.back-link{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--muted);text-decoration:none;margin-bottom:14px}
+.back-link:hover{color:var(--navy)}
+.profile-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:24px;margin-bottom:22px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.profile-card h1{font-size:20px;font-weight:800;color:var(--navy);margin:0 0 4px}
+.profile-card .muted{color:var(--muted);font-size:13px}
+.plan-tag{padding:4px 10px;border-radius:7px;font-size:11px;font-weight:800;display:inline-block;margin-top:8px}
+.plan-trial{background:#fff7ed;color:#c2410c}
+.plan-pro{background:#ecfdf5;color:#065f46}
+.plan-premium{background:#f5f3ff;color:#6d28d9}
+
+.stat-mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:22px}
+.stat-mini{background:var(--paper);border-radius:12px;box-shadow:var(--shadow);padding:14px 16px}
+.stat-mini .label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
+.stat-mini .value{font-size:20px;font-weight:800;color:var(--navy)}
+
+.actions-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px}
+.act-btn{border:none;border-radius:10px;padding:10px 16px;font-size:12.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.act-edit{background:var(--sky);color:var(--navy)}
+.act-quota{background:#fff7ed;color:#c2410c}
+.act-extend{background:#ecfdf5;color:#065f46}
+.act-msg{background:#eef2ff;color:#4338ca}
+.act-delete{background:#fef2f2;color:var(--red)}
+.extend-inline{display:inline-flex;gap:6px;align-items:center}
+.extend-inline select{border:1.5px solid var(--line);border-radius:8px;padding:9px 10px;font-size:12px}
+
+.section-title{font-size:15px;font-weight:800;color:var(--navy);margin:0 0 14px;display:flex;align-items:center;gap:8px}
+.search-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:14px 16px;margin-bottom:14px;display:flex;gap:10px}
+.search-card input{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13px}
+.btn-search{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer}
+
+.doc-table{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:24px}
+.doc-row{display:grid;grid-template-columns:40px 2fr 1fr 1fr 100px 70px 110px;gap:10px;padding:12px 18px;align-items:center;border-bottom:1px solid var(--line);font-size:12.5px}
+.doc-row.header{background:var(--navy);color:#fff;font-weight:700;text-transform:uppercase;font-size:10px}
+.doc-row:last-child{border-bottom:none}
+.doc-num{color:var(--muted);font-weight:700}
+.fmt-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;background:var(--sky);color:var(--navy)}
+.empty-state{text-align:center;padding:28px;color:var(--muted);font-size:13px}
+.pager{display:flex;justify-content:center;gap:6px;padding:14px;flex-wrap:wrap}
+.pager a,.pager span{padding:7px 12px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;color:var(--navy);background:var(--sky)}
+.pager .current{background:var(--navy);color:#fff}
+
+.pay-row{display:grid;grid-template-columns:40px 1fr 1fr 100px;gap:10px;padding:10px 18px;border-bottom:1px solid var(--line);font-size:12.5px}
+.pay-row.header{font-weight:700;color:#fff;background:var(--navy);text-transform:uppercase;font-size:10px}
+.pay-row:last-child{border-bottom:none}
+
+@media(max-width:700px){
+  .doc-row{grid-template-columns:1fr;gap:4px}
+  .doc-row.header{display:none}
+  .pay-row{grid-template-columns:1fr;gap:4px}
+  .pay-row.header{display:none}
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="adm-wrap">
+  <a href="{{ url_for('admin_teachers') }}" class="back-link"><i class="bi bi-arrow-{{ 'right' if is_rtl else 'left' }}"></i> {{ t.nav_teachers }}</a>
+
+  <div class="profile-card">
+    <div>
+      <h1>{{ teacher.full_name }}</h1>
+      <div class="muted"><i class="bi bi-envelope"></i> {{ teacher.email }}</div>
+      <div class="muted"><i class="bi bi-calendar3"></i> {{ t.table_created }}: {{ teacher.created_at.strftime('%d/%m/%Y') }}</div>
+      {% if sub %}
+      <span class="plan-tag plan-{{ sub.plan }}">{{ sub.plan_label() }}</span>
+      {% if sub.expires_at %}<div class="muted" style="margin-top:6px">{{ t.expires_on }} {{ sub.expires_at.strftime('%d/%m/%Y') }}</div>{% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  {% if sub %}
+  <div class="stat-mini-grid">
+    <div class="stat-mini"><div class="label">{{ t.stat_docs_remaining }}</div>
+      <div class="value">{{ sub.remaining() }}{% if sub.is_daily_plan() %}/{{ sub.daily_limit() }}{% endif %}</div></div>
+    <div class="stat-mini"><div class="label">{{ t.stat_docs_created }}</div><div class="value">{{ total_docs }}</div></div>
+    <div class="stat-mini"><div class="label">{{ t.label_plan }}</div><div class="value">{{ sub.plan_label() }}</div></div>
+    <div class="stat-mini"><div class="label">{{ t.table_status }}</div>
+      <div class="value">{{ t.status_expired if sub.is_expired() else t.status_active }}</div></div>
+  </div>
+  {% endif %}
+
+  <div class="actions-row">
+    <a href="{{ url_for('admin_edit_teacher', user_id=teacher.id) }}" class="act-btn act-edit"><i class="bi bi-pencil-fill"></i> {{ t.btn_edit }}</a>
+    <a href="{{ url_for('admin_message_thread', user_id=teacher.id) }}" class="act-btn act-msg"><i class="bi bi-chat-dots-fill"></i> {{ t.nav_messages }}</a>
+    <form method="POST" action="{{ url_for('admin_reset_quota', user_id=teacher.id) }}" onsubmit="return confirm('{{ t.confirm_reset_quota }}')">
+      <button type="submit" class="act-btn act-quota"><i class="bi bi-arrow-counterclockwise"></i> {{ t.btn_reset_quota }}</button>
+    </form>
+    <form method="POST" action="{{ url_for('admin_extend_subscription', user_id=teacher.id) }}" class="extend-inline">
+      <select name="days">
+        <option value="30">+30 {{ t.days_suffix }}</option>
+        <option value="90">+90 {{ t.days_suffix }}</option>
+        <option value="365" selected>+365 {{ t.days_suffix }}</option>
+      </select>
+      <button type="submit" class="act-btn act-extend"><i class="bi bi-calendar-plus-fill"></i> {{ t.btn_extend }}</button>
+    </form>
+    <form method="POST" action="{{ url_for('admin_delete_teacher', user_id=teacher.id) }}" onsubmit="return confirm('{{ t.confirm_delete }} {{ teacher.email }} ?')">
+      <button type="submit" class="act-btn act-delete"><i class="bi bi-trash-fill"></i> {{ t.btn_delete }}</button>
+    </form>
+  </div>
+
+  <div class="section-title"><i class="bi bi-clock-history"></i> {{ t.history_title }}</div>
+  <form class="search-card" method="GET">
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ t.search_placeholder_doc }}"/>
+    <button type="submit" class="btn-search"><i class="bi bi-search"></i></button>
+  </form>
+
+  <div class="doc-table">
+    {% if docs_pager.items %}
+    <div class="doc-row header">
+      <div>#</div><div>{{ t.table_lesson }}</div><div>{{ t.table_subject }}</div><div>{{ t.table_level }}</div><div>{{ t.table_type }}</div><div>{{ t.table_format }}</div><div>{{ t.table_date }}</div>
+    </div>
+    {% for d in docs_pager.items %}
+    <div class="doc-row">
+      <div class="doc-num">{{ (docs_pager.page - 1) * docs_pager.per_page + loop.index }}</div>
+      <div>{{ d.title or t.no_title }}</div>
+      <div>{{ d.subject }}</div>
+      <div>{{ d.level }}</div>
+      <div>{{ d.doc_type }}</div>
+      <div><span class="fmt-tag"><i class="bi bi-file-earmark"></i> {{ d.fmt|upper }}</span></div>
+      <div>{{ d.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
+    </div>
+    {% endfor %}
+    {% if docs_pager.pages > 1 %}
+    <div class="pager">
+      {% for p in range(1, docs_pager.pages + 1) %}
+        {% if p == docs_pager.page %}<span class="current">{{ p }}</span>
+        {% else %}<a href="{{ url_for('admin_teacher_detail', user_id=teacher.id, q=q, page=p) }}">{{ p }}</a>{% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">{{ t.empty_docs }}</div>
+    {% endif %}
+  </div>
+
+  <div class="section-title"><i class="bi bi-receipt"></i> {{ t.stats_payments_title }}</div>
+  <div class="doc-table">
+    {% if payments %}
+    <div class="pay-row header"><div>#</div><div>{{ t.table_date }}</div><div>{{ t.label_plan }}</div><div>{{ t.table_amount }}</div></div>
+    {% for p in payments %}
+    <div class="pay-row">
+      <div class="doc-num">{{ loop.index }}</div>
+      <div>{{ p.created_at.strftime('%d/%m/%Y') }}</div>
+      <div>{{ p.plan }}</div>
+      <div>{{ p.amount }} {{ p.currency }}</div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">—</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

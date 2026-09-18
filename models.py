@@ -112,7 +112,18 @@ class Subscription(db.Model):
         return delta.days
 
     def plan_label(self):
-        return {"trial": "Essai gratuit", "pro": "Pro", "premium": "Premium"}.get(self.plan, self.plan)
+        """Localised plan name for the currently active session language."""
+        try:
+            from flask import session
+            lang = session.get("lang", "fr")
+        except Exception:
+            lang = "fr"
+        labels = {
+            "fr": {"trial": "Essai gratuit", "pro": "Pro", "premium": "Premium"},
+            "en": {"trial": "Free trial", "pro": "Pro", "premium": "Premium"},
+            "ar": {"trial": "تجربة مجانية", "pro": "برو", "premium": "بريميوم"},
+        }
+        return labels.get(lang, labels["fr"]).get(self.plan, self.plan)
 
 
 class Payment(db.Model):
@@ -124,6 +135,20 @@ class Payment(db.Model):
     currency   = db.Column(db.String(10), default="DA")
     note       = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User")
+
+
+class Message(db.Model):
+    """Free, unlimited direct-message thread between a teacher and the admin.
+    One thread per teacher (user_id); `sender` says who wrote this particular message."""
+    id              = db.Column(db.Integer, primary_key=True)
+    user_id         = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    sender          = db.Column(db.String(10), default="teacher")   # teacher | admin
+    body            = db.Column(db.Text, nullable=False)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    read_by_admin   = db.Column(db.Boolean, default=False)
+    read_by_teacher = db.Column(db.Boolean, default=False)
 
     user = db.relationship("User")
 
@@ -151,6 +176,8 @@ class LicenseCode(db.Model):
     used_by       = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     used_at       = db.Column(db.DateTime, nullable=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+
+    used_by_user  = db.relationship("User", foreign_keys=[used_by])
 
 
 def create_trial_subscription(user):
