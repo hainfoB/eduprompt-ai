@@ -583,9 +583,9 @@ const LANG_LOCK_BOTTOM = {
 };
 
 const STYLE_BLOCK = {
-  ar: "الأسلوب: مهني وواضح ومناسب لعمر المتعلمين؛ عرّف أي مصطلح تقني غير مألوف؛ استخدم جداول للتسلسل الزمني وقوائم نقطية للعناصر.",
-  fr: "Style : professionnel, clair, adapté à l'âge des apprenants ; définis tout terme technique peu courant ; utilise des tableaux pour les séquences temporelles et des listes à puces pour les éléments.",
-  en: "Style: professional, clear, age-appropriate for the learners; define any uncommon technical term; use tables for timed sequences and bullet lists for items.",
+  ar: "الأسلوب: مهني وواضح ومناسب لعمر المتعلمين؛ عرّف أي مصطلح تقني غير مألوف. لأي جدول (التسلسل الزمني، شبكة التقييم Rubric، مقارنات...) استخدم حصراً صيغة جدول Markdown بالشكل التالي:\n| العمود 1 | العمود 2 |\n|---|---|\n| قيمة | قيمة |\nلا تستخدم أي صيغة جدول أخرى.",
+  fr: "Style : professionnel, clair, adapté à l'âge des apprenants ; définis tout terme technique peu courant. Pour tout tableau (séquence temporelle, grille d'évaluation Rubric, comparaisons...), utilise EXCLUSIVEMENT la syntaxe Markdown suivante :\n| Colonne 1 | Colonne 2 |\n|---|---|\n| valeur | valeur |\nN'utilise aucune autre présentation de tableau.",
+  en: "Style: professional, clear, age-appropriate for the learners; define any uncommon technical term. For any table (timed sequence, assessment rubric, comparisons...), use EXCLUSIVELY the following Markdown syntax:\n| Column 1 | Column 2 |\n|---|---|\n| value | value |\nDo not use any other table format.",
 };
 
 const EXAMPLES_BLOCK = {
@@ -723,21 +723,27 @@ function buildPrompt(level, palier, subject, lesson, dt, ctx, etablissement, pro
 }
 
 
-const GEMINI_MODELS = ["gemini-2.5-flash-preview-05-20","gemini-2.5-flash","gemini-2.0-flash","gemini-1.5-flash","gemini-1.5-pro"];
+const GEMINI_MODELS = ["gemini-3.8-flash","gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash","gemini-3.5-flash-lite","gemini-2.5-flash"];
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
+const MAX_OUTPUT_TOKENS = 8192;
+const MAX_CONTINUATIONS = 3; // safety cap so a runaway document can't loop forever
 
-async function callOneModel(apiKey, model, prompt, retries=3){
+async function callOneModel(apiKey, model, contents, retries=3){
   for(let attempt=0; attempt<retries; attempt++){
     const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
     let res;
     try{
       res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:4096,temperature:0.7}})});
+        body:JSON.stringify({contents, generationConfig:{maxOutputTokens:MAX_OUTPUT_TOKENS,temperature:0.85}})});
     }catch(e){ throw {type:"network", msg:e.message}; }
 
     if(res.ok){
       const data=await res.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const candidate = data.candidates?.[0];
+      return {
+        text: candidate?.content?.parts?.[0]?.text || "",
+        finishReason: candidate?.finishReason || "STOP",
+      };
     }
     const errData=await res.json().catch(()=>({error:{message:"HTTP "+res.status}}));
     const msg=errData.error?.message || "HTTP "+res.status;
@@ -760,7 +766,27 @@ async function callGemini(apiKey, prompt){
   let lastMsg="";
   for(const model of GEMINI_MODELS){
     updateLoaderMsg(`${UI.loader_trying_model} ${model}…`);
-    try{ return await callOneModel(apiKey, model, prompt); }
+    try{
+      let contents = [{role:"user", parts:[{text: prompt}]}];
+      let fullText = "";
+      let round = 0;
+
+      while(true){
+        const {text, finishReason} = await callOneModel(apiKey, model, contents);
+        fullText += text;
+
+        if(finishReason !== "MAX_TOKENS" || round >= MAX_CONTINUATIONS) break;
+
+        round++;
+        updateLoaderMsg(`✍️ ${UI.loader_writing} (${round + 1})`);
+        contents = [
+          {role:"user", parts:[{text: prompt}]},
+          {role:"model", parts:[{text: fullText}]},
+          {role:"user", parts:[{text: "Continue exactly where you left off, seamlessly, without repeating anything already written and without restarting. Keep the same language and structure."}]},
+        ];
+      }
+      return fullText;
+    }
     catch(e){
       if(e.type==="auth") throw new Error(e.msg);
       if(e.type==="network") throw new Error(e.msg);

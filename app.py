@@ -676,6 +676,36 @@ def set_cell_background(cell, hex_color):
     cell._tc.get_or_add_tcPr().append(shd)
 
 
+def try_parse_md_table(lines, i):
+    """If lines[i] starts a Markdown pipe-table, parse it and return (rows, next_index).
+    Otherwise return None. Handles the |---|---| separator row Gemini emits."""
+    def is_row(s):
+        s = s.strip()
+        return s.startswith("|") and s.endswith("|") and s.count("|") >= 2
+
+    def is_sep(s):
+        s = s.strip().strip("|")
+        return bool(s) and all(c in "-:| " for c in s) and "-" in s
+
+    if i + 1 >= len(lines) or not is_row(lines[i]) or not is_sep(lines[i + 1]):
+        return None
+
+    def split_row(s):
+        s = s.strip()
+        if s.startswith("|"):
+            s = s[1:]
+        if s.endswith("|"):
+            s = s[:-1]
+        return [c.strip() for c in s.split("|")]
+
+    rows = [split_row(lines[i])]
+    j = i + 2
+    while j < len(lines) and is_row(lines[j]):
+        rows.append(split_row(lines[j]))
+        j += 1
+    return rows, j
+
+
 HEADER_LABELS = {
     "fr": {"teacher": "Enseignant(e)", "etablissement": "Établissement", "level": "Niveau",
            "palier": "Palier", "subject": "Matière", "projet": "Projet / Unité", "activite": "Activité"},
@@ -762,11 +792,38 @@ def make_docx(content, meta, colors_cfg, lang="fr"):
     lr.font.color.rgb = RGBColor(*hex_to_rgb(c3))
     lesson_p.paragraph_format.space_after = Pt(16)
 
-    # ── Body content (markdown-ish parsing) ──
-    for line in content.split("\n"):
-        line = line.strip()
+    # ── Body content (markdown-ish parsing, with real tables) ──
+    lines = content.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+
         if not line:
             doc.add_paragraph("")
+            i += 1
+            continue
+
+        table_result = try_parse_md_table(lines, i)
+        if table_result:
+            rows, i = table_result
+            n_cols = max(len(r) for r in rows)
+            tbl = doc.add_table(rows=len(rows), cols=n_cols)
+            tbl.style = "Table Grid"
+            for ri, row in enumerate(rows):
+                for ci in range(n_cols):
+                    cell = tbl.cell(ri, ci)
+                    cell.text = ""
+                    p = cell.paragraphs[0]
+                    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT if lang == "ar" else WD_ALIGN_PARAGRAPH.LEFT
+                    r = p.add_run(row[ci] if ci < len(row) else "")
+                    r.font.size = Pt(10)
+                    if ri == 0:
+                        r.bold = True
+                        r.font.color.rgb = RGBColor(255, 255, 255)
+                        set_cell_background(cell, c3)
+                    else:
+                        r.font.color.rgb = RGBColor(*hex_to_rgb(ctext, "1a1a1a"))
+            doc.add_paragraph().paragraph_format.space_after = Pt(10)
             continue
 
         if line.startswith("### "):
@@ -788,11 +845,13 @@ def make_docx(content, meta, colors_cfg, lang="fr"):
         else:
             p = doc.add_paragraph()
             parts = line.split("**")
-            for i, part in enumerate(parts):
+            for pi, part in enumerate(parts):
                 r = p.add_run(part)
                 r.font.color.rgb = RGBColor(*hex_to_rgb(ctext, "1a1a1a"))
-                if i % 2 == 1:
+                if pi % 2 == 1:
                     r.bold = True
+
+        i += 1
 
     # ── Footer ──
     doc.add_paragraph().paragraph_format.space_before = Pt(20)
@@ -869,11 +928,43 @@ def make_pdf(content, meta, colors_cfg, lang="fr"):
     story.append(Spacer(1, 0.5*cm))
     story.append(Paragraph(meta.get("lesson",""), lesson_s))
 
-    for line in content.split("\n"):
-        line = line.strip()
+    cell_s = ParagraphStyle("Cell", parent=styles["Normal"], textColor=rl_colors.HexColor(ctext),
+                             fontSize=9, leading=13, alignment=align)
+    cell_head_s = ParagraphStyle("CellH", parent=styles["Normal"], textColor=rl_colors.white,
+                                  fontSize=9, leading=13, alignment=align, fontName="Helvetica-Bold")
+
+    lines = content.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+
         if not line:
             story.append(Spacer(1, 0.2*cm))
-        elif line.startswith("### ") or line.startswith("## ") or line.startswith("# "):
+            i += 1
+            continue
+
+        table_result = try_parse_md_table(lines, i)
+        if table_result:
+            rows, i = table_result
+            n_cols = max(len(r) for r in rows)
+            wrapped = []
+            for ri, row in enumerate(rows):
+                style = cell_head_s if ri == 0 else cell_s
+                wrapped.append([Paragraph(row[ci] if ci < len(row) else "", style) for ci in range(n_cols)])
+            col_w = (16*cm) / n_cols
+            body_tbl = Table(wrapped, colWidths=[col_w]*n_cols)
+            body_tbl.setStyle(TableStyle([
+                ("BACKGROUND", (0,0), (-1,0), rl_colors.HexColor(c3)),
+                ("GRID", (0,0), (-1,-1), 0.6, rl_colors.HexColor("#dce6f0")),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                ("TOPPADDING", (0,0), (-1,-1), 5),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+            ]))
+            story.append(body_tbl)
+            story.append(Spacer(1, 0.3*cm))
+            continue
+
+        if line.startswith("### ") or line.startswith("## ") or line.startswith("# "):
             style = h1_s if line.startswith("# ") else h2_s
             story.append(Paragraph(line.lstrip("#").strip(), style))
         elif line.startswith("- ") or line.startswith("• "):
@@ -882,6 +973,8 @@ def make_pdf(content, meta, colors_cfg, lang="fr"):
             safe = line.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
             safe = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', safe)
             story.append(Paragraph(safe, body_s))
+
+        i += 1
 
     doc.build(story)
     buf.seek(0)
