@@ -54,6 +54,14 @@
         <label class="form-label">{{ t.label_password }}</label>
         <input type="password" name="password" class="form-control" placeholder="Min. 6" required/>
       </div>
+      <div class="form-group">
+        <label class="form-label"><i class="bi bi-key-fill"></i> {{ t.apikey_register_label }}</label>
+        <input type="text" name="api_key" class="form-control" placeholder="AIza... / AQ.Ab8..." style="direction:ltr;text-align:left" required/>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5">
+          {{ t.apikey_register_hint }}
+          <a href="{{ url_for('home') }}#tuto" style="color:var(--orange);font-weight:600">↗</a>
+        </div>
+      </div>
       <button type="submit" class="btn-auth"><i class="bi bi-rocket-takeoff-fill"></i> {{ t.btn_register }}</button>
     </form>
     <div class="auth-switch">

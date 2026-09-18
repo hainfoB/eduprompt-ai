@@ -20,7 +20,8 @@
 .credentials-warn{font-size:11px;color:#92400e;background:#fffbeb;border-radius:8px;padding:8px 12px;margin-top:8px}
 
 .teachers-table{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
-.t-row{display:grid;grid-template-columns:1.6fr 1.8fr 100px 130px 90px 90px;gap:10px;padding:12px 18px;align-items:center;border-bottom:1px solid var(--line);font-size:12px}
+.t-row{display:grid;grid-template-columns:1.6fr 1.8fr 100px 130px 90px 90px 90px;gap:10px;padding:12px 18px;align-items:center;border-bottom:1px solid var(--line);font-size:12px}
+.btn-edit-link{background:var(--sky);color:var(--navy)}
 .t-row.header{background:var(--navy);color:#fff;font-weight:700;text-transform:uppercase;font-size:10px}
 .t-name{font-weight:700;color:var(--ink)}
 .t-email{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -85,6 +86,8 @@
       <label class="form-label">{{ t.label_password_optional }}</label>
       <input type="text" name="password" class="form-control" placeholder="—"/>
       <div class="hint">{{ t.password_hint }}</div>
+      <label class="form-label" style="margin-top:12px">{{ t.profile_section_apikey }}</label>
+      <input type="text" name="api_key" class="form-control" style="direction:ltr;text-align:left" placeholder="AIza... / AQ.Ab8... (optionnel)"/>
       <button type="submit" class="btn-create"><i class="bi bi-plus-circle-fill"></i> {{ t.btn_create_account }}</button>
     </form>
   </div>
@@ -92,7 +95,7 @@
   <div class="teachers-table">
     {% if teachers %}
     <div class="t-row header">
-      <div>{{ t.table_name }}</div><div>{{ t.label_email }}</div><div>{{ t.label_plan }}</div><div>{{ t.table_created }}</div><div></div><div></div>
+      <div>{{ t.table_name }}</div><div>{{ t.label_email }}</div><div>{{ t.label_plan }}</div><div>{{ t.table_created }}</div><div></div><div></div><div></div>
     </div>
     {% for tch in teachers %}
     <div class="t-row">
@@ -100,6 +103,9 @@
       <div class="t-email">{{ tch.email }}</div>
       <div><span class="plan-tag plan-{{ tch.subscription.plan if tch.subscription else 'trial' }}">{{ tch.subscription.plan_label() if tch.subscription else '—' }}</span></div>
       <div>{{ tch.created_at.strftime('%d/%m/%Y') }}</div>
+      <div>
+        <a href="{{ url_for('admin_edit_teacher', user_id=tch.id) }}" class="btn-mini btn-edit-link" style="display:inline-block;text-decoration:none"><i class="bi bi-pencil-fill"></i></a>
+      </div>
       <div>
         <form method="POST" action="{{ url_for('admin_reset_password', user_id=tch.id) }}" onsubmit="return confirm('{{ t.confirm_reset_pw }} {{ tch.email }} ?')">
           <button type="submit" class="btn-mini btn-reset"><i class="bi bi-key-fill"></i></button>

@@ -128,18 +128,21 @@
         <a href="{{ url_for('upgrade') }}" id="quotaUpgradeLink" style="display:none">{{ t.quota_upgrade_link }}</a>
       </div>
 
-      <div class="apikey-box">
-        <label class="form-label"><i class="bi bi-key-fill"></i> {{ t.apikey_label }}</label>
-        <div class="apikey-input-wrap">
-          <input type="password" id="apiKey" class="form-control" placeholder="AIza... / AQ.Ab8..." autocomplete="off"/>
-          <button class="apikey-toggle" type="button" onclick="toggleApiVis()"><i class="bi bi-eye" id="eyeIcon"></i></button>
-        </div>
-        <div class="apikey-tip">💡 {{ t.apikey_tip }} <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com</a></div>
+      {% if current_user.gemini_api_key %}
+      <div class="apikey-box" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="font-size:12px;color:var(--navy2)"><i class="bi bi-shield-check"></i> {{ t.apikey_stored_note }}</div>
+        <a href="{{ url_for('profile') }}" style="font-size:12px;font-weight:700;color:var(--orange);text-decoration:none">{{ t.go_to_profile }} →</a>
       </div>
+      {% else %}
+      <div class="apikey-box" style="border-color:#fca5a5;background:#fef2f2">
+        <div style="font-size:12px;color:#991b1b;margin-bottom:8px"><i class="bi bi-exclamation-triangle-fill"></i> {{ t.apikey_missing_generator }}</div>
+        <a href="{{ url_for('profile') }}" style="font-size:12px;font-weight:700;color:var(--navy);text-decoration:none">{{ t.go_to_profile }} →</a>
+      </div>
+      {% endif %}
 
       <div class="section-block">
         <div class="section-title"><i class="bi bi-person-badge-fill"></i> {{ t.section_teacher }}</div>
-        <div class="row g-2">
+        <div class="row g-2 mb-2">
           <div class="col-sm-6">
             <div class="form-group mb-0">
               <label class="form-label">{{ t.label_first_name }}</label>
@@ -150,6 +153,26 @@
             <div class="form-group mb-0">
               <label class="form-label">{{ t.label_last_name }}</label>
               <input type="text" id="teacherLast" class="form-control" value="{{ current_user.last_name }}"/>
+            </div>
+          </div>
+        </div>
+        <div class="row g-2">
+          <div class="col-sm-4">
+            <div class="form-group mb-0">
+              <label class="form-label">{{ t.label_etablissement }}</label>
+              <input type="text" id="etablissementInput" class="form-control"/>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="form-group mb-0">
+              <label class="form-label">{{ t.label_projet }}</label>
+              <input type="text" id="projetInput" class="form-control"/>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="form-group mb-0">
+              <label class="form-label">{{ t.label_activite }}</label>
+              <input type="text" id="activiteInput" class="form-control"/>
             </div>
           </div>
         </div>
@@ -307,6 +330,9 @@
 <script>
 // ── DATA ──────────────────────────────────────────────────────────────────────
 const CURRENT_LANG = {{ lang | tojson }};
+const CONTACT_EMAIL = {{ contact_email | tojson }};
+const STORED_API_KEY = {{ (current_user.gemini_api_key or "") | tojson }};
+const PROFILE_URL = {{ url_for('profile') | tojson }};
 const ALL_LEVELS = {{ levels | tojson }};
 const ALL_SUBJECTS = {{ subjects | tojson }};
 const ALL_DOC_TYPES = {{ doc_types | tojson }};
@@ -319,6 +345,8 @@ const DOC_ICONS = {
 
 const UI = {
   err_need_apikey:  {{ t.err_need_apikey | tojson }},
+  apikey_missing_generator: {{ t.apikey_missing_generator | tojson }},
+  go_to_profile: {{ t.go_to_profile | tojson }},
   err_need_level:   {{ t.err_need_level | tojson }},
   err_need_subject: {{ t.err_need_subject | tojson }},
   err_need_lesson:  {{ t.err_need_lesson | tojson }},
@@ -335,7 +363,10 @@ const UI = {
   quota_label_prefix: {{ t.quota_label_prefix | tojson }},
   quota_remaining_suffix: {{ t.quota_remaining_suffix | tojson }},
   quota_unlimited: {{ t.quota_unlimited | tojson }},
-  quota_exceeded: {{ t.quota_exceeded | tojson }},
+  quota_exceeded_trial: {{ t.quota_exceeded_trial | tojson }},
+  quota_exceeded_daily: {{ t.quota_exceeded_daily | tojson }},
+  contact_us_cta: {{ t.contact_us_cta | tojson }},
+  contact_us_subject_upgrade: {{ t.contact_us_subject_upgrade | tojson }},
 };
 
 let docType="lesson_plan", fmt="docx", lastContent="", sourcesContext="";
@@ -386,17 +417,28 @@ async function loadQuota(){
     const banner=document.getElementById("quotaBanner");
     const text=document.getElementById("quotaText");
     const link=document.getElementById("quotaUpgradeLink");
+
     if(data.plan==="trial"){
       text.innerHTML=`<i class="bi bi-hourglass-split"></i> ${UI.quota_label_prefix} ${data.plan_label} — <strong>${data.remaining}</strong> ${UI.quota_remaining_suffix}`;
+      link.href="{{ url_for('upgrade') }}";
       link.style.display="inline";
       if(data.remaining<=1) banner.classList.add("low");
-    } else {
-      text.innerHTML=`<i class="bi bi-star-fill"></i> ${UI.quota_label_prefix} ${data.plan_label} — ${UI.quota_unlimited}`;
-      link.style.display="none";
+    } else if(data.is_daily){
+      text.innerHTML=`<i class="bi bi-star-fill"></i> ${UI.quota_label_prefix} ${data.plan_label} — <strong>${data.remaining}</strong>/${data.daily_limit} ${UI.quota_remaining_suffix}`;
+      if(data.remaining<=0){
+        link.href=mailtoLink();
+        link.textContent=UI.contact_us_cta;
+        link.style.display="inline";
+        banner.classList.add("low");
+      } else {
+        link.style.display="none";
+        banner.classList.remove("low");
+      }
     }
+
     if(!data.allowed){
       document.getElementById("generateBtn").disabled=true;
-      showError(UI.quota_exceeded);
+      showError(buildQuotaMessage(data));
     }
   }catch(e){}
 }
@@ -509,12 +551,118 @@ async function extractSources(){
 }
 
 function setFmt(btn){document.querySelectorAll(".fmt-btn").forEach(b=>b.classList.remove("active"));btn.classList.add("active");fmt=btn.dataset.fmt}
-function showError(msg){const e=document.getElementById("errorMsg");if(msg){document.getElementById("errorText").textContent=msg;e.classList.add("visible")}else e.classList.remove("visible")}
-function toggleApiVis(){const i=document.getElementById("apiKey");const eye=document.getElementById("eyeIcon");if(i.type==="password"){i.type="text";eye.className="bi bi-eye-slash"}else{i.type="password";eye.className="bi bi-eye"}}
+function showError(msg){const e=document.getElementById("errorMsg");if(msg){document.getElementById("errorText").innerHTML=msg;e.classList.add("visible")}else e.classList.remove("visible")}
+function mailtoLink(){
+  const subject = encodeURIComponent(UI.contact_us_subject_upgrade);
+  return `mailto:${CONTACT_EMAIL}?subject=${subject}`;
+}
+function buildQuotaMessage(data){
+  let text;
+  if(data.is_daily){
+    text = UI.quota_exceeded_daily.replace("{limit}", data.daily_limit);
+  } else {
+    text = UI.quota_exceeded_trial;
+  }
+  return `${text} <a href="${mailtoLink()}" style="color:inherit;font-weight:800;text-decoration:underline">${UI.contact_us_cta}</a>`;
+}
+
 function toast(msg){const w=document.getElementById("toastWrap");const t=document.createElement("div");t.className="toast-item";t.textContent=msg;w.appendChild(t);setTimeout(()=>t.remove(),3500)}
 function updateLoaderMsg(msg){const el=document.getElementById("loaderText");if(el) el.textContent=msg}
 
-function buildPrompt(level, palier, subject, lesson, dt, ctx){
+// ── STRONG LANGUAGE LOCK (Gemini tends to default to French for Algerian
+// curriculum content regardless of instruction language — this counters it) ──
+const LANG_LOCK_TOP = {
+  ar: "⚠️ تعليمة قصوى الأولوية: اكتب الإجابة بأكملها باللغة العربية الفصحى فقط، دون أي كلمة بلغة أخرى — حتى العناوين والمصطلحات التقنية يجب ترجمتها إلى العربية. هذا التوجيه يتجاوز أي عادة مرتبطة بالمنهاج الجزائري المكتوب أصلاً بالفرنسية.\n",
+  fr: "⚠️ CONSIGNE PRIORITAIRE ABSOLUE : Rédige l'intégralité de la réponse UNIQUEMENT en français, sans aucun mélange d'une autre langue.\n",
+  en: "⚠️ TOP-PRIORITY INSTRUCTION: Write the ENTIRE response only in English, with no other language mixed in — even technical terms and headings must be in English.\n",
+};
+const LANG_LOCK_BOTTOM = {
+  ar: "\n\n⚠️ تذكير أخير: الوثيقة كاملةً يجب أن تكون باللغة العربية فقط، دون أي كلمة أو مصطلح بلغة أخرى.",
+  fr: "\n\n⚠️ Rappel final : le document entier doit être rédigé exclusivement en français, sans aucun mot dans une autre langue.",
+  en: "\n\n⚠️ Final reminder: the entire document must be written exclusively in English, with no word in any other language.",
+};
+
+const STYLE_BLOCK = {
+  ar: "الأسلوب: مهني وواضح ومناسب لعمر المتعلمين؛ عرّف أي مصطلح تقني غير مألوف؛ استخدم جداول للتسلسل الزمني وقوائم نقطية للعناصر.",
+  fr: "Style : professionnel, clair, adapté à l'âge des apprenants ; définis tout terme technique peu courant ; utilise des tableaux pour les séquences temporelles et des listes à puces pour les éléments.",
+  en: "Style: professional, clear, age-appropriate for the learners; define any uncommon technical term; use tables for timed sequences and bullet lists for items.",
+};
+
+const EXAMPLES_BLOCK = {
+  ar: "الأمثلة: قدم مثالين إلى ثلاثة أمثلة واقعية وملموسة مرتبطة بالمادة والمستوى، مستوحاة من الحياة اليومية الجزائرية إن أمكن.",
+  fr: "Exemples : fournis 2 à 3 exemples concrets et réalistes liés à la matière et au niveau, si possible inspirés du quotidien algérien.",
+  en: "Examples: provide 2 to 3 concrete, realistic examples tied to the subject and level, drawing on everyday Algerian context where relevant.",
+};
+
+const NORMS_DIFF = {
+  ar: "المعايير (N) — التفريق البيداغوجي، ثلاثة مستويات:\nN1 (صعوبة): دعم بصري، صيغ جاهزة، أمثلة موجهة.\nN2 (عادي): تمارين كلاسيكية وتعليمات واضحة.\nN3 (متقدم): مشكلة مفتوحة ومسار مستقل.",
+  fr: "NORMES (N) — Différenciation pédagogique, trois niveaux :\nN1 (difficulté) : support visuel, formulations prêtes à l'emploi, exemples guidés.\nN2 (standard) : exercices classiques, consignes claires.\nN3 (avancé) : problème ouvert, démarche autonome.",
+  en: "STANDARDS (N) — Pedagogical differentiation, three levels:\nN1 (struggling): visual support, ready-made formulas, guided examples.\nN2 (standard): classic exercises, clear instructions.\nN3 (advanced): open-ended problem, independent approach.",
+};
+
+const NORMS_QUALITY = {
+  ar: "المعايير (N): دقة علمية، وضوح المفردات المناسبة لعمر المتعلمين، مطابقة صارمة للمنهاج الرسمي والكفاءات المستهدفة، صياغات لا لبس فيها.",
+  fr: "NORMES (N) : rigueur scientifique, clarté du vocabulaire adapté à l'âge des élèves, conformité stricte au programme officiel et aux compétences visées, formulations sans ambiguïté.",
+  en: "STANDARDS (N): scientific rigor, vocabulary clarity suited to learners' age, strict alignment with the official curriculum and targeted competencies, unambiguous wording.",
+};
+
+const EVAL_GENERIC = {
+  ar: "التقييم (E): تكويني أثناء الحصة + ختامي في نهايتها. المجموع على 20 نقطة مع شبكة تصحيح من 4 مستويات.",
+  fr: "ÉVALUATION (E) : formative pendant la séance + sommative en fin de séance. Barème sur 20 points avec grille de correction à 4 niveaux.",
+  en: "ASSESSMENT (E): formative during the session + summative at the end. Scored out of 20 with a 4-level marking rubric.",
+};
+
+// ── TASK BLOCKS (T) — the specific deliverables per document type ──
+const TASKS = {
+  lesson_plan: {
+    ar: "المخرجات (T): بطاقة تقنية بيداغوجية كاملة من 10 أقسام:\n1) التعريف: العنوان، المستوى، المدة، المتطلبات السابقة.\n2) الأهداف: تخصصية، عرضية، منهجية.\n3) المحتوى: المفاهيم الأساسية، الكفاءات، الوضعية-المشكلة.\n4) التسلسل الزمني: 3 مراحل (مقدمة/تطوير/خاتمة) مع الزمن والتعليمات والوسائل، في جدول.\n5) التفريق: N1/N2/N3 بتكييفات ملموسة.\n6) التقييم: المعايير، Rubric من 4 مستويات، تكويني وختامي، على 20 نقطة.\n7) الموارد: الوسائل، الروابط، الأدوات الرقمية.\n8) التكييفات السياقية: التلاميذ في صعوبة، المتفوقون، التجهيز المحدود.\n9) السلامة وقواعد القسم.\n10) ما بعد الحصة: أسئلة تأمل للأستاذ، مؤشرات نجاح، محاور تحسين.",
+    fr: "LIVRABLES (T) : Fiche technique pédagogique complète en 10 sections :\n1) Identification : titre, niveau, durée, prérequis.\n2) Objectifs : spécifiques, transversaux, méthodologiques.\n3) Contenu : concepts clés, compétences visées, situation-problème.\n4) Déroulement chronométré : 3 phases (introduction/développement/conclusion) avec durée, consignes et moyens, sous forme de tableau.\n5) Différenciation : adaptations concrètes N1/N2/N3.\n6) Évaluation : critères, rubric à 4 niveaux, formative et sommative, notée sur 20.\n7) Ressources : supports, liens, outils numériques.\n8) Adaptations contextuelles : élèves en difficulté, élèves avancés, matériel limité.\n9) Sécurité et consignes de classe.\n10) Après la séance : questions de réflexion pour l'enseignant, indicateurs de réussite, pistes d'amélioration.",
+    en: "DELIVERABLES (T): Complete pedagogical technical card in 10 sections:\n1) Identification: title, level, duration, prerequisites.\n2) Objectives: specific, cross-curricular, methodological.\n3) Content: key concepts, targeted competencies, problem-situation.\n4) Timed sequence: 3 phases (introduction/development/conclusion) with duration, instructions and means, as a table.\n5) Differentiation: concrete N1/N2/N3 adaptations.\n6) Assessment: criteria, 4-level rubric, formative and summative, scored out of 20.\n7) Resources: materials, links, digital tools.\n8) Contextual adaptations: struggling students, advanced students, limited equipment.\n9) Safety and classroom rules.\n10) After the session: reflection questions for the teacher, success indicators, improvement areas.",
+  },
+  differentiated: {
+    ar: "المخرجات (T): ورقة متعلم لثلاث نسخ مختلفة (N1/N2/N3). لكل نسخة: العنوان، الهدف، المتطلبات، 3-4 أنشطة، تمارين تطبيق، تقييم تكويني، واجب منزلي متمايز.\nN1 (صعوبة): إطار منظم، خانات، دعم بصري، تعريفات وصيغ، تمارين موجهة، كلمات مفتاحية.\nN2 (عادي): تعليمات واضحة، تمارين متدرجة، أسئلة مفتوحة معتدلة، استقلالية متزايدة.\nN3 (متقدم): مشكلة مفتوحة، بحث واستقصاء، توسيع المفاهيم، استقلالية كاملة، خيار عرض شفهي.\nيجب تقييم النسخ الثلاث بنفس Rubric مع تكييف مستوى الأداء.",
+    fr: "LIVRABLES (T) : Feuille apprenant en trois versions différenciées (N1/N2/N3). Pour chaque version : titre, objectif, prérequis, 3-4 activités, exercices d'application, évaluation formative, devoir maison différencié.\nN1 (difficulté) : cadre structuré, cases à remplir, support visuel, définitions et formules fournies, exercices guidés, mots-clés.\nN2 (standard) : consignes claires, exercices progressifs, questions ouvertes modérées, autonomie croissante.\nN3 (avancé) : problème ouvert, recherche et investigation, approfondissement des concepts, autonomie complète, option d'exposé oral.\nLes trois versions doivent être évaluées avec le même rubric, en adaptant le niveau de performance attendu.",
+    en: "DELIVERABLES (T): Student worksheet in three differentiated versions (N1/N2/N3). For each version: title, objective, prerequisites, 3-4 activities, application exercises, formative assessment, differentiated homework.\nN1 (struggling): structured frame, fill-in boxes, visual support, provided definitions and formulas, guided exercises, keywords.\nN2 (standard): clear instructions, progressive exercises, moderately open questions, growing autonomy.\nN3 (advanced): open-ended problem, research and inquiry, concept deepening, full autonomy, optional oral presentation.\nAll three versions must be assessed with the same rubric, adapting the expected performance level.",
+  },
+  course_plan: {
+    ar: "المخرجات (T):\n1) خطة تسلسل مفصلة: مقدمة 10 د، تطوير 25 د، خاتمة 10 د.\n2) بطاقة تقنية بيداغوجية كاملة من 8 أقسام.\n3) سيناريو سردي تربوي من 800-1000 كلمة يشرح سير الحصة.\n4) ورقة متعلم بثلاث نسخ متمايزة (N1/N2/N3).\n5) QCM من 10 أسئلة مع مشتتات معقولة مبنية على الأخطاء الشائعة.\n6) شبكة تقييم Rubric بمعايير واضحة وأربعة مستويات أداء.",
+    fr: "LIVRABLES (T) :\n1) Plan de séquence détaillé : introduction 10 min, développement 25 min, conclusion 10 min.\n2) Fiche technique pédagogique complète en 8 sections.\n3) Scénario narratif pédagogique de 800-1000 mots décrivant le déroulement de la séance.\n4) Feuille apprenant en trois versions différenciées (N1/N2/N3).\n5) QCM de 10 questions avec distracteurs plausibles basés sur les erreurs fréquentes.\n6) Grille d'évaluation Rubric à critères clairs et quatre niveaux de performance.",
+    en: "DELIVERABLES (T):\n1) Detailed sequence plan: introduction 10 min, development 25 min, conclusion 10 min.\n2) Complete pedagogical technical card in 8 sections.\n3) 800-1000 word pedagogical narrative scenario describing how the session unfolds.\n4) Student worksheet in three differentiated versions (N1/N2/N3).\n5) 10-question MCQ with plausible distractors based on common mistakes.\n6) Rubric with clear criteria and four performance levels.",
+  },
+  activity: {
+    ar: "المخرجات (T): ورقة نشاط تحتوي على 4-6 تمارين متدرجة (تذكير قصير بالدرس، تمارين موجهة، تمرين تركيبي، وضعية-مشكلة)، مع تصحيح مفصل خطوة بخطوة، وشبكة تقييم ذاتي للمتعلم.",
+    fr: "LIVRABLES (T) : Une feuille d'activité avec 4 à 6 exercices progressifs (rappel de cours court, exercices guidés, exercice de synthèse, situation-problème), corrigé détaillé étape par étape, et une grille d'auto-évaluation pour l'élève.",
+    en: "DELIVERABLES (T): An activity sheet with 4 to 6 progressive exercises (short course reminder, guided exercises, synthesis exercise, problem-situation), detailed step-by-step answer key, and a self-assessment grid for the student.",
+  },
+  quiz: {
+    ar: "المخرجات (T): اختبار QCM من 10 إلى 15 سؤالاً يغطي مستويات بلوم المختلفة (تذكر، فهم، تطبيق، تحليل)، بأربعة اقتراحات لكل سؤال ومشتتات معقولة مبنية على أخطاء المتعلمين الشائعة، تصحيح كامل مع تبرير كل إجابة صحيحة، وسلم تنقيط على 20.",
+    fr: "LIVRABLES (T) : Un QCM de 10 à 15 questions couvrant différents niveaux de Bloom (mémorisation, compréhension, application, analyse), avec 4 propositions par question et des distracteurs plausibles basés sur les erreurs fréquentes des élèves, corrigé complet avec justification de chaque bonne réponse, et un barème sur 20.",
+    en: "DELIVERABLES (T): A 10-to-15-question MCQ covering different Bloom levels (recall, comprehension, application, analysis), with 4 options per question and plausible distractors based on common student mistakes, full answer key with justification for each correct answer, and a scoring scale out of 20.",
+  },
+  rubric: {
+    ar: "المخرجات (T): شبكة تقييم Rubric بـ 5 إلى 6 معايير دقيقة مرتبطة بالكفاءات المستهدفة، بأربعة مستويات أداء لكل معيار (غير كافٍ، في طور الاكتساب، مكتسب، متقن) مع واصفات سلوكية ملاحظة وغير غامضة، وطريقة حساب العلامة النهائية على 20.",
+    fr: "LIVRABLES (T) : Une grille d'évaluation (rubric) avec 5 à 6 critères précis liés aux compétences visées, 4 niveaux de performance par critère (insuffisant, en cours d'acquisition, acquis, expert) avec des descripteurs comportementaux observables et non ambigus, et une méthode de calcul de la note finale sur 20.",
+    en: "DELIVERABLES (T): An assessment rubric with 5 to 6 precise criteria tied to the targeted competencies, 4 performance levels per criterion (insufficient, developing, acquired, expert) with observable, unambiguous behavioral descriptors, and a method for computing the final score out of 20.",
+  },
+  summary: {
+    ar: "المخرجات (T): بطاقة مرجعية موجزة (صفحة واحدة) تحتوي على التعريفات الأساسية، القواعد/الصيغ الضرورية في إطارات مميزة، مخطط ذهني نصي تلخيصي، وثلاثة أخطاء شائعة يجب تجنبها.",
+    fr: "LIVRABLES (T) : Une fiche mémo synthétique (une page) avec les définitions clés, les règles/formules essentielles mises en évidence dans des encadrés, une carte mentale textuelle de synthèse, et 3 pièges fréquents à éviter.",
+    en: "DELIVERABLES (T): A concise one-page reference card with key definitions, essential rules/formulas highlighted in boxes, a text-based summary mind map, and 3 common pitfalls to avoid.",
+  },
+  homework: {
+    ar: "المخرجات (T): واجب منزلي من 3 أجزاء متدرجة (استرجاع المعارف، تطبيق مباشر، وضعية-مشكلة مفتوحة لإعادة الاستثمار)، تعليمات العرض والتسليم، سلم تنقيط مفصل على 20، وشبكة تقييم ذاتي ليتحقق المتعلم من عمله قبل التسليم.",
+    fr: "LIVRABLES (T) : Un devoir maison en 3 parties progressives (restitution de connaissances, application directe, situation-problème ouverte de réinvestissement), consignes de présentation et de rendu, barème détaillé sur 20, et une grille d'auto-évaluation pour que l'élève vérifie son travail avant de le remettre.",
+    en: "DELIVERABLES (T): Homework in 3 progressive parts (knowledge recall, direct application, open reinvestment problem-situation), presentation and submission guidelines, detailed scoring out of 20, and a self-assessment grid for the student to check their work before submitting.",
+  },
+};
+
+const NORMS_KIND = {
+  lesson_plan: "diff", differentiated: "diff", course_plan: "diff",
+  activity: "diff", homework: "diff",
+  quiz: "quality", rubric: "quality", summary: "quality",
+};
+
+function buildPrompt(level, palier, subject, lesson, dt, ctx, etablissement, projet, activite){
   const docLabels={}; ALL_DOC_TYPES[docLang].forEach(d=>docLabels[d.id]=d.label);
   const docLabel=docLabels[dt]||dt;
 
@@ -524,52 +672,56 @@ function buildPrompt(level, palier, subject, lesson, dt, ctx){
     en: ctx && ctx.trim() ? `\n\nSOURCES PROVIDED BY THE TEACHER (use as primary reference, NotebookLM style):\n${ctx}\n` : "",
   };
 
-  const prompts = {
-    ar: `أنت خبير تربوي متخصص في المنهاج الجزائري الرسمي.
-المستوى: ${level} | الطور: ${palier} | المادة: ${subject} | الموضوع: ${lesson}
-أنشئ وثيقة من نوع: ${docLabel}
-${sourceBlocks.ar}
-التعليمات:
-- اتبع المنهج الجزائري الرسمي والكفاءات المستهدفة
-- إذا توفرت مصادر أعلاه، اعتمد عليها بشكل أساسي
-- استخدم لغة عربية فصحى واضحة ومهيكلة
-- استخدم # للعناوين الرئيسية و## للعناوين الفرعية
-- أضف: الكفاءات المستهدفة، الأهداف، الموارد، التقييم
-- لا تكرر معلومات الترويسة (الاسم، المستوى، المادة) في المحتوى
-- وثيقة كاملة، مفصلة واحترافية
-
-أنشئ الوثيقة الآن:`,
-    fr: `Tu es un expert pédagogique spécialisé dans le curriculum algérien officiel.
-Niveau : ${level} | Palier : ${palier} | Matière : ${subject} | Leçon : ${lesson}
-Crée un document de type : ${docLabel}
-${sourceBlocks.fr}
-Instructions :
-- Respecte le programme officiel algérien et les compétences visées
-- Si des sources sont fournies ci-dessus, base ton contenu sur elles en priorité
-- Rédige en français pédagogique clair et structuré
-- Structure avec des titres clairs (# pour titres principaux, ## pour sous-titres)
-- Inclus : compétences visées, objectifs, ressources, évaluation
-- Ne répète pas les informations d'en-tête (nom, niveau, matière) dans le corps
-- Document complet, détaillé et professionnel
-
-Génère le document maintenant :`,
-    en: `You are a pedagogical expert specializing in the Algerian official curriculum.
-Level: ${level} | Grade: ${palier} | Subject: ${subject} | Lesson: ${lesson}
-Create a document of type: ${docLabel}
-${sourceBlocks.en}
-Instructions:
-- Follow the official Algerian curriculum and targeted competencies
-- If sources are provided above, base your content on them primarily
-- Write in clear, structured pedagogical English
-- Structure with clear headings (# for main headings, ## for sub-headings)
-- Include: targeted competencies, objectives, resources, assessment
-- Do not repeat header info (name, level, subject) in the body
-- Complete, detailed and professional document
-
-Generate the document now:`,
+  const contextLine = {
+    ar: `السياق (C): أستاذ مادة ${subject}، مستوى ${level}، الطور ${palier}${etablissement?"، المؤسسة: "+etablissement:""}${projet?"، المشروع/الوحدة: "+projet:""}${activite?"، النشاط: "+activite:""}. الفصل/الدرس: "${lesson}". أنشئ وثيقة من نوع: ${docLabel}.`,
+    fr: `CONTEXTE (C) : Enseignant(e) de ${subject}, niveau ${level}, palier ${palier}${etablissement?", établissement : "+etablissement:""}${projet?", projet/unité : "+projet:""}${activite?", activité : "+activite:""}. Chapitre/leçon : "${lesson}". Crée un document de type : ${docLabel}.`,
+    en: `CONTEXT (C): Teacher of ${subject}, level ${level}, grade ${palier}${etablissement?", institution: "+etablissement:""}${projet?", project/unit: "+projet:""}${activite?", activity: "+activite:""}. Chapter/lesson: "${lesson}". Create a document of type: ${docLabel}.`,
   };
-  return prompts[docLang] || prompts.fr;
+
+  const objectivesLine = {
+    ar: "الهدف (O): حدد هدفين تعليميين واضحين باستخدام أفعال بلوم الإجرائية، متصلين مباشرة بموضوع الدرس والكفاءة المستهدفة في المنهاج الرسمي.",
+    fr: "OBJECTIF (O) : Formule deux objectifs d'apprentissage clairs avec des verbes d'action de Bloom, directement liés au sujet de la leçon et à la compétence visée par le programme officiel.",
+    en: "OBJECTIVE (O): State two clear learning objectives using Bloom's action verbs, directly tied to the lesson topic and the competency targeted by the official curriculum.",
+  };
+
+  const proContextLine = {
+    ar: "السياق المهني (E): اخترع وضعية-مشكلة واقعية وجذابة، مناسبة للحياة اليومية للمتعلمين الجزائريين ومرتبطة بموضوع الدرس. المدة الافتراضية للحصة: 45 دقيقة ما لم يُذكر خلاف ذلك. احترم بدقة المنهاج الجزائري الرسمي الساري لهذا المستوى.",
+    fr: "CONTEXTE PROFESSIONNEL (E) : Invente une situation-problème réaliste et engageante, adaptée au quotidien des élèves algériens et liée au sujet de la leçon. Durée par défaut de la séance : 45 minutes sauf indication contraire. Respecte strictement le programme officiel algérien en vigueur pour ce niveau.",
+    en: "PROFESSIONAL CONTEXT (E): Invent a realistic, engaging problem-situation suited to Algerian students' daily life and tied to the lesson topic. Default session duration: 45 minutes unless stated otherwise. Strictly follow the current official Algerian curriculum for this level.",
+  };
+
+  const noRepeatLine = {
+    ar: "لا تكرر معلومات الترويسة (الاسم، المؤسسة، المستوى، المادة) في متن الوثيقة — فهي معروضة بشكل منفصل.",
+    fr: "Ne répète pas les informations d'en-tête (nom, établissement, niveau, matière) dans le corps du document — elles sont déjà affichées séparément.",
+    en: "Do not repeat header information (name, institution, level, subject) in the document body — it is already displayed separately.",
+  };
+
+  const normsBlock = NORMS_KIND[dt] === "diff" ? NORMS_DIFF[docLang] : NORMS_QUALITY[docLang];
+  const tasksBlock = (TASKS[dt] && TASKS[dt][docLang]) || TASKS.lesson_plan[docLang];
+
+  const headingHint = {
+    ar: "استخدم # للعناوين الرئيسية و## للعناوين الفرعية. نسّق الوثيقة بشكل كامل ومفصل ومهني.",
+    fr: "Utilise # pour les titres principaux et ## pour les sous-titres. Structure le document de façon complète, détaillée et professionnelle.",
+    en: "Use # for main headings and ## for sub-headings. Structure the document fully, in a detailed and professional manner.",
+  };
+
+  return [
+    LANG_LOCK_TOP[docLang],
+    contextLine[docLang],
+    objectivesLine[docLang],
+    normsBlock,
+    tasksBlock,
+    proContextLine[docLang],
+    EXAMPLES_BLOCK[docLang],
+    STYLE_BLOCK[docLang],
+    EVAL_GENERIC[docLang],
+    noRepeatLine[docLang],
+    headingHint[docLang],
+    sourceBlocks[docLang],
+    LANG_LOCK_BOTTOM[docLang],
+  ].filter(Boolean).join("\n\n");
 }
+
 
 const GEMINI_MODELS = ["gemini-2.5-flash-preview-05-20","gemini-2.5-flash","gemini-2.0-flash","gemini-1.5-flash","gemini-1.5-pro"];
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
@@ -620,13 +772,13 @@ async function callGemini(apiKey, prompt){
 
 async function generate(){
   showError(null);
-  const apiKey=document.getElementById("apiKey").value.trim();
+  const apiKey=STORED_API_KEY;
   const level=document.getElementById("levelSel").value;
   const palier=document.getElementById("palierInput").value.trim();
   const subject=document.getElementById("subjectSel").value;
   const lesson=document.getElementById("lessonInput").value.trim();
 
-  if(!apiKey) return showError(UI.err_need_apikey);
+  if(!apiKey) return showError(UI.apikey_missing_generator + ' <a href="' + PROFILE_URL + '" style="color:inherit;font-weight:800;text-decoration:underline">' + UI.go_to_profile + '</a>');
   if(!level) return showError(UI.err_need_level);
   if(!subject) return showError(UI.err_need_subject);
   if(!lesson) return showError(UI.err_need_lesson);
@@ -634,7 +786,7 @@ async function generate(){
   const quotaRes=await fetch("/api/check-quota");
   const quotaData=await quotaRes.json();
   if(!quotaData.allowed){
-    return showError(UI.quota_exceeded);
+    return showError(buildQuotaMessage(quotaData));
   }
 
   const btn=document.getElementById("generateBtn");
@@ -652,7 +804,10 @@ async function generate(){
     sourcesContext = await extractSources();
 
     updateLoaderMsg(UI.loader_writing);
-    const prompt=buildPrompt(level, palier, subject, lesson, docType, sourcesContext);
+    const etablissement = document.getElementById("etablissementInput").value.trim();
+    const projet = document.getElementById("projetInput").value.trim();
+    const activite = document.getElementById("activiteInput").value.trim();
+    const prompt=buildPrompt(level, palier, subject, lesson, docType, sourcesContext, etablissement, projet, activite);
     const text=await callGemini(apiKey, prompt);
     lastContent=text;
 
@@ -701,6 +856,9 @@ async function downloadDoc(){
         palier:document.getElementById("palierInput").value,
         subject:document.getElementById("subjectSel").value,
         lesson:document.getElementById("lessonInput").value,
+        etablissement:document.getElementById("etablissementInput").value,
+        projet:document.getElementById("projetInput").value,
+        activite:document.getElementById("activiteInput").value,
         colors:getColors(),
       })});
     if(!res.ok) throw new Error("Download failed");

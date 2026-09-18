@@ -7,7 +7,13 @@
 .up-header h1{font-size:24px;font-weight:800;color:var(--navy);margin:0 0 8px}
 .up-header p{font-size:13px;color:var(--muted)}
 
-.plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px}
+.contact-hero{background:linear-gradient(135deg,var(--navy3),var(--navy));border-radius:14px;padding:26px;color:#fff;text-align:center;margin-bottom:28px}
+.contact-hero h3{margin:0 0 8px;font-size:16px;font-weight:800}
+.contact-hero p{margin:0 0 16px;font-size:13px;color:rgba(255,255,255,.75)}
+.btn-contact-big{background:var(--orange);color:#fff;border:none;border-radius:10px;padding:13px 26px;font-size:14px;font-weight:800;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
+.btn-contact-big:hover{background:var(--orange2);color:#fff}
+
+.plan-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:28px}
 .plan-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:24px;text-align:center;border:2px solid transparent}
 .plan-card.featured{border-color:var(--orange)}
 .plan-card .badge-top{background:var(--orange);color:#fff;font-size:10px;font-weight:800;padding:3px 10px;border-radius:99px;display:inline-block;margin-bottom:10px}
@@ -25,6 +31,8 @@
 .btn-activate{width:100%;background:linear-gradient(135deg,var(--orange),var(--orange2));color:#fff;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;margin-top:14px}
 
 .contact-note{background:var(--sky);border-radius:10px;padding:14px 18px;font-size:12px;color:var(--navy2);margin-top:18px;display:flex;gap:8px;align-items:flex-start}
+
+@media(max-width:600px){ .plan-grid{grid-template-columns:1fr} }
 </style>
 {% endblock %}
 {% block content %}
@@ -34,26 +42,34 @@
     <p>{{ t.upgrade_page_subtitle }}</p>
   </div>
 
+  <div class="contact-hero">
+    <h3>📧 {{ t.landing_contact_title }}</h3>
+    <p>{{ t.price_subscribe_note }}</p>
+    <a href="mailto:{{ contact_email }}?subject={{ t.contact_us_subject_upgrade | urlencode }}" class="btn-contact-big">
+      <i class="bi bi-envelope-fill"></i> {{ contact_email }}
+    </a>
+  </div>
+
   <div class="plan-grid">
     <div class="plan-card">
-      <h3>{{ t.plan_pro_name }}</h3>
-      <div class="price">2500 DA <small>{{ t.per_year }}</small></div>
+      <h3>{{ t.price_pro_name }}</h3>
+      <div class="price">{{ t.price_pro_price }} <small>{{ t.price_pro_period }}</small></div>
       <ul>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_unlimited_docs }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_colors }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_sources }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_export }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_pro_f1 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_pro_f2 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_pro_f3 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_pro_f4 }}</li>
       </ul>
     </div>
     <div class="plan-card featured">
-      <span class="badge-top">{{ t.popular_badge }}</span>
-      <h3>{{ t.plan_premium_name }}</h3>
-      <div class="price">4500 DA <small>{{ t.per_year }}</small></div>
+      <span class="badge-top">{{ t.price_popular_badge }}</span>
+      <h3>{{ t.price_premium_name }}</h3>
+      <div class="price">{{ t.price_premium_price }} <small>{{ t.price_premium_period }}</small></div>
       <ul>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_pro_all }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_priority_support }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_exclusive_templates }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.feature_early_access }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_premium_f1 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_premium_f2 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_premium_f3 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_premium_f4 }}</li>
       </ul>
     </div>
   </div>

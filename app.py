@@ -24,9 +24,10 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_RIGHT, TA_CENTER, TA_LEFT
 
-from models import db, User, Subscription, Document, LicenseCode, create_trial_subscription
+from models import db, User, Subscription, Document, LicenseCode, Payment, PLAN_PRICES, create_trial_subscription
 from utils import build_sources_context
 from translations import get_translations, TRANSLATIONS
+from notifications import check_and_send_expiry_reminders, send_email
 
 SUPPORTED_LANGS = ("ar", "fr", "en")
 
@@ -52,6 +53,8 @@ app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(DATA_DIR, "e
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024  # 15 MB uploads
 
+CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "haithemcomputing@gmail.com")
+
 db.init_app(app)
 
 login_manager = LoginManager(app)
@@ -74,18 +77,55 @@ def ensure_lang():
 @app.context_processor
 def inject_i18n():
     lang = current_lang()
-    return dict(lang=lang, t=get_translations(lang), is_rtl=(lang == "ar"))
+    return dict(lang=lang, t=get_translations(lang), is_rtl=(lang == "ar"), contact_email=CONTACT_EMAIL)
 
 
 @app.route("/set-lang/<lang>")
 def set_lang(lang):
     if lang in SUPPORTED_LANGS:
         session["lang"] = lang
+        if current_user.is_authenticated:
+            current_user.preferred_lang = lang
+            db.session.commit()
     return redirect(request.referrer or url_for("home"))
+
+
+def _migrate_sqlite_schema():
+    """Add newly-introduced columns to an existing SQLite db (no full migration
+    framework needed for this small app). Safe to run on every startup."""
+    import sqlite3
+    db_path = os.path.join(DATA_DIR, "eduprompt.db")
+    if not os.path.exists(db_path):
+        return
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    try:
+        table_additions = {
+            "subscription": {
+                "docs_used_today": "INTEGER DEFAULT 0",
+                "last_reset_date": "DATE",
+                "expiry_reminder_sent": "BOOLEAN DEFAULT 0",
+            },
+            "user": {
+                "gemini_api_key": "VARCHAR(255)",
+                "preferred_lang": "VARCHAR(5) DEFAULT 'fr'",
+            },
+        }
+        for table, additions in table_additions.items():
+            cur.execute(f"PRAGMA table_info({table})")
+            existing_cols = {row[1] for row in cur.fetchall()}
+            for col, col_type in additions.items():
+                if col not in existing_cols:
+                    cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
+                    print(f"✅ Migrated: added {table}.{col}")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 with app.app_context():
     db.create_all()
+    _migrate_sqlite_schema()
 
     # ── One-time admin bootstrap (idempotent — safe on every restart) ──
     _admin_email = os.environ.get("ADMIN_EMAIL")
@@ -103,10 +143,35 @@ with app.app_context():
         db.session.add(Subscription(
             user_id=_admin.id, plan="premium", status="active",
             expires_at=datetime.utcnow() + timedelta(days=3650),
-            docs_used=0, docs_limit=999999,
+            docs_used=0,
         ))
         db.session.commit()
         print(f"✅ Admin account bootstrapped: {_admin_email}")
+
+
+def log_payment(user_id, plan, amount=None, note=""):
+    """Record a manual payment (bank transfer / CCP) for revenue tracking."""
+    db.session.add(Payment(
+        user_id=user_id,
+        plan=plan,
+        amount=amount if amount is not None else PLAN_PRICES.get(plan, 0),
+        note=note,
+    ))
+
+
+# ── DAILY REMINDER SCHEDULER (5-day heads-up before subscription expiry) ─────
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    _scheduler = BackgroundScheduler(daemon=True)
+    _scheduler.add_job(
+        lambda: check_and_send_expiry_reminders(app, db, User, Subscription, CONTACT_EMAIL),
+        "interval", hours=24, next_run_time=datetime.utcnow(),
+        id="expiry_reminders", replace_existing=True,
+    )
+    _scheduler.start()
+    print("✅ Expiry reminder scheduler started")
+except Exception as e:
+    print(f"⚠️  Could not start reminder scheduler: {e}")
 
 
 # ── STATIC REFERENCE DATA ────────────────────────────────────────────────────
@@ -159,9 +224,7 @@ SUBJECTS = {
 # ── AUTH ROUTES ───────────────────────────────────────────────────────────────
 @app.route("/")
 def home():
-    if current_user.is_authenticated:
-        return redirect(url_for("generator"))
-    return redirect(url_for("login"))
+    return render_template("landing.html")
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -174,8 +237,9 @@ def register():
         last_name  = request.form.get("last_name", "").strip()
         email      = request.form.get("email", "").strip().lower()
         password   = request.form.get("password", "")
+        api_key    = request.form.get("api_key", "").strip()
 
-        if not all([first_name, last_name, email, password]):
+        if not all([first_name, last_name, email, password, api_key]):
             flash(tr("flash_all_fields_required"), "error")
             return render_template("register.html")
 
@@ -187,7 +251,8 @@ def register():
             flash(tr("flash_email_exists"), "error")
             return render_template("register.html")
 
-        user = User(first_name=first_name, last_name=last_name, email=email)
+        user = User(first_name=first_name, last_name=last_name, email=email,
+                    gemini_api_key=api_key, preferred_lang=current_lang())
         user.set_password(password)
         db.session.add(user)
         db.session.flush()  # get user.id before commit
@@ -235,6 +300,55 @@ def dashboard():
     return render_template("dashboard.html", sub=sub, docs=recent_docs)
 
 
+# ── PROFILE (self-service) ───────────────────────────────────────────────────
+@app.route("/profile", methods=["GET", "POST"])
+@login_required
+def profile():
+    if request.method == "POST":
+        action = request.form.get("action")
+
+        if action == "update_info":
+            first_name = request.form.get("first_name", "").strip()
+            last_name  = request.form.get("last_name", "").strip()
+            email      = request.form.get("email", "").strip().lower()
+
+            if not all([first_name, last_name, email]):
+                flash(tr("flash_all_fields_required"), "error")
+            else:
+                existing = User.query.filter_by(email=email).first()
+                if existing and existing.id != current_user.id:
+                    flash(tr("flash_email_exists"), "error")
+                else:
+                    current_user.first_name = first_name
+                    current_user.last_name = last_name
+                    current_user.email = email
+                    db.session.commit()
+                    flash(tr("flash_profile_updated"), "success")
+
+        elif action == "change_password":
+            current_pw = request.form.get("current_password", "")
+            new_pw = request.form.get("new_password", "")
+            if not current_user.check_password(current_pw):
+                flash(tr("flash_wrong_current_password"), "error")
+            elif len(new_pw) < 6:
+                flash(tr("flash_password_min_length"), "error")
+            else:
+                current_user.set_password(new_pw)
+                db.session.commit()
+                flash(tr("flash_password_changed"), "success")
+
+        elif action == "update_apikey":
+            api_key = request.form.get("api_key", "").strip()
+            if api_key:
+                current_user.gemini_api_key = api_key
+                db.session.commit()
+                flash(tr("flash_apikey_updated"), "success")
+
+        return redirect(url_for("profile"))
+
+    return render_template("profile.html")
+
+
 @app.route("/upgrade", methods=["GET", "POST"])
 @login_required
 def upgrade():
@@ -252,10 +366,15 @@ def upgrade():
         sub.started_at = datetime.utcnow()
         sub.expires_at = datetime.utcnow() + timedelta(days=lic.duration_days)
         sub.docs_used = 0
+        sub.docs_used_today = 0
+        sub.last_reset_date = None
+        sub.expiry_reminder_sent = False
 
         lic.used = True
         lic.used_by = current_user.id
         lic.used_at = datetime.utcnow()
+
+        log_payment(current_user.id, lic.plan, note=f"License code {lic.code}")
 
         db.session.commit()
         flash(tr("flash_upgraded", plan=sub.plan_label()), "success")
@@ -284,6 +403,67 @@ def admin_licenses():
     return render_template("admin_licenses.html", codes=codes)
 
 
+# ── ADMIN: advanced statistics dashboard ─────────────────────────────────────
+@app.route("/admin/stats")
+@login_required
+def admin_stats():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    from sqlalchemy import func
+
+    total_teachers = User.query.filter_by(role="user").count()
+    plan_counts = {}
+    for p in ("trial", "pro", "premium"):
+        plan_counts[p] = Subscription.query.filter_by(plan=p).count()
+
+    total_docs = Document.query.count()
+
+    # Documents per day, last 14 days
+    since = datetime.utcnow() - timedelta(days=14)
+    daily_rows = (
+        db.session.query(func.date(Document.created_at), func.count(Document.id))
+        .filter(Document.created_at >= since)
+        .group_by(func.date(Document.created_at))
+        .all()
+    )
+    daily_map = {str(d): c for d, c in daily_rows}
+    chart_labels, chart_values = [], []
+    for i in range(13, -1, -1):
+        day = (datetime.utcnow() - timedelta(days=i)).date()
+        chart_labels.append(day.strftime("%d/%m"))
+        chart_values.append(daily_map.get(str(day), 0))
+
+    # Revenue
+    total_revenue = db.session.query(func.sum(Payment.amount)).scalar() or 0
+    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_revenue = (
+        db.session.query(func.sum(Payment.amount))
+        .filter(Payment.created_at >= month_start)
+        .scalar() or 0
+    )
+    recent_payments = Payment.query.order_by(Payment.created_at.desc()).limit(20).all()
+
+    # Expiring within 5 days
+    now = datetime.utcnow()
+    soon = now + timedelta(days=5)
+    expiring = (
+        Subscription.query.filter(
+            Subscription.status == "active",
+            Subscription.expires_at.isnot(None),
+            Subscription.expires_at >= now,
+            Subscription.expires_at <= soon,
+        ).all()
+    )
+
+    return render_template("admin_stats.html",
+                           total_teachers=total_teachers, plan_counts=plan_counts,
+                           total_docs=total_docs, chart_labels=chart_labels, chart_values=chart_values,
+                           total_revenue=total_revenue, month_revenue=month_revenue,
+                           recent_payments=recent_payments, expiring=expiring)
+
+
 def generate_password(length=12):
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
@@ -305,6 +485,7 @@ def admin_teachers():
         email      = request.form.get("email", "").strip().lower()
         plan       = request.form.get("plan", "trial")
         custom_pw  = request.form.get("password", "").strip()
+        api_key    = request.form.get("api_key", "").strip()
 
         if not all([first_name, last_name, email]):
             flash(tr("flash_teacher_fields_required"), "error")
@@ -312,7 +493,8 @@ def admin_teachers():
             flash(tr("flash_email_exists"), "error")
         else:
             password = custom_pw or generate_password()
-            user = User(first_name=first_name, last_name=last_name, email=email)
+            user = User(first_name=first_name, last_name=last_name, email=email,
+                        gemini_api_key=api_key or None)
             user.set_password(password)
             db.session.add(user)
             db.session.flush()
@@ -323,8 +505,9 @@ def admin_teachers():
                 db.session.add(Subscription(
                     user_id=user.id, plan=plan, status="active",
                     expires_at=datetime.utcnow() + timedelta(days=365),
-                    docs_used=0, docs_limit=999999,
+                    docs_used=0, docs_used_today=0, last_reset_date=None,
                 ))
+                log_payment(user.id, plan, note="Created by admin")
 
             db.session.commit()
             generated = (email, password)
@@ -332,6 +515,54 @@ def admin_teachers():
 
     teachers = User.query.filter_by(role="user").order_by(User.created_at.desc()).all()
     return render_template("admin_teachers.html", teachers=teachers, generated=generated)
+
+
+@app.route("/admin/teachers/<int:user_id>/edit", methods=["GET", "POST"])
+@login_required
+def admin_edit_teacher(user_id):
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    teacher = User.query.get_or_404(user_id)
+    sub = teacher.subscription
+
+    if request.method == "POST":
+        first_name = request.form.get("first_name", "").strip()
+        last_name  = request.form.get("last_name", "").strip()
+        email      = request.form.get("email", "").strip().lower()
+        plan       = request.form.get("plan", sub.plan if sub else "trial")
+        api_key    = request.form.get("api_key", "").strip()
+
+        existing = User.query.filter_by(email=email).first()
+        if existing and existing.id != teacher.id:
+            flash(tr("flash_email_exists"), "error")
+            return render_template("admin_edit_teacher.html", teacher=teacher, sub=sub)
+
+        teacher.first_name = first_name
+        teacher.last_name = last_name
+        teacher.email = email
+        teacher.gemini_api_key = api_key or teacher.gemini_api_key
+
+        if sub and plan != sub.plan:
+            old_plan = sub.plan
+            sub.plan = plan
+            sub.docs_used_today = 0
+            sub.last_reset_date = None
+            sub.expiry_reminder_sent = False
+            if plan == "trial" and old_plan != "trial":
+                sub.docs_used = 0
+                sub.docs_limit = 5
+                sub.expires_at = datetime.utcnow() + timedelta(days=14)
+            elif plan != "trial":
+                sub.expires_at = datetime.utcnow() + timedelta(days=365)
+                log_payment(teacher.id, plan, note="Plan changed by admin")
+
+        db.session.commit()
+        flash(tr("flash_teacher_updated", name=teacher.full_name), "success")
+        return redirect(url_for("admin_teachers"))
+
+    return render_template("admin_edit_teacher.html", teacher=teacher, sub=sub)
 
 
 @app.route("/admin/teachers/<int:user_id>/reset-password", methods=["POST"])
@@ -379,11 +610,16 @@ def generator():
 @login_required
 def check_quota():
     sub = current_user.subscription
+    allowed = sub.has_quota()
+    db.session.commit()  # persist any daily-counter roll-over from has_quota()
     return jsonify({
-        "allowed": sub.has_quota(),
+        "allowed": allowed,
         "remaining": sub.remaining(),
         "plan": sub.plan,
         "plan_label": sub.plan_label(),
+        "is_daily": sub.is_daily_plan(),
+        "daily_limit": sub.daily_limit() if sub.is_daily_plan() else None,
+        "contact_email": CONTACT_EMAIL,
     })
 
 
@@ -395,10 +631,9 @@ def log_usage():
     sub = current_user.subscription
 
     if not sub.has_quota():
-        return jsonify({"error": "quota_exceeded"}), 403
+        return jsonify({"error": "quota_exceeded", "contact_email": CONTACT_EMAIL}), 403
 
-    if not sub.is_unlimited():
-        sub.docs_used += 1
+    sub.register_usage()
 
     doc = Document(
         user_id=current_user.id,
@@ -442,9 +677,12 @@ def set_cell_background(cell, hex_color):
 
 
 HEADER_LABELS = {
-    "fr": ["Enseignant(e)", "Niveau", "Palier", "Matière"],
-    "en": ["Teacher", "Level", "Grade", "Subject"],
-    "ar": ["الأستاذ(ة)", "المستوى", "الطور", "المادة"],
+    "fr": {"teacher": "Enseignant(e)", "etablissement": "Établissement", "level": "Niveau",
+           "palier": "Palier", "subject": "Matière", "projet": "Projet / Unité", "activite": "Activité"},
+    "en": {"teacher": "Teacher", "etablissement": "Institution", "level": "Level",
+           "palier": "Grade", "subject": "Subject", "projet": "Project / Unit", "activite": "Activity"},
+    "ar": {"teacher": "الأستاذ(ة)", "etablissement": "المؤسسة", "level": "المستوى",
+           "palier": "الطور", "subject": "المادة", "projet": "المشروع / الوحدة", "activite": "النشاط"},
 }
 
 
@@ -474,24 +712,29 @@ def make_docx(content, meta, colors_cfg, lang="fr"):
     run.font.color.rgb = RGBColor(*hex_to_rgb(c1))
     title_p.paragraph_format.space_after = Pt(14)
 
-    # ── Header table: Teacher / Level / Palier / Subject ──
-    table = doc.add_table(rows=2, cols=4)
-    table.style = "Table Grid"
-    table.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    headers = HEADER_LABELS.get(lang, HEADER_LABELS["fr"])
-    values  = [
-        f"{meta.get('teacher_first','')} {meta.get('teacher_last','')}".strip() or "—",
-        meta.get("level", "—"),
-        meta.get("palier", "—"),
-        meta.get("subject", "—"),
+    # ── Header table: vertical label:value rows (scales to any number of fields) ──
+    labels = HEADER_LABELS.get(lang, HEADER_LABELS["fr"])
+    rows_data = [
+        (labels["teacher"], f"{meta.get('teacher_first','')} {meta.get('teacher_last','')}".strip() or "—"),
+        (labels["etablissement"], meta.get("etablissement") or "—"),
+        (labels["level"], meta.get("level") or "—"),
+        (labels["palier"], meta.get("palier") or "—"),
+        (labels["subject"], meta.get("subject") or "—"),
+        (labels["projet"], meta.get("projet") or "—"),
+        (labels["activite"], meta.get("activite") or "—"),
     ]
 
-    for i, (h, v) in enumerate(zip(headers, values)):
-        hc = table.cell(0, i)
+    table = doc.add_table(rows=len(rows_data), cols=2)
+    table.style = "Table Grid"
+    table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    table.columns[0].width = Inches(1.8)
+    table.columns[1].width = Inches(4.2)
+
+    for i, (h, v) in enumerate(rows_data):
+        hc = table.cell(i, 0)
         hc.text = ""
         hp = hc.paragraphs[0]
-        hp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        hp.alignment = WD_ALIGN_PARAGRAPH.LEFT if lang != "ar" else WD_ALIGN_PARAGRAPH.RIGHT
         hr = hp.add_run(h)
         hr.bold = True
         hr.font.size = Pt(10)
@@ -499,10 +742,10 @@ def make_docx(content, meta, colors_cfg, lang="fr"):
         set_cell_background(hc, c1)
         hc.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
 
-        vc = table.cell(1, i)
+        vc = table.cell(i, 1)
         vc.text = ""
         vp = vc.paragraphs[0]
-        vp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        vp.alignment = WD_ALIGN_PARAGRAPH.LEFT if lang != "ar" else WD_ALIGN_PARAGRAPH.RIGHT
         vr = vp.add_run(v)
         vr.font.size = Pt(11)
         vr.font.color.rgb = RGBColor(*hex_to_rgb(ctext, "1a1a1a"))
@@ -595,22 +838,32 @@ def make_pdf(content, meta, colors_cfg, lang="fr"):
     story = [Paragraph("EduPrompt AI", title_s)]
 
     teacher = f"{meta.get('teacher_first','')} {meta.get('teacher_last','')}".strip() or "—"
+    labels = HEADER_LABELS.get(lang, HEADER_LABELS["fr"])
     table_data = [
-        HEADER_LABELS.get(lang, HEADER_LABELS["fr"]),
-        [teacher, meta.get("level","—"), meta.get("palier","—"), meta.get("subject","—")],
+        [labels["teacher"], teacher],
+        [labels["etablissement"], meta.get("etablissement") or "—"],
+        [labels["level"], meta.get("level") or "—"],
+        [labels["palier"], meta.get("palier") or "—"],
+        [labels["subject"], meta.get("subject") or "—"],
+        [labels["projet"], meta.get("projet") or "—"],
+        [labels["activite"], meta.get("activite") or "—"],
     ]
-    tbl = Table(table_data, colWidths=[4.2*cm]*4)
+    if lang == "ar":
+        table_data = [[row[1], row[0]] for row in table_data]  # value first visually for RTL
+
+    tbl = Table(table_data, colWidths=[5*cm, 9*cm])
     tbl.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), rl_colors.HexColor(c1)),
-        ("TEXTCOLOR", (0,0), (-1,0), rl_colors.white),
-        ("TEXTCOLOR", (0,1), (-1,1), rl_colors.HexColor(ctext)),
-        ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+        ("BACKGROUND", (0,0), (0,-1) if lang != "ar" else (1,-1), rl_colors.HexColor(c1)),
+        ("TEXTCOLOR", (0,0), (0,-1) if lang != "ar" else (1,-1), rl_colors.white),
+        ("TEXTCOLOR", (1,0), (1,-1) if lang != "ar" else (0,-1), rl_colors.HexColor(ctext)),
+        ("FONTNAME", (0,0), (0,-1) if lang != "ar" else (1,-1), "Helvetica-Bold"),
         ("FONTSIZE", (0,0), (-1,-1), 9),
-        ("ALIGN", (0,0), (-1,-1), "CENTER"),
+        ("ALIGN", (0,0), (-1,-1), "RIGHT" if lang == "ar" else "LEFT"),
         ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
         ("GRID", (0,0), (-1,-1), 0.75, rl_colors.HexColor("#dce6f0")),
-        ("TOPPADDING", (0,0), (-1,-1), 8),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 8),
+        ("TOPPADDING", (0,0), (-1,-1), 7),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+        ("LEFTPADDING", (0,0), (-1,-1), 10),
     ]))
     story.append(tbl)
     story.append(Spacer(1, 0.5*cm))
@@ -651,6 +904,9 @@ def download():
         "palier":        data.get("palier", ""),
         "subject":       data.get("subject", ""),
         "lesson":        data.get("lesson", ""),
+        "etablissement": data.get("etablissement", ""),
+        "projet":        data.get("projet", ""),
+        "activite":      data.get("activite", ""),
     }
     colors_cfg = data.get("colors", {})
 

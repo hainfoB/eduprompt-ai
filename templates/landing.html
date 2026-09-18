@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}EduPrompt AI — {{ t.landing_hero_title_1 }}{% endblock %}
+{% block extra_head %}
+<style>
+/* ══ HERO ══ */
+.lp-hero{
+  background:linear-gradient(135deg,var(--navy3) 0%,var(--navy) 55%,var(--navy2) 100%);
+  color:#fff; padding:60px max(5vw,20px) 70px; position:relative; overflow:hidden;
+}
+.lp-hero::before{
+  content:""; position:absolute; inset:0; z-index:0;
+  background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);
+  background-size:40px 40px;
+  mask-image:radial-gradient(ellipse 80% 80% at 50% 40%,black,transparent);
+}
+.lp-hero-inner{position:relative;z-index:1;max-width:780px;margin:0 auto;text-align:center}
+.lp-badge{display:inline-flex;align-items:center;gap:7px;background:rgba(249,115,22,.2);border:1px solid rgba(249,115,22,.4);border-radius:99px;padding:6px 16px;font-size:12px;font-weight:700;color:#f9a361;margin-bottom:22px}
+.lp-hero h1{font-size:clamp(26px,5.5vw,48px);font-weight:800;letter-spacing:-1.2px;line-height:1.2;margin:0 0 16px}
+.lp-hero h1 em{color:var(--orange);font-style:normal}
+.lp-hero p{font-size:clamp(13px,2vw,16px);color:rgba(255,255,255,.72);max-width:600px;margin:0 auto 28px;line-height:1.75}
+.lp-hero-ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+.btn-lp-primary{background:var(--orange);color:#fff;border:none;border-radius:12px;padding:14px 28px;font-size:15px;font-weight:800;text-decoration:none;display:inline-flex;align-items:center;gap:8px;box-shadow:0 8px 28px rgba(249,115,22,.35);transition:all .2s}
+.btn-lp-primary:hover{background:var(--orange2);color:#fff;transform:translateY(-2px)}
+.btn-lp-secondary{background:rgba(255,255,255,.1);color:#fff;border:1.5px solid rgba(255,255,255,.3);border-radius:12px;padding:13px 26px;font-size:15px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:8px;transition:all .2s}
+.btn-lp-secondary:hover{background:rgba(255,255,255,.18);color:#fff}
+.lp-hero-note{font-size:12px;color:rgba(255,255,255,.5)}
+
+/* ══ SECTION SHARED ══ */
+.lp-section{max-width:1080px;margin:0 auto;padding:64px max(5vw,20px)}
+.lp-section-head{text-align:center;max-width:640px;margin:0 auto 40px}
+.lp-section-head h2{font-size:clamp(22px,3.5vw,32px);font-weight:800;color:var(--navy);margin:0 0 10px;letter-spacing:-.5px}
+.lp-section-head p{font-size:14px;color:var(--muted);margin:0;line-height:1.6}
+
+/* ══ FEATURES GRID ══ */
+.lp-features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px}
+.lp-feature-card{background:var(--paper);border-radius:16px;box-shadow:var(--shadow);padding:26px;transition:transform .2s}
+.lp-feature-card:hover{transform:translateY(-3px)}
+.lp-feature-icon{width:48px;height:48px;background:var(--sky);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--orange);margin-bottom:16px}
+.lp-feature-card h3{font-size:15px;font-weight:800;color:var(--navy);margin:0 0 8px}
+.lp-feature-card p{font-size:13px;color:var(--muted);line-height:1.6;margin:0}
+
+/* ══ HOW IT WORKS ══ */
+.lp-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;counter-reset:step}
+.lp-step{text-align:center;position:relative}
+.lp-step-num{width:44px;height:44px;background:var(--navy);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;margin:0 auto 14px}
+.lp-step h3{font-size:14px;font-weight:800;color:var(--navy);margin:0 0 6px}
+.lp-step p{font-size:12.5px;color:var(--muted);line-height:1.6;margin:0}
+
+/* ══ TUTORIAL ══ */
+.lp-tuto-section{background:var(--sky)}
+.lp-tuto-list{display:flex;flex-direction:column;gap:14px;max-width:720px;margin:0 auto}
+.lp-tuto-step{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:18px 22px;display:flex;gap:16px;align-items:flex-start}
+.lp-tuto-num{width:36px;height:36px;background:var(--orange);color:#fff;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;flex-shrink:0}
+.lp-tuto-step h4{font-size:14px;font-weight:800;color:var(--navy);margin:0 0 4px}
+.lp-tuto-step p{font-size:12.5px;color:var(--muted);line-height:1.6;margin:0}
+.lp-tuto-step code{background:var(--ivory);padding:1px 6px;border-radius:5px;font-size:11.5px;color:var(--navy2);direction:ltr;display:inline-block}
+.lp-tuto-cta-wrap{text-align:center;margin-top:26px}
+.btn-tuto{background:var(--navy);color:#fff;border:none;border-radius:12px;padding:13px 26px;font-size:14px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
+.btn-tuto:hover{background:var(--navy2);color:#fff}
+
+/* ══ PRICING ══ */
+.lp-pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:stretch}
+.lp-price-card{background:var(--paper);border-radius:16px;box-shadow:var(--shadow);padding:28px 24px;text-align:center;border:2px solid transparent;display:flex;flex-direction:column}
+.lp-price-card.featured{border-color:var(--orange);box-shadow:var(--shadow2);transform:scale(1.03)}
+.lp-price-badge{background:var(--orange);color:#fff;font-size:10px;font-weight:800;padding:4px 12px;border-radius:99px;display:inline-block;margin-bottom:12px;letter-spacing:.5px}
+.lp-price-card h3{font-size:17px;font-weight:800;color:var(--navy);margin:0 0 10px}
+.lp-price-value{font-size:32px;font-weight:800;color:var(--ink);margin-bottom:2px}
+.lp-price-period{font-size:12px;color:var(--muted);margin-bottom:20px}
+.lp-price-features{list-style:none;padding:0;margin:0 0 24px;text-align:start;font-size:13px;color:var(--muted);flex:1}
+.lp-price-features li{padding:7px 0;display:flex;align-items:center;gap:9px;border-bottom:1px solid var(--line)}
+.lp-price-features li:last-child{border-bottom:none}
+.lp-price-features li i{color:var(--green);flex-shrink:0}
+.btn-price{width:100%;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn-price.primary{background:var(--orange);color:#fff}
+.btn-price.primary:hover{background:var(--orange2);color:#fff}
+.btn-price.outline{background:var(--ivory);color:var(--navy);border:1.5px solid var(--line)}
+.btn-price.outline:hover{background:var(--sky)}
+.lp-price-note{text-align:center;font-size:12px;color:var(--muted);margin-top:24px;max-width:520px;margin-left:auto;margin-right:auto;line-height:1.6}
+
+/* ══ CONTACT ══ */
+.lp-contact-section{background:linear-gradient(135deg,var(--navy3),var(--navy));color:#fff;text-align:center;border-radius:20px;padding:48px 32px;margin:0 max(5vw,20px) 64px;max-width:1080px;margin-left:auto;margin-right:auto}
+.lp-contact-section h2{font-size:clamp(20px,3vw,28px);font-weight:800;margin:0 0 10px}
+.lp-contact-section p{font-size:13px;color:rgba(255,255,255,.7);margin:0 0 24px}
+
+/* ══ RESPONSIVE ══ */
+@media(max-width:800px){
+  .lp-pricing-grid{grid-template-columns:1fr}
+  .lp-price-card.featured{transform:none}
+}
+@media(max-width:600px){
+  .lp-hero{padding:44px 16px 54px}
+  .lp-section{padding:44px 16px}
+  .lp-tuto-step{flex-direction:column;text-align:center}
+  .lp-tuto-num{margin:0 auto}
+  .lp-contact-section{padding:34px 20px;border-radius:16px}
+}
+</style>
+{% endblock %}
+{% block content %}
+
+<!-- ══ HERO ══ -->
+<section class="lp-hero">
+  <div class="lp-hero-inner">
+    <div class="lp-badge"><i class="bi bi-stars"></i> {{ t.landing_hero_badge }}</div>
+    <h1>{{ t.landing_hero_title_1 }} <em>{{ t.landing_hero_title_em }}</em></h1>
+    <p>{{ t.landing_hero_subtitle }}</p>
+    <div class="lp-hero-ctas">
+      <a href="{{ url_for('generator') if current_user.is_authenticated else url_for('register') }}" class="btn-lp-primary">
+        <i class="bi bi-rocket-takeoff-fill"></i> {{ t.landing_hero_cta_primary }}
+      </a>
+      <a href="#pricing" class="btn-lp-secondary">
+        <i class="bi bi-tag-fill"></i> {{ t.landing_hero_cta_secondary }}
+      </a>
+    </div>
+    <div class="lp-hero-note">{{ t.landing_hero_note }}</div>
+  </div>
+</section>
+
+<!-- ══ FEATURES ══ -->
+<section class="lp-section">
+  <div class="lp-section-head">
+    <h2>{{ t.landing_features_title }}</h2>
+    <p>{{ t.landing_features_subtitle }}</p>
+  </div>
+  <div class="lp-features-grid">
+    <div class="lp-feature-card">
+      <div class="lp-feature-icon"><i class="bi bi-translate"></i></div>
+      <h3>{{ t.feature1_title }}</h3><p>{{ t.feature1_desc }}</p>
+    </div>
+    <div class="lp-feature-card">
+      <div class="lp-feature-icon"><i class="bi bi-mortarboard-fill"></i></div>
+      <h3>{{ t.feature2_title }}</h3><p>{{ t.feature2_desc }}</p>
+    </div>
+    <div class="lp-feature-card">
+      <div class="lp-feature-icon"><i class="bi bi-palette-fill"></i></div>
+      <h3>{{ t.feature3_title }}</h3><p>{{ t.feature3_desc }}</p>
+    </div>
+    <div class="lp-feature-card">
+      <div class="lp-feature-icon"><i class="bi bi-collection-fill"></i></div>
+      <h3>{{ t.feature4_title }}</h3><p>{{ t.feature4_desc }}</p>
+    </div>
+    <div class="lp-feature-card">
+      <div class="lp-feature-icon"><i class="bi bi-file-earmark-arrow-down-fill"></i></div>
+      <h3>{{ t.feature5_title }}</h3><p>{{ t.feature5_desc }}</p>
+    </div>
+    <div class="lp-feature-card">
+      <div class="lp-feature-icon"><i class="bi bi-lightning-charge-fill"></i></div>
+      <h3>{{ t.feature6_title }}</h3><p>{{ t.feature6_desc }}</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ HOW IT WORKS ══ -->
+<section class="lp-section" style="padding-top:0">
+  <div class="lp-section-head">
+    <h2>{{ t.landing_how_title }}</h2>
+  </div>
+  <div class="lp-steps">
+    <div class="lp-step"><div class="lp-step-num">1</div><h3>{{ t.how_step1_title }}</h3><p>{{ t.how_step1_desc }}</p></div>
+    <div class="lp-step"><div class="lp-step-num">2</div><h3>{{ t.how_step2_title }}</h3><p>{{ t.how_step2_desc }}</p></div>
+    <div class="lp-step"><div class="lp-step-num">3</div><h3>{{ t.how_step3_title }}</h3><p>{{ t.how_step3_desc }}</p></div>
+    <div class="lp-step"><div class="lp-step-num">4</div><h3>{{ t.how_step4_title }}</h3><p>{{ t.how_step4_desc }}</p></div>
+  </div>
+</section>
+
+<!-- ══ TUTORIAL: Google AI Studio key ══ -->
+<section class="lp-section lp-tuto-section" style="max-width:100%" id="tuto">
+  <div style="max-width:1080px;margin:0 auto">
+    <div class="lp-section-head">
+      <h2><i class="bi bi-key-fill" style="color:var(--orange)"></i> {{ t.landing_tuto_title }}</h2>
+      <p>{{ t.landing_tuto_subtitle }}</p>
+    </div>
+    <div class="lp-tuto-list">
+      <div class="lp-tuto-step">
+        <div class="lp-tuto-num">1</div>
+        <div><h4>{{ t.tuto_step1_title }}</h4><p>{{ t.tuto_step1_desc }} <code>aistudio.google.com/app/apikey</code></p></div>
+      </div>
+      <div class="lp-tuto-step">
+        <div class="lp-tuto-num">2</div>
+        <div><h4>{{ t.tuto_step2_title }}</h4><p>{{ t.tuto_step2_desc }}</p></div>
+      </div>
+      <div class="lp-tuto-step">
+        <div class="lp-tuto-num">3</div>
+        <div><h4>{{ t.tuto_step3_title }}</h4><p>{{ t.tuto_step3_desc }}</p></div>
+      </div>
+      <div class="lp-tuto-step">
+        <div class="lp-tuto-num">4</div>
+        <div><h4>{{ t.tuto_step4_title }}</h4><p>{{ t.tuto_step4_desc }}</p></div>
+      </div>
+      <div class="lp-tuto-step">
+        <div class="lp-tuto-num">5</div>
+        <div><h4>{{ t.tuto_step5_title }}</h4><p>{{ t.tuto_step5_desc }}</p></div>
+      </div>
+      <div class="lp-tuto-step">
+        <div class="lp-tuto-num">6</div>
+        <div><h4>{{ t.tuto_step6_title }}</h4><p>{{ t.tuto_step6_desc }}</p></div>
+      </div>
+    </div>
+    <div class="lp-tuto-cta-wrap">
+      <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" class="btn-tuto">
+        <i class="bi bi-box-arrow-up-right"></i> {{ t.tuto_cta }}
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ══ PRICING ══ -->
+<section class="lp-section" id="pricing">
+  <div class="lp-section-head">
+    <h2>{{ t.landing_pricing_title }}</h2>
+    <p>{{ t.landing_pricing_subtitle }}</p>
+  </div>
+  <div class="lp-pricing-grid">
+    <div class="lp-price-card">
+      <h3>{{ t.price_trial_name }}</h3>
+      <div class="lp-price-value">{{ t.price_trial_price }}</div>
+      <div class="lp-price-period">{{ t.price_trial_period }}</div>
+      <ul class="lp-price-features">
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_trial_f1 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_trial_f2 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_trial_f3 }}</li>
+      </ul>
+      <a href="{{ url_for('register') }}" class="btn-price outline">
+        <i class="bi bi-arrow-right-circle"></i> {{ t.price_trial_cta }}
+      </a>
+    </div>
+    <div class="lp-price-card">
+      <h3>{{ t.price_pro_name }}</h3>
+      <div class="lp-price-value">{{ t.price_pro_price }}</div>
+      <div class="lp-price-period">{{ t.price_pro_period }}</div>
+      <ul class="lp-price-features">
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_pro_f1 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_pro_f2 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_pro_f3 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_pro_f4 }}</li>
+      </ul>
+      <a href="mailto:{{ contact_email }}?subject={{ t.contact_us_subject_upgrade | urlencode }}" class="btn-price primary">
+        <i class="bi bi-envelope-fill"></i> {{ t.price_pro_cta }}
+      </a>
+    </div>
+    <div class="lp-price-card featured">
+      <span class="lp-price-badge">{{ t.price_popular_badge }}</span>
+      <h3>{{ t.price_premium_name }}</h3>
+      <div class="lp-price-value">{{ t.price_premium_price }}</div>
+      <div class="lp-price-period">{{ t.price_premium_period }}</div>
+      <ul class="lp-price-features">
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_premium_f1 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_premium_f2 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_premium_f3 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_premium_f4 }}</li>
+      </ul>
+      <a href="mailto:{{ contact_email }}?subject={{ t.contact_us_subject_upgrade | urlencode }}" class="btn-price primary">
+        <i class="bi bi-envelope-fill"></i> {{ t.price_premium_cta }}
+      </a>
+    </div>
+  </div>
+  <div class="lp-price-note">
+    <i class="bi bi-info-circle"></i> {{ t.price_subscribe_note }}
+  </div>
+</section>
+
+<!-- ══ ABOUT / CREATOR ══ -->
+<section class="lp-section" style="max-width:760px;padding-top:0">
+  <div class="lp-section-head">
+    <h2>{{ t.about_title }}</h2>
+  </div>
+  <div class="lp-feature-card" style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;text-align:start">
+    <div style="width:64px;height:64px;border-radius:50%;background:var(--navy);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;flex-shrink:0">AHB</div>
+    <div style="flex:1;min-width:220px">
+      <h3 style="margin-bottom:2px">{{ t.about_name }}</h3>
+      <div style="font-size:12px;color:var(--orange);font-weight:700;margin-bottom:10px">{{ t.about_role }}</div>
+      <p style="margin-bottom:14px">{{ t.about_bio }}</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <a href="https://wa.me/213699102525" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;background:#25D366;color:#fff;padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;text-decoration:none">
+          <i class="bi bi-whatsapp"></i> {{ t.about_contact_whatsapp }}
+        </a>
+        <a href="mailto:haithem-berkane@outlook.fr" style="display:inline-flex;align-items:center;gap:6px;background:var(--navy);color:#fff;padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;text-decoration:none">
+          <i class="bi bi-envelope-fill"></i> {{ t.about_contact_email }}
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ CONTACT ══ -->
+<div class="lp-contact-section">
+  <h2>{{ t.landing_contact_title }}</h2>
+  <p>{{ t.landing_contact_subtitle }}</p>
+  <a href="mailto:{{ contact_email }}?subject={{ t.contact_us_subject_upgrade | urlencode }}" class="btn-lp-primary">
+    <i class="bi bi-envelope-fill"></i> {{ contact_email }}
+  </a>
+</div>
+
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ t.admin_edit_teacher_title }}{% endblock %}
+{% block extra_head %}
+<style>
+.pf-wrap{max-width:560px;margin:32px auto;padding:0 max(4vw,16px)}
+.pf-header h1{font-size:22px;font-weight:800;color:var(--navy);margin:0 0 20px}
+.pf-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:24px}
+.form-label{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:6px;display:block}
+.form-control,.form-select{border:1.5px solid var(--line);border-radius:10px;padding:10px 13px;font-size:14px;width:100%;background:var(--ivory)}
+.btn-pf{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:11px 20px;font-size:13px;font-weight:700;cursor:pointer;margin-top:14px}
+.apikey-input{direction:ltr;text-align:left}
+</style>
+{% endblock %}
+{% block content %}
+<div class="pf-wrap">
+  <div class="pf-header"><h1>{{ t.admin_edit_teacher_title }}</h1></div>
+  <div class="pf-card">
+    <form method="POST">
+      <div class="row g-2 mb-2">
+        <div class="col-sm-6">
+          <label class="form-label">{{ t.label_first_name }}</label>
+          <input type="text" name="first_name" class="form-control" value="{{ teacher.first_name }}" required/>
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">{{ t.label_last_name }}</label>
+          <input type="text" name="last_name" class="form-control" value="{{ teacher.last_name }}" required/>
+        </div>
+      </div>
+      <label class="form-label">{{ t.label_email }}</label>
+      <input type="email" name="email" class="form-control mb-2" value="{{ teacher.email }}" required/>
+
+      <label class="form-label" style="margin-top:12px">{{ t.label_plan }}</label>
+      <select name="plan" class="form-select mb-2">
+        <option value="trial" {% if sub and sub.plan=='trial' %}selected{% endif %}>{{ t.plan_trial_option }}</option>
+        <option value="pro" {% if sub and sub.plan=='pro' %}selected{% endif %}>{{ t.plan_pro_option }}</option>
+        <option value="premium" {% if sub and sub.plan=='premium' %}selected{% endif %}>{{ t.plan_premium_option }}</option>
+      </select>
+
+      <label class="form-label" style="margin-top:12px">{{ t.profile_section_apikey }}</label>
+      <input type="text" name="api_key" class="form-control apikey-input" value="{{ teacher.gemini_api_key or '' }}" placeholder="AIza... / AQ.Ab8..."/>
+
+      <button type="submit" class="btn-pf"><i class="bi bi-check2"></i> {{ t.btn_save }}</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

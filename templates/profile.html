@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ t.profile_title }} — EduPrompt AI{% endblock %}
+{% block extra_head %}
+<style>
+.pf-wrap{max-width:560px;margin:32px auto;padding:0 max(4vw,16px)}
+.pf-header{margin-bottom:24px}
+.pf-header h1{font-size:22px;font-weight:800;color:var(--navy);margin:0 0 4px}
+.pf-header p{font-size:13px;color:var(--muted);margin:0}
+.pf-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:24px;margin-bottom:20px}
+.pf-card h3{font-size:14px;font-weight:800;color:var(--navy);margin:0 0 16px;display:flex;align-items:center;gap:8px}
+.form-label{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:6px;display:block}
+.form-control{border:1.5px solid var(--line);border-radius:10px;padding:10px 13px;font-size:14px;width:100%;background:var(--ivory)}
+.form-control:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(249,115,22,.13);outline:none;background:#fff}
+.btn-pf{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:11px 20px;font-size:13px;font-weight:700;cursor:pointer;margin-top:14px}
+.apikey-input{direction:ltr;text-align:left}
+</style>
+{% endblock %}
+{% block content %}
+<div class="pf-wrap">
+  <div class="pf-header">
+    <h1>{{ t.profile_title }}</h1>
+    <p>{{ t.profile_subtitle }}</p>
+  </div>
+
+  <div class="pf-card">
+    <h3><i class="bi bi-person-badge-fill"></i> {{ t.profile_section_info }}</h3>
+    <form method="POST">
+      <input type="hidden" name="action" value="update_info"/>
+      <div class="row g-2 mb-2">
+        <div class="col-sm-6">
+          <label class="form-label">{{ t.label_first_name }}</label>
+          <input type="text" name="first_name" class="form-control" value="{{ current_user.first_name }}" required/>
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">{{ t.label_last_name }}</label>
+          <input type="text" name="last_name" class="form-control" value="{{ current_user.last_name }}" required/>
+        </div>
+      </div>
+      <label class="form-label">{{ t.label_email }}</label>
+      <input type="email" name="email" class="form-control" value="{{ current_user.email }}" required/>
+      <button type="submit" class="btn-pf"><i class="bi bi-check2"></i> {{ t.btn_save_changes }}</button>
+    </form>
+  </div>
+
+  <div class="pf-card">
+    <h3><i class="bi bi-key-fill"></i> {{ t.profile_section_apikey }}</h3>
+    <p style="font-size:12px;color:var(--muted);margin:-8px 0 14px">{{ t.apikey_stored_note }}</p>
+    <form method="POST">
+      <input type="hidden" name="action" value="update_apikey"/>
+      <input type="text" name="api_key" class="form-control apikey-input"
+             value="{{ current_user.gemini_api_key or '' }}" placeholder="AIza... / AQ.Ab8..."/>
+      <button type="submit" class="btn-pf"><i class="bi bi-arrow-repeat"></i> {{ t.btn_update_key }}</button>
+    </form>
+  </div>
+
+  <div class="pf-card">
+    <h3><i class="bi bi-lock-fill"></i> {{ t.profile_section_password }}</h3>
+    <form method="POST">
+      <input type="hidden" name="action" value="change_password"/>
+      <label class="form-label">{{ t.profile_current_password }}</label>
+      <input type="password" name="current_password" class="form-control" required/>
+      <label class="form-label" style="margin-top:12px">{{ t.profile_new_password }}</label>
+      <input type="password" name="new_password" class="form-control" required/>
+      <button type="submit" class="btn-pf"><i class="bi bi-shield-lock-fill"></i> {{ t.btn_change_password }}</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

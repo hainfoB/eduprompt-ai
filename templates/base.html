@@ -16,21 +16,22 @@ html{scroll-behavior:smooth}
 body{margin:0;background:var(--ivory);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh}
 html[lang="ar"] body{font-family:'Noto Sans Arabic',Tahoma,sans-serif}
 
-.topbar{position:sticky;top:0;z-index:100;height:64px;background:rgba(255,255,255,.97);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);box-shadow:0 2px 14px rgba(16,42,83,.06);display:flex;align-items:center;padding:0 max(5vw,20px);justify-content:space-between;gap:12px}
-.brand{display:flex;align-items:center;gap:11px;text-decoration:none;color:inherit}
-.brand-icon{width:42px;height:42px;background:var(--navy);color:var(--orange);border-radius:10px 3px 10px 3px;box-shadow:3px 3px 0 var(--orange);display:grid;place-items:center;font-size:20px;font-weight:900;flex-shrink:0}
+.topbar{position:sticky;top:0;z-index:100;min-height:64px;background:rgba(255,255,255,.97);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);box-shadow:0 2px 14px rgba(16,42,83,.06);display:flex;align-items:center;flex-wrap:wrap;row-gap:8px;padding:10px max(5vw,20px);justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:11px;text-decoration:none;color:inherit;flex-shrink:0}
+.brand-icon{width:40px;height:40px;background:var(--navy);color:var(--orange);border-radius:10px 3px 10px 3px;box-shadow:3px 3px 0 var(--orange);display:grid;place-items:center;font-size:19px;font-weight:900;flex-shrink:0}
 html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 0 var(--orange)}
-.brand-text{line-height:1.2}
-.brand-text b{display:block;font-size:15px;color:var(--navy)}
+.brand-text{line-height:1.2;white-space:nowrap}
+.brand-text b{display:block;font-size:14px;color:var(--navy)}
 .brand-text small{font-size:10px;color:var(--muted)}
 
-.topbar-right{display:flex;align-items:center;gap:10px}
-.lang-switcher{display:flex;gap:3px;background:var(--sky);border-radius:9px;padding:3px}
-.lang-btn{border:none;background:transparent;padding:5px 9px;border-radius:6px;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;text-decoration:none;transition:all .18s}
+.topbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.lang-switcher{display:flex;gap:3px;background:var(--sky);border-radius:9px;padding:3px;flex-shrink:0}
+.lang-btn{border:none;background:transparent;padding:5px 8px;border-radius:6px;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;text-decoration:none;transition:all .18s;white-space:nowrap}
 .lang-btn.active{background:var(--navy);color:#fff}
+.lang-btn .lb-short{display:none}
 
-.nav-links{display:flex;align-items:center;gap:6px}
-.nav-link{padding:8px 14px;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted);text-decoration:none;transition:all .18s var(--ease);display:flex;align-items:center;gap:6px}
+.nav-links{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.nav-link{padding:8px 12px;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted);text-decoration:none;transition:all .18s var(--ease);display:flex;align-items:center;gap:6px;white-space:nowrap}
 .nav-link:hover{background:var(--sky);color:var(--navy)}
 .nav-link.active{background:var(--navy);color:#fff}
 .nav-link.logout{color:var(--red)}
@@ -38,7 +39,17 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
 
 @media(max-width:800px){
   .nav-link span.label{display:none}
-  .topbar{padding:0 10px}
+  .nav-link{padding:8px 10px}
+}
+@media(max-width:640px){
+  .lang-btn .lb-full{display:none}
+  .lang-btn .lb-short{display:inline}
+  .brand-text small{display:none}
+  .topbar{padding:8px 12px}
+}
+@media(max-width:400px){
+  .brand-text b{font-size:13px}
+  .brand-icon{width:36px;height:36px;font-size:17px}
 }
 
 .flash-wrap{max-width:820px;margin:16px auto 0;padding:0 max(4vw,16px)}
@@ -53,7 +64,7 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
 <body>
 
 <header class="topbar">
-  <a class="brand" href="{{ url_for('home') }}">
+  <a class="brand" href="{{ url_for('generator') if current_user.is_authenticated else url_for('home') }}">
     <div class="brand-icon">📚</div>
     <div class="brand-text">
       <b>EduPrompt AI</b>
@@ -62,9 +73,9 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
   </a>
   <div class="topbar-right">
     <div class="lang-switcher">
-      <a class="lang-btn {% if lang=='ar' %}active{% endif %}" href="{{ url_for('set_lang', lang='ar') }}">عربية</a>
-      <a class="lang-btn {% if lang=='fr' %}active{% endif %}" href="{{ url_for('set_lang', lang='fr') }}">Français</a>
-      <a class="lang-btn {% if lang=='en' %}active{% endif %}" href="{{ url_for('set_lang', lang='en') }}">English</a>
+      <a class="lang-btn {% if lang=='ar' %}active{% endif %}" href="{{ url_for('set_lang', lang='ar') }}"><span class="lb-full">عربية</span><span class="lb-short">AR</span></a>
+      <a class="lang-btn {% if lang=='fr' %}active{% endif %}" href="{{ url_for('set_lang', lang='fr') }}"><span class="lb-full">Français</span><span class="lb-short">FR</span></a>
+      <a class="lang-btn {% if lang=='en' %}active{% endif %}" href="{{ url_for('set_lang', lang='en') }}"><span class="lb-full">English</span><span class="lb-short">EN</span></a>
     </div>
     {% if current_user.is_authenticated %}
     <div class="nav-links">
@@ -74,7 +85,13 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
       <a class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
         <i class="bi bi-speedometer2"></i><span class="label">{{ t.nav_dashboard }}</span>
       </a>
+      <a class="nav-link {% if request.endpoint=='profile' %}active{% endif %}" href="{{ url_for('profile') }}">
+        <i class="bi bi-person-circle"></i><span class="label">{{ t.nav_profile }}</span>
+      </a>
       {% if current_user.role == 'admin' %}
+      <a class="nav-link {% if request.endpoint=='admin_stats' %}active{% endif %}" href="{{ url_for('admin_stats') }}">
+        <i class="bi bi-graph-up"></i><span class="label">{{ t.nav_stats }}</span>
+      </a>
       <a class="nav-link {% if request.endpoint=='admin_teachers' %}active{% endif %}" href="{{ url_for('admin_teachers') }}">
         <i class="bi bi-people-fill"></i><span class="label">{{ t.nav_teachers }}</span>
       </a>
@@ -84,6 +101,15 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
       {% endif %}
       <a class="nav-link logout" href="{{ url_for('logout') }}">
         <i class="bi bi-box-arrow-right"></i><span class="label">{{ t.nav_logout }}</span>
+      </a>
+    </div>
+    {% else %}
+    <div class="nav-links">
+      <a class="nav-link" href="{{ url_for('login') }}">
+        <i class="bi bi-box-arrow-in-right"></i><span class="label">{{ t.landing_nav_login }}</span>
+      </a>
+      <a class="nav-link" style="background:var(--orange);color:#fff" href="{{ url_for('register') }}">
+        <i class="bi bi-rocket-takeoff-fill"></i><span class="label">{{ t.landing_nav_register }}</span>
       </a>
     </div>
     {% endif %}
