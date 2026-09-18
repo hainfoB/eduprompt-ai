@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}EduPrompt AI — {{ t.landing_hero_title_1 }}{% endblock %}
+{% block title %}HaithemEduAI — {{ t.landing_hero_title_1 }}{% endblock %}
 {% block extra_head %}
 <style>
 /* ══ HERO ══ */
@@ -276,6 +276,9 @@
         </a>
         <a href="mailto:haithem-berkane@outlook.fr" style="display:inline-flex;align-items:center;gap:6px;background:var(--navy);color:#fff;padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;text-decoration:none">
           <i class="bi bi-envelope-fill"></i> {{ t.about_contact_email }}
+        </a>
+        <a href="{{ url_for('about') }}" style="display:inline-flex;align-items:center;gap:6px;background:var(--sky);color:var(--navy);padding:8px 16px;border-radius:9px;font-size:12px;font-weight:700;text-decoration:none">
+          <i class="bi bi-file-earmark-person-fill"></i> {{ t.about_full_cv_link }}
         </a>
       </div>
     </div>

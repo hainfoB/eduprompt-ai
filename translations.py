@@ -183,10 +183,10 @@ TRANSLATIONS = {
         "flash_teacher_deleted": "Compte {email} supprimé.",
         "login_required_message": "Veuillez vous connecter pour accéder à cette page.",
 
-        "quota_exceeded_trial": "Votre période d'essai gratuite est terminée. Contactez-nous pour vous abonner et continuer à utiliser EduPrompt AI.",
+        "quota_exceeded_trial": "Votre période d'essai gratuite est terminée. Contactez-nous pour vous abonner et continuer à utiliser HaithemEduAI.",
         "quota_exceeded_daily": "Vous avez atteint votre limite de {limit} leçon(s) par jour. Revenez demain, ou contactez-nous pour passer à un forfait supérieur.",
         "contact_us_cta": "Nous contacter par email",
-        "contact_us_subject_upgrade": "Je souhaite m'abonner à EduPrompt AI",
+        "contact_us_subject_upgrade": "Je souhaite m'abonner à HaithemEduAI",
 
         "landing_nav_login": "Se connecter",
         "landing_nav_register": "Essai gratuit",
@@ -199,7 +199,7 @@ TRANSLATIONS = {
         "landing_hero_cta_secondary": "Voir les tarifs",
         "landing_hero_note": "Aucune carte bancaire requise pour l'essai",
 
-        "landing_features_title": "Pourquoi EduPrompt AI ?",
+        "landing_features_title": "Pourquoi HaithemEduAI ?",
         "landing_features_subtitle": "Tout ce dont un enseignant a besoin, réuni en une seule plateforme.",
         "feature1_title": "Trilingue par nature",
         "feature1_desc": "Interface et documents en arabe, français ou anglais — indépendamment l'un de l'autre.",
@@ -236,7 +236,7 @@ TRANSLATIONS = {
         "tuto_step4_desc": "Google vous demande un projet Google Cloud — choisissez celui proposé par défaut, ou créez-en un nouveau (gratuit).",
         "tuto_step5_title": "Copiez votre clé",
         "tuto_step5_desc": "Une longue chaîne de caractères apparaît (commençant par AIza ou AQ.). Cliquez sur l'icône de copie.",
-        "tuto_step6_title": "Collez-la dans EduPrompt AI",
+        "tuto_step6_title": "Collez-la dans HaithemEduAI",
         "tuto_step6_desc": "Collez cette clé lors de votre inscription — elle sera enregistrée en toute sécurité et réutilisée automatiquement à chaque génération, sans jamais avoir à la ressaisir.",
         "tuto_cta": "Ouvrir Google AI Studio",
 
@@ -321,8 +321,8 @@ TRANSLATIONS = {
         "expiry_banner_text": "⏰ Votre abonnement {plan} expire dans {days} jour(s).",
         "expiry_banner_cta": "Renouveler maintenant",
 
-        "email_reminder_subject": "Votre abonnement EduPrompt AI expire bientôt",
-        "email_reminder_body": "Bonjour {name},\n\nVotre abonnement {plan} sur EduPrompt AI expire dans {days} jour(s), le {date}.\n\nPour continuer à générer vos documents pédagogiques sans interruption, contactez-nous dès maintenant : {email}\n\nMerci de votre confiance,\nL'équipe EduPrompt AI",
+        "email_reminder_subject": "Votre abonnement HaithemEduAI expire bientôt",
+        "email_reminder_body": "Bonjour {name},\n\nVotre abonnement {plan} sur HaithemEduAI expire dans {days} jour(s), le {date}.\n\nPour continuer à générer vos documents pédagogiques sans interruption, contactez-nous dès maintenant : {email}\n\nMerci de votre confiance,\nL'équipe HaithemEduAI",
 
         "about_title": "À propos du créateur",
         "about_name": "Ahmed Haithem BERKANE",
@@ -330,6 +330,9 @@ TRANSLATIONS = {
         "about_bio": "Consultant indépendant et formateur, spécialisé en intelligence artificielle, développement web et ingénierie pédagogique. Plus de 1000 enseignants et étudiants formés en Algérie et à l'international.",
         "about_contact_whatsapp": "WhatsApp",
         "about_contact_email": "Email",
+        "about_full_cv_link": "Voir le CV complet",
+        "about_back_link": "← Retour à l'accueil",
+        "about_download_cv": "Télécharger en PDF",
     },
 
     "en": {
@@ -499,10 +502,10 @@ TRANSLATIONS = {
         "flash_teacher_deleted": "Account {email} deleted.",
         "login_required_message": "Please log in to access this page.",
 
-        "quota_exceeded_trial": "Your free trial has ended. Contact us to subscribe and keep using EduPrompt AI.",
+        "quota_exceeded_trial": "Your free trial has ended. Contact us to subscribe and keep using HaithemEduAI.",
         "quota_exceeded_daily": "You've reached your limit of {limit} lesson(s) per day. Come back tomorrow, or contact us to upgrade your plan.",
         "contact_us_cta": "Contact us by email",
-        "contact_us_subject_upgrade": "I would like to subscribe to EduPrompt AI",
+        "contact_us_subject_upgrade": "I would like to subscribe to HaithemEduAI",
 
         "landing_nav_login": "Log in",
         "landing_nav_register": "Free trial",
@@ -515,7 +518,7 @@ TRANSLATIONS = {
         "landing_hero_cta_secondary": "See pricing",
         "landing_hero_note": "No credit card required for the trial",
 
-        "landing_features_title": "Why EduPrompt AI?",
+        "landing_features_title": "Why HaithemEduAI?",
         "landing_features_subtitle": "Everything a teacher needs, in one platform.",
         "feature1_title": "Trilingual by design",
         "feature1_desc": "Interface and documents in Arabic, French or English — independently of each other.",
@@ -552,7 +555,7 @@ TRANSLATIONS = {
         "tuto_step4_desc": "Google asks for a Google Cloud project — pick the default one, or create a new one (free).",
         "tuto_step5_title": "Copy your key",
         "tuto_step5_desc": "A long string appears (starting with AIza or AQ.). Click the copy icon.",
-        "tuto_step6_title": "Paste it into EduPrompt AI",
+        "tuto_step6_title": "Paste it into HaithemEduAI",
         "tuto_step6_desc": "Paste this key when you sign up — it will be securely saved and reused automatically for every generation, with no need to re-enter it.",
         "tuto_cta": "Open Google AI Studio",
 
@@ -637,8 +640,8 @@ TRANSLATIONS = {
         "expiry_banner_text": "⏰ Your {plan} subscription expires in {days} day(s).",
         "expiry_banner_cta": "Renew now",
 
-        "email_reminder_subject": "Your EduPrompt AI subscription is expiring soon",
-        "email_reminder_body": "Hello {name},\n\nYour {plan} subscription on EduPrompt AI expires in {days} day(s), on {date}.\n\nTo keep generating your teaching documents without interruption, contact us now: {email}\n\nThank you for your trust,\nThe EduPrompt AI team",
+        "email_reminder_subject": "Your HaithemEduAI subscription is expiring soon",
+        "email_reminder_body": "Hello {name},\n\nYour {plan} subscription on HaithemEduAI expires in {days} day(s), on {date}.\n\nTo keep generating your teaching documents without interruption, contact us now: {email}\n\nThank you for your trust,\nThe HaithemEduAI team",
 
         "about_title": "About the creator",
         "about_name": "Ahmed Haithem BERKANE",
@@ -646,6 +649,9 @@ TRANSLATIONS = {
         "about_bio": "Independent consultant and trainer, specialized in artificial intelligence, web development and pedagogical engineering. Over 1000 teachers and students trained in Algeria and internationally.",
         "about_contact_whatsapp": "WhatsApp",
         "about_contact_email": "Email",
+        "about_full_cv_link": "View full CV",
+        "about_back_link": "← Back to home",
+        "about_download_cv": "Download as PDF",
     },
 
     "ar": {
@@ -815,10 +821,10 @@ TRANSLATIONS = {
         "flash_teacher_deleted": "تم حذف الحساب {email}.",
         "login_required_message": "يرجى تسجيل الدخول للوصول إلى هذه الصفحة.",
 
-        "quota_exceeded_trial": "انتهت فترتك التجريبية المجانية. تواصل معنا للاشتراك ومواصلة استخدام EduPrompt AI.",
+        "quota_exceeded_trial": "انتهت فترتك التجريبية المجانية. تواصل معنا للاشتراك ومواصلة استخدام HaithemEduAI.",
         "quota_exceeded_daily": "لقد بلغت حد {limit} درس/دروس في اليوم. عد غداً، أو تواصل معنا للترقية إلى باقة أعلى.",
         "contact_us_cta": "تواصل معنا عبر البريد الإلكتروني",
-        "contact_us_subject_upgrade": "أرغب في الاشتراك في EduPrompt AI",
+        "contact_us_subject_upgrade": "أرغب في الاشتراك في HaithemEduAI",
 
         "landing_nav_login": "تسجيل الدخول",
         "landing_nav_register": "تجربة مجانية",
@@ -831,7 +837,7 @@ TRANSLATIONS = {
         "landing_hero_cta_secondary": "شاهد الأسعار",
         "landing_hero_note": "لا حاجة لبطاقة بنكية للتجربة",
 
-        "landing_features_title": "لماذا EduPrompt AI؟",
+        "landing_features_title": "لماذا HaithemEduAI؟",
         "landing_features_subtitle": "كل ما يحتاجه الأستاذ، في منصة واحدة.",
         "feature1_title": "ثلاثي اللغة بطبيعته",
         "feature1_desc": "الواجهة والوثائق بالعربية أو الفرنسية أو الإنجليزية — بشكل مستقل عن بعضها.",
@@ -868,7 +874,7 @@ TRANSLATIONS = {
         "tuto_step4_desc": "تطلب منك Google مشروع Google Cloud — اختر المقترح افتراضياً، أو أنشئ واحداً جديداً (مجاني).",
         "tuto_step5_title": "انسخ مفتاحك",
         "tuto_step5_desc": "تظهر سلسلة طويلة من الأحرف (تبدأ بـ AIza أو AQ.). انقر على أيقونة النسخ.",
-        "tuto_step6_title": "الصقه في EduPrompt AI",
+        "tuto_step6_title": "الصقه في HaithemEduAI",
         "tuto_step6_desc": "الصق هذا المفتاح عند التسجيل — سيُحفظ بأمان ويُعاد استخدامه تلقائياً في كل إنشاء، دون الحاجة لإعادة إدخاله.",
         "tuto_cta": "افتح Google AI Studio",
 
@@ -953,8 +959,8 @@ TRANSLATIONS = {
         "expiry_banner_text": "⏰ اشتراكك {plan} ينتهي خلال {days} يوم/أيام.",
         "expiry_banner_cta": "جدد الآن",
 
-        "email_reminder_subject": "اشتراكك في EduPrompt AI سينتهي قريباً",
-        "email_reminder_body": "مرحباً {name}،\n\nاشتراكك {plan} في EduPrompt AI سينتهي خلال {days} يوم/أيام، بتاريخ {date}.\n\nلمواصلة إنشاء وثائقك التعليمية دون انقطاع، تواصل معنا الآن: {email}\n\nشكراً لثقتك،\nفريق EduPrompt AI",
+        "email_reminder_subject": "اشتراكك في HaithemEduAI سينتهي قريباً",
+        "email_reminder_body": "مرحباً {name}،\n\nاشتراكك {plan} في HaithemEduAI سينتهي خلال {days} يوم/أيام، بتاريخ {date}.\n\nلمواصلة إنشاء وثائقك التعليمية دون انقطاع، تواصل معنا الآن: {email}\n\nشكراً لثقتك،\nفريق HaithemEduAI",
 
         "about_title": "عن المطوّر",
         "about_name": "أحمد هيثم بركان",
@@ -962,6 +968,9 @@ TRANSLATIONS = {
         "about_bio": "مستشار مستقل ومكوّن، متخصص في الذكاء الاصطناعي وتطوير الويب والهندسة البيداغوجية. أكثر من 1000 أستاذ وطالب تم تكوينهم في الجزائر ودولياً.",
         "about_contact_whatsapp": "واتساب",
         "about_contact_email": "البريد الإلكتروني",
+        "about_full_cv_link": "عرض السيرة الذاتية كاملة",
+        "about_back_link": "← العودة إلى الرئيسية",
+        "about_download_cv": "تحميل بصيغة PDF",
     },
 }
 

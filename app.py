@@ -133,7 +133,7 @@ with app.app_context():
     if _admin_email and _admin_password and not User.query.filter_by(email=_admin_email).first():
         _admin = User(
             first_name=os.environ.get("ADMIN_FIRST_NAME", "Admin"),
-            last_name=os.environ.get("ADMIN_LAST_NAME", "EduPrompt"),
+            last_name=os.environ.get("ADMIN_LAST_NAME", "HaithemEduAI"),
             email=_admin_email,
             role="admin",
         )
@@ -225,6 +225,12 @@ SUBJECTS = {
 @app.route("/")
 def home():
     return render_template("landing.html")
+
+
+@app.route("/about")
+def about():
+    from cv_data import CV
+    return render_template("about.html", cv=CV.get(current_lang(), CV["fr"]))
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -736,7 +742,7 @@ def make_docx(content, meta, colors_cfg, lang="fr"):
     # ── Brand title ──
     title_p = doc.add_paragraph()
     title_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = title_p.add_run("EduPrompt AI")
+    run = title_p.add_run("HaithemEduAI")
     run.bold = True
     run.font.size = Pt(22)
     run.font.color.rgb = RGBColor(*hex_to_rgb(c1))
@@ -857,7 +863,7 @@ def make_docx(content, meta, colors_cfg, lang="fr"):
     doc.add_paragraph().paragraph_format.space_before = Pt(20)
     footer_p = doc.add_paragraph()
     footer_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    fr = footer_p.add_run("Généré avec EduPrompt AI")
+    fr = footer_p.add_run("Généré avec HaithemEduAI")
     fr.font.size = Pt(8)
     fr.font.color.rgb = RGBColor(150, 150, 150)
     fr.italic = True
@@ -894,7 +900,7 @@ def make_pdf(content, meta, colors_cfg, lang="fr"):
     blt_s = ParagraphStyle("Bl", parent=styles["Normal"], textColor=rl_colors.HexColor(ctext),
                             fontSize=10, leading=16, leftIndent=20, spaceAfter=3, alignment=align)
 
-    story = [Paragraph("EduPrompt AI", title_s)]
+    story = [Paragraph("HaithemEduAI", title_s)]
 
     teacher = f"{meta.get('teacher_first','')} {meta.get('teacher_last','')}".strip() or "—"
     labels = HEADER_LABELS.get(lang, HEADER_LABELS["fr"])

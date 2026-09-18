@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}{{ cv.name }} — {{ cv.title }}{% endblock %}
+{% block extra_head %}
+<style>
+.cv-hero{background:linear-gradient(135deg,var(--navy3) 0%,var(--navy) 55%,var(--navy2) 100%);color:#fff;padding:56px max(5vw,20px) 60px;text-align:center}
+.cv-avatar{width:88px;height:88px;border-radius:50%;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;margin:0 auto 18px;box-shadow:0 8px 30px rgba(249,115,22,.35)}
+.cv-hero h1{font-size:clamp(22px,4vw,32px);font-weight:800;margin:0 0 8px}
+.cv-hero .cv-title{font-size:13px;color:#f9a361;font-weight:700;max-width:640px;margin:0 auto 14px;line-height:1.6}
+.cv-hero .cv-loc{font-size:12px;color:rgba(255,255,255,.6);margin-bottom:20px}
+.cv-contact-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.cv-contact-btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:10px;font-size:13px;font-weight:700;text-decoration:none}
+.cv-contact-btn.wa{background:#25D366;color:#fff}
+.cv-contact-btn.mail{background:var(--orange);color:#fff}
+
+.cv-stats{max-width:900px;margin:-32px auto 0;padding:0 max(4vw,16px);position:relative;z-index:2}
+.cv-stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;background:var(--paper);border-radius:16px;box-shadow:var(--shadow2);padding:24px}
+.cv-stat{text-align:center}
+.cv-stat .v{font-size:24px;font-weight:800;color:var(--orange)}
+.cv-stat .l{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4}
+
+.cv-section{max-width:900px;margin:0 auto;padding:44px max(5vw,20px) 0}
+.cv-section h2{font-size:19px;font-weight:800;color:var(--navy);margin:0 0 20px;display:flex;align-items:center;gap:9px}
+.cv-section h2 i{color:var(--orange)}
+.cv-objective{font-size:14px;color:var(--ink);line-height:1.8;background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:22px}
+
+.cv-timeline{display:flex;flex-direction:column;gap:4px}
+.cv-item{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:20px 22px;margin-bottom:14px;border-inline-start:4px solid var(--orange)}
+.cv-item .period{font-size:11px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.cv-item h3{font-size:15px;font-weight:800;color:var(--navy);margin:0 0 2px}
+.cv-item .org{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:10px}
+.cv-item ul{margin:0;padding-inline-start:20px;font-size:13px;color:var(--ink);line-height:1.7}
+.cv-item .detail{font-size:12.5px;color:var(--muted);font-style:italic;margin-top:4px}
+
+.cv-skills-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.cv-skill-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:20px}
+.cv-skill-card h4{font-size:13px;font-weight:800;color:var(--navy);margin:0 0 12px}
+.cv-tag{display:inline-block;background:var(--sky);color:var(--navy2);font-size:11px;font-weight:600;padding:5px 11px;border-radius:8px;margin:0 6px 6px 0}
+
+.cv-projects-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.cv-project-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:20px}
+.cv-project-card h4{font-size:14px;font-weight:800;color:var(--navy);margin:0 0 8px;display:flex;align-items:center;gap:7px}
+.cv-project-card p{font-size:12.5px;color:var(--muted);line-height:1.6;margin:0}
+
+.cv-list-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:20px 22px}
+.cv-list-card ul{margin:0;padding-inline-start:20px;font-size:13px;color:var(--ink);line-height:2}
+
+.cv-events-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.cv-event-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:18px}
+.cv-event-card .date{font-size:10px;font-weight:800;color:var(--orange);text-transform:uppercase;margin-bottom:6px}
+.cv-event-card h4{font-size:13px;font-weight:800;color:var(--navy);margin:0 0 6px}
+.cv-event-card p{font-size:12px;color:var(--muted);line-height:1.5;margin:0}
+
+.cv-lang-row{display:flex;gap:14px;flex-wrap:wrap}
+.cv-lang-chip{background:var(--paper);box-shadow:var(--shadow);border-radius:12px;padding:14px 20px;text-align:center;flex:1;min-width:120px}
+.cv-lang-chip .lang{font-weight:800;color:var(--navy);font-size:13px}
+.cv-lang-chip .level{font-size:11px;color:var(--muted);margin-top:3px}
+
+.cv-back{max-width:900px;margin:36px auto 60px;padding:0 max(4vw,16px);text-align:center}
+.cv-back a{color:var(--orange);font-weight:700;text-decoration:none;font-size:13px}
+
+@media(max-width:600px){
+  .cv-hero{padding:40px 16px 50px}
+  .cv-section{padding:32px 16px 0}
+}
+</style>
+{% endblock %}
+{% block content %}
+
+<section class="cv-hero">
+  <div class="cv-avatar">AHB</div>
+  <h1>{{ cv.name }}</h1>
+  <div class="cv-title">{{ cv.title }}</div>
+  <div class="cv-loc"><i class="bi bi-geo-alt-fill"></i> {{ cv.location }}</div>
+  <div class="cv-contact-row">
+    <a href="https://wa.me/213699102525" target="_blank" rel="noopener" class="cv-contact-btn wa"><i class="bi bi-whatsapp"></i> WhatsApp</a>
+    <a href="mailto:haithem-berkane@outlook.fr" class="cv-contact-btn mail"><i class="bi bi-envelope-fill"></i> Email</a>
+  </div>
+</section>
+
+<div class="cv-stats">
+  <div class="cv-stats-grid">
+    {% for s in cv.stats %}
+    <div class="cv-stat"><div class="v">{{ s.value }}</div><div class="l">{{ s.label }}</div></div>
+    {% endfor %}
+  </div>
+</div>
+
+<section class="cv-section">
+  <div class="cv-objective">{{ cv.objective }}</div>
+</section>
+
+<section class="cv-section">
+  <h2><i class="bi bi-briefcase-fill"></i> {{ cv.section_experience }}</h2>
+  <div class="cv-timeline">
+    {% for e in cv.experience %}
+    <div class="cv-item">
+      <div class="period">{{ e.period }}</div>
+      <h3>{{ e.title }}</h3>
+      <div class="org">{{ e.org }}</div>
+      <ul>{% for b in e.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="cv-section">
+  <h2><i class="bi bi-mortarboard-fill"></i> {{ cv.section_education }}</h2>
+  <div class="cv-timeline">
+    {% for e in cv.education %}
+    <div class="cv-item">
+      <div class="period">{{ e.period }}</div>
+      <h3>{{ e.title }}</h3>
+      <div class="org">{{ e.org }}</div>
+      {% if e.detail %}<div class="detail">{{ e.detail }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="cv-section">
+  <h2><i class="bi bi-stars"></i> {{ cv.section_skills }}</h2>
+  <div class="cv-skills-grid">
+    {% for g in cv.skills_groups %}
+    <div class="cv-skill-card">
+      <h4>{{ g.title }}</h4>
+      <div>{% for item in g.skills %}<span class="cv-tag">{{ item }}</span>{% endfor %}</div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="cv-section">
+  <h2><i class="bi bi-cpu-fill"></i> {{ cv.section_projects }}</h2>
+  <div class="cv-projects-grid">
+    {% for p in cv.projects %}
+    <div class="cv-project-card">
+      <h4><i class="bi bi-box-fill" style="color:var(--orange)"></i> {{ p.title }}</h4>
+      <p>{{ p.desc }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="cv-section">
+  <h2><i class="bi bi-broadcast"></i> {{ cv.section_influence }}</h2>
+  <div class="cv-list-card">
+    <ul>{% for item in cv.influence %}<li>{{ item }}</li>{% endfor %}</ul>
+  </div>
+</section>
+
+<section class="cv-section">
+  <h2><i class="bi bi-calendar-event-fill"></i> {{ cv.section_events }}</h2>
+  <div class="cv-events-grid">
+    {% for ev in cv.events %}
+    <div class="cv-event-card">
+      <div class="date">{{ ev.date }}</div>
+      <h4>{{ ev.title }}</h4>
+      <p>{{ ev.desc }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="cv-section">
+  <h2><i class="bi bi-patch-check-fill"></i> {{ cv.section_certifications }}</h2>
+  <div class="cv-list-card">
+    <ul>{% for c in cv.certifications %}<li>{{ c }}</li>{% endfor %}</ul>
+  </div>
+</section>
+
+<section class="cv-section">
+  <h2><i class="bi bi-translate"></i> {{ cv.section_languages }}</h2>
+  <div class="cv-lang-row">
+    {% for l in cv.languages %}
+    <div class="cv-lang-chip"><div class="lang">{{ l.lang }}</div><div class="level">{{ l.level }}</div></div>
+    {% endfor %}
+  </div>
+</section>
+
+<div class="cv-back">
+  <a href="{{ url_for('home') }}">{{ t.about_back_link }}</a>
+</div>
+
+{% endblock %}
