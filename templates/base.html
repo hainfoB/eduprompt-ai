@@ -115,6 +115,10 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
       <a class="nav-link {% if request.endpoint=='admin_documents' %}active{% endif %}" href="{{ url_for('admin_documents') }}">
         <i class="bi bi-file-earmark-text-fill"></i><span class="label">{{ t.nav_documents }}</span>
       </a>
+      <a class="nav-link {% if request.endpoint in ['admin_payments'] %}active{% endif %}" href="{{ url_for('admin_payments') }}">
+        <i class="bi bi-cash-coin"></i><span class="label">{{ t.nav_payments }}</span>
+        {% if notif_payments %}<span class="nav-badge">{{ notif_payments }}</span>{% endif %}
+      </a>
       <a class="nav-link {% if request.endpoint=='admin_licenses' %}active{% endif %}" href="{{ url_for('admin_licenses') }}">
         <i class="bi bi-key-fill"></i><span class="label">{{ t.nav_codes }}</span>
       </a>
@@ -131,13 +135,18 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
       <div class="bell-wrap">
         <button class="bell-btn" type="button" onclick="haithemToggleBell(event)" aria-label="Notifications">
           <i class="bi bi-bell-fill"></i>
-          {% set bell_count = notif_unread_msgs + notif_expiring + (1 if notif_reminder else 0) %}
+          {% set bell_count = notif_unread_msgs + notif_expiring + notif_payments + (1 if notif_reminder else 0) %}
           {% if bell_count %}<span class="bell-badge">{{ bell_count }}</span>{% endif %}
         </button>
         <div class="bell-menu" id="haithemBellMenu">
           {% if notif_unread_msgs %}
           <a class="bell-item" href="{{ url_for('admin_messages') if current_user.role=='admin' else url_for('messages') }}">
             <i class="bi bi-chat-dots-fill"></i> {{ t.bell_unread_msgs.format(count=notif_unread_msgs) }}
+          </a>
+          {% endif %}
+          {% if current_user.role == 'admin' and notif_payments %}
+          <a class="bell-item" href="{{ url_for('admin_payments') }}">
+            <i class="bi bi-cash-coin"></i> {{ t.bell_pending_payments.format(count=notif_payments) }}
           </a>
           {% endif %}
           {% if current_user.role == 'admin' and notif_expiring %}

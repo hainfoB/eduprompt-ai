@@ -62,7 +62,7 @@
 
   <div class="profile-card">
     <div>
-      <h1>{{ teacher.full_name }}</h1>
+      <h1>{{ teacher.full_name }}{% if not teacher.is_active %} <span class="plan-tag" style="background:#fef2f2;color:var(--red)">{{ t.status_inactive }}</span>{% endif %}</h1>
       <div class="muted"><i class="bi bi-envelope"></i> {{ teacher.email }}</div>
       <div class="muted"><i class="bi bi-calendar3"></i> {{ t.table_created }}: {{ teacher.created_at.strftime('%d/%m/%Y') }}</div>
       {% if sub %}
@@ -87,9 +87,11 @@
     <a href="{{ url_for('admin_edit_teacher', user_id=teacher.id) }}" class="act-btn act-edit"><i class="bi bi-pencil-fill"></i> {{ t.btn_edit }}</a>
     <a href="{{ url_for('admin_message_thread', user_id=teacher.id) }}" class="act-btn act-msg"><i class="bi bi-chat-dots-fill"></i> {{ t.nav_messages }}</a>
     <form method="POST" action="{{ url_for('admin_reset_quota', user_id=teacher.id) }}" onsubmit="return confirm('{{ t.confirm_reset_quota }}')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="act-btn act-quota"><i class="bi bi-arrow-counterclockwise"></i> {{ t.btn_reset_quota }}</button>
     </form>
     <form method="POST" action="{{ url_for('admin_extend_subscription', user_id=teacher.id) }}" class="extend-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <select name="days">
         <option value="30">+30 {{ t.days_suffix }}</option>
         <option value="90">+90 {{ t.days_suffix }}</option>
@@ -97,8 +99,13 @@
       </select>
       <button type="submit" class="act-btn act-extend"><i class="bi bi-calendar-plus-fill"></i> {{ t.btn_extend }}</button>
     </form>
-    <form method="POST" action="{{ url_for('admin_delete_teacher', user_id=teacher.id) }}" onsubmit="return confirm('{{ t.confirm_delete }} {{ teacher.email }} ?')">
-      <button type="submit" class="act-btn act-delete"><i class="bi bi-trash-fill"></i> {{ t.btn_delete }}</button>
+    <form method="POST" action="{{ url_for('admin_delete_teacher', user_id=teacher.id) }}" onsubmit="return confirm('{{ t.confirm_reactivate if not teacher.is_active else t.confirm_deactivate }} {{ teacher.email }} ?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="redirect_to" value="{{ url_for('admin_teacher_detail', user_id=teacher.id) }}">
+      <button type="submit" class="act-btn act-delete">
+        <i class="bi {{ 'bi-arrow-counterclockwise' if not teacher.is_active else 'bi-slash-circle-fill' }}"></i>
+        {{ t.btn_reactivate if not teacher.is_active else t.btn_deactivate }}
+      </button>
     </form>
   </div>
 

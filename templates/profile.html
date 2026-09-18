@@ -25,6 +25,7 @@
   <div class="pf-card">
     <h3><i class="bi bi-person-badge-fill"></i> {{ t.profile_section_info }}</h3>
     <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="update_info"/>
       <div class="row g-2 mb-2">
         <div class="col-sm-6">
@@ -46,6 +47,7 @@
     <h3><i class="bi bi-key-fill"></i> {{ t.profile_section_apikey }}</h3>
     <p style="font-size:12px;color:var(--muted);margin:-8px 0 14px">{{ t.apikey_stored_note }}</p>
     <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="update_apikey"/>
       <input type="text" name="api_key" class="form-control apikey-input"
              value="{{ current_user.gemini_api_key or '' }}" placeholder="AIza... / AQ.Ab8..."/>
@@ -56,6 +58,7 @@
   <div class="pf-card">
     <h3><i class="bi bi-lock-fill"></i> {{ t.profile_section_password }}</h3>
     <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="change_password"/>
       <label class="form-label">{{ t.profile_current_password }}</label>
       <input type="password" name="current_password" class="form-control" required/>

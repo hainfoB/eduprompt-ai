@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ t.audit_log_title }} — HaithemEduAI{% endblock %}
+{% block extra_head %}
+<style>
+.adm-wrap{max-width:900px;margin:32px auto;padding:0 max(4vw,16px)}
+.adm-header h1{font-size:22px;font-weight:800;color:var(--navy);margin:0 0 20px}
+.search-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:14px 16px;margin-bottom:18px;display:flex;gap:10px}
+.search-card input{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13px}
+.btn-search{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer}
+
+.log-table{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.log-row{display:grid;grid-template-columns:40px 130px 1fr 1.4fr 1fr;gap:10px;padding:11px 18px;align-items:center;border-bottom:1px solid var(--line);font-size:12px}
+.log-row.header{background:var(--navy);color:#fff;font-weight:700;text-transform:uppercase;font-size:10px}
+.log-row:last-child{border-bottom:none}
+.log-num{color:var(--muted);font-weight:700}
+.action-tag{padding:3px 8px;border-radius:6px;font-size:10px;font-weight:800;background:var(--sky);color:var(--navy);display:inline-block}
+.empty-state{text-align:center;padding:32px;color:var(--muted);font-size:13px}
+.pager{display:flex;justify-content:center;gap:6px;padding:16px;flex-wrap:wrap}
+.pager a,.pager span{padding:7px 12px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;color:var(--navy);background:var(--sky)}
+.pager .current{background:var(--navy);color:#fff}
+
+@media(max-width:750px){
+  .log-row{grid-template-columns:1fr}
+  .log-row.header{display:none}
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="adm-wrap">
+  <div class="adm-header"><h1><i class="bi bi-shield-lock-fill"></i> {{ t.audit_log_title }}</h1></div>
+
+  <form class="search-card" method="GET">
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ t.audit_log_search_placeholder }}"/>
+    <button type="submit" class="btn-search"><i class="bi bi-search"></i></button>
+  </form>
+
+  <div class="log-table">
+    {% if pager.items %}
+    <div class="log-row header">
+      <div>#</div><div>{{ t.table_date }}</div><div>{{ t.audit_log_admin }}</div><div>{{ t.audit_log_action }}</div><div>{{ t.audit_log_details }}</div>
+    </div>
+    {% for l in pager.items %}
+    <div class="log-row">
+      <div class="log-num">{{ (pager.page - 1) * pager.per_page + loop.index }}</div>
+      <div>{{ l.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
+      <div>{{ l.admin.full_name if l.admin else "—" }}</div>
+      <div><span class="action-tag">{{ l.action }}</span> {{ l.target }}</div>
+      <div>{{ l.details }}</div>
+    </div>
+    {% endfor %}
+    {% if pager.pages > 1 %}
+    <div class="pager">
+      {% for p in range(1, pager.pages + 1) %}
+        {% if p == pager.page %}<span class="current">{{ p }}</span>
+        {% else %}<a href="{{ url_for('admin_audit_log', q=q, page=p) }}">{{ p }}</a>{% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">{{ t.audit_log_empty }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

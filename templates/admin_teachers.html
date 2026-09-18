@@ -70,6 +70,7 @@
   <div class="create-card">
     <h3><i class="bi bi-person-plus-fill"></i> {{ t.create_teacher_title }}</h3>
     <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="row g-2 mb-2">
         <div class="col-sm-6">
           <label class="form-label">{{ t.label_first_name }}</label>
@@ -119,6 +120,7 @@
     </div>
     <button type="submit" class="btn-search"><i class="bi bi-search"></i> {{ t.btn_search }}</button>
     {% if q or plan_filter %}<a href="{{ url_for('admin_teachers') }}" class="btn-clear"><i class="bi bi-x-lg"></i></a>{% endif %}
+    <a href="{{ url_for('admin_teachers_export', q=q, plan=plan_filter) }}" class="btn-clear"><i class="bi bi-download"></i> {{ t.btn_export_csv }}</a>
   </form>
 
   <div class="teachers-table">
@@ -129,7 +131,7 @@
     {% for tch in teachers %}
     <div class="t-row">
       <div class="t-num">{{ (pager.page - 1) * pager.per_page + loop.index }}</div>
-      <div class="t-name">{{ tch.full_name }}</div>
+      <div class="t-name">{{ tch.full_name }}{% if not tch.is_active %} <span class="plan-tag" style="background:#fef2f2;color:var(--red)">{{ t.status_inactive }}</span>{% endif %}</div>
       <div class="t-email">{{ tch.email }}</div>
       <div><span class="plan-tag plan-{{ tch.subscription.plan if tch.subscription else 'trial' }}">{{ tch.subscription.plan_label() if tch.subscription else '—' }}</span></div>
       <div>{{ tch.created_at.strftime('%d/%m/%Y') }}</div>
@@ -141,12 +143,16 @@
       </div>
       <div>
         <form method="POST" action="{{ url_for('admin_reset_password', user_id=tch.id) }}" onsubmit="return confirm('{{ t.confirm_reset_pw }} {{ tch.email }} ?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn-mini btn-reset"><i class="bi bi-key-fill"></i></button>
         </form>
       </div>
       <div>
-        <form method="POST" action="{{ url_for('admin_delete_teacher', user_id=tch.id) }}" onsubmit="return confirm('{{ t.confirm_delete }} {{ tch.email }} ?')">
-          <button type="submit" class="btn-mini btn-delete"><i class="bi bi-trash-fill"></i></button>
+        <form method="POST" action="{{ url_for('admin_delete_teacher', user_id=tch.id) }}" onsubmit="return confirm('{{ t.confirm_reactivate if not tch.is_active else t.confirm_deactivate }} {{ tch.email }} ?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn-mini {{ 'btn-reset' if not tch.is_active else 'btn-delete' }}" title="{{ t.btn_reactivate if not tch.is_active else t.btn_deactivate }}">
+            <i class="bi {{ 'bi-arrow-counterclockwise' if not tch.is_active else 'bi-slash-circle-fill' }}"></i>
+          </button>
         </form>
       </div>
     </div>

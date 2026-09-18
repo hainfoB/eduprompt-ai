@@ -32,6 +32,7 @@ class User(UserMixin, db.Model):
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     gemini_api_key = db.Column(db.String(255), nullable=True)
     preferred_lang = db.Column(db.String(5), default="fr")
+    is_active      = db.Column(db.Boolean, default=True)  # soft-delete: False = deactivated account
 
     subscription  = db.relationship("Subscription", backref="user", uselist=False,
                                      cascade="all, delete-orphan")
@@ -137,6 +138,50 @@ class Payment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship("User")
+
+
+class PaymentRequest(db.Model):
+    """A teacher's self-declared payment (bank transfer / CCP / WhatsApp), awaiting
+    admin validation before the corresponding plan is activated or renewed."""
+    id             = db.Column(db.Integer, primary_key=True)
+    user_id        = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    plan           = db.Column(db.String(20), nullable=False)   # pro | premium
+    amount_claimed = db.Column(db.Integer, nullable=True)
+    reference      = db.Column(db.String(120), nullable=True)   # transfer/CCP/WhatsApp reference
+    note           = db.Column(db.Text, nullable=True)
+    status         = db.Column(db.String(20), default="pending")  # pending | approved | rejected
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at    = db.Column(db.DateTime, nullable=True)
+    reviewed_by    = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    admin_note     = db.Column(db.Text, nullable=True)
+
+    user     = db.relationship("User", foreign_keys=[user_id])
+    reviewer = db.relationship("User", foreign_keys=[reviewed_by])
+
+    def status_label(self):
+        labels = {
+            "fr": {"pending": "En attente", "approved": "Validé", "rejected": "Refusé"},
+            "en": {"pending": "Pending", "approved": "Approved", "rejected": "Rejected"},
+            "ar": {"pending": "قيد الانتظار", "approved": "تم القبول", "rejected": "مرفوض"},
+        }
+        try:
+            from flask import session
+            lang = session.get("lang", "fr")
+        except Exception:
+            lang = "fr"
+        return labels.get(lang, labels["fr"]).get(self.status, self.status)
+
+
+class AdminLog(db.Model):
+    """Lightweight audit trail of admin actions, for accountability."""
+    id         = db.Column(db.Integer, primary_key=True)
+    admin_id   = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    action     = db.Column(db.String(80), nullable=False)
+    target     = db.Column(db.String(255), nullable=True)   # human-readable target description
+    details    = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    admin = db.relationship("User")
 
 
 class Message(db.Model):

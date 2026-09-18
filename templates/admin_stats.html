@@ -32,7 +32,12 @@
 {% endblock %}
 {% block content %}
 <div class="st-wrap">
-  <div class="st-header"><h1>{{ t.stats_title }}</h1></div>
+  <div class="st-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+    <h1 style="margin:0">{{ t.stats_title }}</h1>
+    <a href="{{ url_for('admin_audit_log') }}" style="font-size:12px;font-weight:700;color:var(--navy);text-decoration:none;background:var(--sky);padding:8px 14px;border-radius:9px">
+      <i class="bi bi-shield-lock-fill"></i> {{ t.audit_log_title }}
+    </a>
+  </div>
 
   <div class="st-grid">
     <div class="st-card">
@@ -82,6 +87,30 @@
     {% endfor %}
     {% else %}
     <div class="empty-state">{{ t.stats_no_expiring }}</div>
+    {% endif %}
+  </div>
+
+  <div class="st-section">
+    <h3 style="justify-content:space-between">
+      <span><i class="bi bi-trophy-fill"></i> {{ t.stats_top_teachers }}</span>
+      {% if pending_payments %}
+      <a href="{{ url_for('admin_payments') }}" style="font-size:11px;font-weight:700;color:#c2410c;text-decoration:none;background:#fff7ed;padding:6px 12px;border-radius:8px">
+        <i class="bi bi-cash-coin"></i> {{ pending_payments }} {{ t.stats_pending_payments_link }}
+      </a>
+      {% endif %}
+    </h3>
+    {% if top_teachers %}
+    <div class="pay-row header"><div>#</div><div>{{ t.table_teacher }}</div><div>{{ t.stats_doc_count }}</div><div></div></div>
+    {% for u, cnt in top_teachers %}
+    <div class="pay-row">
+      <div class="row-num">{{ loop.index }}</div>
+      <div>{{ u.full_name }} ({{ u.email }})</div>
+      <div>{{ cnt }}</div>
+      <div></div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">—</div>
     {% endif %}
   </div>
 

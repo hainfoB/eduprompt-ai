@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ t.nav_payments }} — HaithemEduAI{% endblock %}
+{% block extra_head %}
+<style>
+.adm-wrap{max-width:1000px;margin:32px auto;padding:0 max(4vw,16px)}
+.adm-header h1{font-size:22px;font-weight:800;color:var(--navy);margin:0 0 20px}
+.tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+.tab{padding:9px 16px;border-radius:9px;font-size:12.5px;font-weight:700;color:var(--muted);background:var(--sky);text-decoration:none}
+.tab.active{background:var(--navy);color:#fff}
+.search-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:14px 16px;margin-bottom:18px;display:flex;gap:10px}
+.search-card input{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13px}
+.btn-search{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer}
+
+.req-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:18px 20px;margin-bottom:14px}
+.req-top{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px}
+.req-num{color:var(--muted);font-weight:700;font-size:12px;margin-inline-end:8px}
+.req-name{font-weight:800;color:var(--navy);font-size:14px}
+.req-email{color:var(--muted);font-size:12px}
+.plan-tag{padding:3px 10px;border-radius:7px;font-size:11px;font-weight:800;display:inline-block}
+.plan-pro{background:#ecfdf5;color:#065f46}
+.plan-premium{background:#f5f3ff;color:#6d28d9}
+.status-tag{padding:3px 10px;border-radius:7px;font-size:10px;font-weight:800}
+.status-pending{background:#fff7ed;color:#c2410c}
+.status-approved{background:#ecfdf5;color:#065f46}
+.status-rejected{background:#fef2f2;color:var(--red)}
+.req-details{font-size:12.5px;color:var(--ink);background:var(--ivory);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px}
+.req-details b{color:var(--navy)}
+.req-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.act-approve{background:#10b981;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:700;cursor:pointer}
+.act-reject{background:#fef2f2;color:var(--red);border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:700;cursor:pointer}
+.act-reject-input{border:1.5px solid var(--line);border-radius:9px;padding:9px 12px;font-size:12.5px;flex:1;min-width:180px}
+.act-days select{border:1.5px solid var(--line);border-radius:9px;padding:9px 10px;font-size:12.5px}
+.reviewed-note{font-size:11.5px;color:var(--muted);margin-top:8px}
+.empty-state{text-align:center;padding:40px;color:var(--muted);font-size:13px}
+.pager{display:flex;justify-content:center;gap:6px;padding:16px;flex-wrap:wrap}
+.pager a,.pager span{padding:7px 12px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;color:var(--navy);background:var(--sky)}
+.pager .current{background:var(--navy);color:#fff}
+</style>
+{% endblock %}
+{% block content %}
+<div class="adm-wrap">
+  <div class="adm-header"><h1><i class="bi bi-cash-coin"></i> {{ t.nav_payments }}</h1></div>
+
+  <div class="tabs">
+    <a class="tab {% if status_filter=='pending' %}active{% endif %}" href="{{ url_for('admin_payments', status='pending') }}">{{ t.status_pending }}</a>
+    <a class="tab {% if status_filter=='approved' %}active{% endif %}" href="{{ url_for('admin_payments', status='approved') }}">{{ t.status_approved }}</a>
+    <a class="tab {% if status_filter=='rejected' %}active{% endif %}" href="{{ url_for('admin_payments', status='rejected') }}">{{ t.status_rejected }}</a>
+  </div>
+
+  <form class="search-card" method="GET">
+    <input type="hidden" name="status" value="{{ status_filter }}"/>
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ t.search_placeholder_teacher }}"/>
+    <button type="submit" class="btn-search"><i class="bi bi-search"></i></button>
+  </form>
+
+  {% if pager.items %}
+  {% for r in pager.items %}
+  <div class="req-card">
+    <div class="req-top">
+      <div>
+        <span class="req-num">{{ (pager.page - 1) * pager.per_page + loop.index }}</span>
+        <span class="req-name">{{ r.user.full_name }}</span> · <span class="req-email">{{ r.user.email }}</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <span class="plan-tag plan-{{ r.plan }}">{{ r.plan|upper }}</span>
+        <span class="status-tag status-{{ r.status }}">{{ r.status_label() }}</span>
+      </div>
+    </div>
+    <div class="req-details">
+      <div><b>{{ t.label_amount_claimed }}:</b> {{ r.amount_claimed }} DA</div>
+      <div><b>{{ t.label_reference }}:</b> {{ r.reference or "—" }}</div>
+      <div><b>{{ t.table_date }}:</b> {{ r.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
+      {% if r.note %}<div style="grid-column:1/-1"><b>{{ t.label_note }}:</b> {{ r.note }}</div>{% endif %}
+    </div>
+
+    {% if r.status == 'pending' %}
+    <div class="req-actions">
+      <form method="POST" action="{{ url_for('admin_approve_payment', req_id=r.id) }}" style="display:flex;gap:8px;align-items:center">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="act-days">
+          <select name="days">
+            <option value="30">+30 {{ t.days_suffix }}</option>
+            <option value="365" selected>+365 {{ t.days_suffix }}</option>
+          </select>
+        </div>
+        <button type="submit" class="act-approve"><i class="bi bi-check-circle-fill"></i> {{ t.btn_approve }}</button>
+      </form>
+      <form method="POST" action="{{ url_for('admin_reject_payment', req_id=r.id) }}" style="display:flex;gap:8px;flex:1;min-width:220px" onsubmit="return confirm('{{ t.confirm_reject_payment }}')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="text" name="reason" class="act-reject-input" placeholder="{{ t.label_rejection_reason }}"/>
+        <button type="submit" class="act-reject"><i class="bi bi-x-circle-fill"></i> {{ t.btn_reject }}</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="reviewed-note">
+      {{ t.label_reviewed_by }} {{ r.reviewer.full_name if r.reviewer else "—" }} · {{ r.reviewed_at.strftime('%d/%m/%Y %H:%M') if r.reviewed_at else "" }}
+      {% if r.admin_note %} · {{ r.admin_note }}{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% if pager.pages > 1 %}
+  <div class="pager">
+    {% for p in range(1, pager.pages + 1) %}
+      {% if p == pager.page %}<span class="current">{{ p }}</span>
+      {% else %}<a href="{{ url_for('admin_payments', q=q, status=status_filter, page=p) }}">{{ p }}</a>{% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% else %}
+  <div class="empty-state">{{ t.empty_payments }}</div>
+  {% endif %}
+</div>
+{% endblock %}

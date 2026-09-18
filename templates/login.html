@@ -27,6 +27,7 @@
       <p>{{ t.login_subtitle }}</p>
     </div>
     <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
         <label class="form-label">{{ t.label_email }}</label>
         <input type="email" name="email" class="form-control" placeholder="vous@exemple.com" required autofocus/>

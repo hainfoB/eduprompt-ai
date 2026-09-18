@@ -16,6 +16,7 @@
   <div class="pf-header"><h1>{{ t.admin_edit_teacher_title }}</h1></div>
   <div class="pf-card">
     <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="row g-2 mb-2">
         <div class="col-sm-6">
           <label class="form-label">{{ t.label_first_name }}</label>

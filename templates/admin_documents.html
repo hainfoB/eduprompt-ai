@@ -50,6 +50,7 @@
     </div>
     <button type="submit" class="btn-search"><i class="bi bi-search"></i> {{ t.btn_search }}</button>
     {% if q or doc_type %}<a href="{{ url_for('admin_documents') }}" class="btn-clear"><i class="bi bi-x-lg"></i></a>{% endif %}
+    <a href="{{ url_for('admin_documents_export', q=q, doc_type=doc_type) }}" class="btn-clear"><i class="bi bi-download"></i> {{ t.btn_export_csv }}</a>
   </form>
 
   <div class="doc-table">

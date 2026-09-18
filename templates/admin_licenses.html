@@ -39,6 +39,7 @@
 
   <div class="gen-card">
     <form method="POST" class="gen-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
         <label class="form-label">{{ t.label_plan }}</label>
         <select name="plan" class="form-select">

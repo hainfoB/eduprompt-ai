@@ -24,7 +24,12 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_RIGHT, TA_CENTER, TA_LEFT
 
-from models import db, User, Subscription, Document, LicenseCode, Payment, Message, PLAN_PRICES, create_trial_subscription
+from flask_wtf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
+from models import (db, User, Subscription, Document, LicenseCode, Payment, Message,
+                     PaymentRequest, AdminLog, PLAN_PRICES, create_trial_subscription)
 from utils import build_sources_context
 from translations import get_translations, TRANSLATIONS
 from notifications import check_and_send_expiry_reminders, send_email
@@ -56,6 +61,8 @@ app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024  # 15 MB uploads
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "haithemcomputing@gmail.com")
 
 db.init_app(app)
+csrf = CSRFProtect(app)
+limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri="memory://")
 
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
@@ -84,7 +91,7 @@ def inject_i18n():
 def inject_notifications():
     """Feeds the navbar notification bell for both teachers and admins."""
     if not current_user.is_authenticated:
-        return dict(notif_unread_msgs=0, notif_expiring=0, notif_reminder=False)
+        return dict(notif_unread_msgs=0, notif_expiring=0, notif_reminder=False, notif_payments=0)
 
     if current_user.role == "admin":
         unread_msgs = Message.query.filter_by(sender="teacher", read_by_admin=False).count()
@@ -96,14 +103,17 @@ def inject_notifications():
             Subscription.expires_at >= now,
             Subscription.expires_at <= soon,
         ).count()
-        return dict(notif_unread_msgs=unread_msgs, notif_expiring=expiring, notif_reminder=False)
+        pending_payments = PaymentRequest.query.filter_by(status="pending").count()
+        return dict(notif_unread_msgs=unread_msgs, notif_expiring=expiring, notif_reminder=False,
+                    notif_payments=pending_payments)
     else:
         unread_msgs = Message.query.filter_by(user_id=current_user.id, sender="admin",
                                                read_by_teacher=False).count()
         sub = current_user.subscription
         days_left = sub.days_until_expiry() if sub else None
         reminder = days_left is not None and 0 <= days_left <= 5
-        return dict(notif_unread_msgs=unread_msgs, notif_expiring=0, notif_reminder=reminder)
+        return dict(notif_unread_msgs=unread_msgs, notif_expiring=0, notif_reminder=reminder,
+                    notif_payments=0)
 
 
 def paginate_list(items, page, per_page=15):
@@ -145,6 +155,7 @@ def _migrate_sqlite_schema():
             "user": {
                 "gemini_api_key": "VARCHAR(255)",
                 "preferred_lang": "VARCHAR(5) DEFAULT 'fr'",
+                "is_active": "BOOLEAN DEFAULT 1",
             },
         }
         for table, additions in table_additions.items():
@@ -193,6 +204,39 @@ def log_payment(user_id, plan, amount=None, note=""):
         amount=amount if amount is not None else PLAN_PRICES.get(plan, 0),
         note=note,
     ))
+
+
+def log_admin_action(action, target="", details=""):
+    """Lightweight audit trail — who did what, when."""
+    db.session.add(AdminLog(
+        admin_id=current_user.id if current_user.is_authenticated else None,
+        action=action,
+        target=target,
+        details=details,
+    ))
+
+
+def apply_payment_approval(teacher, plan, days=365):
+    """Activate or renew a teacher's subscription after a payment has been validated.
+    Renewing the same plan extends from the later of (now, current expiry);
+    switching plan (or reactivating an expired/trial account) starts a fresh period."""
+    sub = teacher.subscription
+    if not sub:
+        sub = Subscription(user_id=teacher.id)
+        db.session.add(sub)
+        db.session.flush()
+
+    is_renewal = (sub.plan == plan and sub.status == "active" and not sub.is_expired())
+    base = sub.expires_at if (is_renewal and sub.expires_at) else datetime.utcnow()
+
+    sub.plan = plan
+    sub.status = "active"
+    sub.expires_at = base + timedelta(days=days)
+    sub.docs_used = 0
+    sub.docs_used_today = 0
+    sub.last_reset_date = None
+    sub.expiry_reminder_sent = False
+    return is_renewal
 
 
 # ── DAILY REMINDER SCHEDULER (5-day heads-up before subscription expiry) ─────
@@ -270,6 +314,7 @@ def about():
 
 
 @app.route("/register", methods=["GET", "POST"])
+@limiter.limit("15/hour")
 def register():
     if current_user.is_authenticated:
         return redirect(url_for("generator"))
@@ -309,6 +354,7 @@ def register():
 
 
 @app.route("/login", methods=["GET", "POST"])
+@limiter.limit("20/hour")
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("generator"))
@@ -319,6 +365,9 @@ def login():
         user = User.query.filter_by(email=email).first()
 
         if user and user.check_password(password):
+            if not user.is_active:
+                flash(tr("flash_account_deactivated"), "error")
+                return render_template("login.html")
             login_user(user, remember=True)
             return redirect(url_for("generator"))
         flash(tr("flash_wrong_credentials"), "error")
@@ -400,22 +449,35 @@ def profile():
 @login_required
 def upgrade():
     if request.method == "POST":
+        action = request.form.get("action", "code")
+
+        if action == "declare_payment":
+            plan = request.form.get("plan", "pro")
+            amount = request.form.get("amount", "").strip()
+            reference = request.form.get("reference", "").strip()
+            note = request.form.get("note", "").strip()
+
+            if plan not in ("pro", "premium") or not reference:
+                flash(tr("flash_payment_fields_required"), "error")
+                return redirect(url_for("upgrade"))
+
+            db.session.add(PaymentRequest(
+                user_id=current_user.id, plan=plan,
+                amount_claimed=int(amount) if amount.isdigit() else PLAN_PRICES.get(plan),
+                reference=reference, note=note,
+            ))
+            db.session.commit()
+            flash(tr("flash_payment_declared"), "success")
+            return redirect(url_for("upgrade"))
+
         code_str = request.form.get("code", "").strip().upper()
         lic = LicenseCode.query.filter_by(code=code_str, used=False).first()
 
         if not lic:
             flash(tr("flash_invalid_code"), "error")
-            return render_template("upgrade.html")
+            return redirect(url_for("upgrade"))
 
-        sub = current_user.subscription
-        sub.plan = lic.plan
-        sub.status = "active"
-        sub.started_at = datetime.utcnow()
-        sub.expires_at = datetime.utcnow() + timedelta(days=lic.duration_days)
-        sub.docs_used = 0
-        sub.docs_used_today = 0
-        sub.last_reset_date = None
-        sub.expiry_reminder_sent = False
+        apply_payment_approval(current_user, lic.plan, days=lic.duration_days)
 
         lic.used = True
         lic.used_by = current_user.id
@@ -424,10 +486,12 @@ def upgrade():
         log_payment(current_user.id, lic.plan, note=f"License code {lic.code}")
 
         db.session.commit()
-        flash(tr("flash_upgraded", plan=sub.plan_label()), "success")
+        flash(tr("flash_upgraded", plan=current_user.subscription.plan_label()), "success")
         return redirect(url_for("dashboard"))
 
-    return render_template("upgrade.html")
+    my_requests = PaymentRequest.query.filter_by(user_id=current_user.id) \
+        .order_by(PaymentRequest.created_at.desc()).all()
+    return render_template("upgrade.html", my_requests=my_requests)
 
 
 # ── ADMIN: generate license codes ────────────────────────────────────────────
@@ -443,6 +507,7 @@ def admin_licenses():
         days = int(request.form.get("days", 365))
         lic = LicenseCode(plan=plan, duration_days=days)
         db.session.add(lic)
+        log_admin_action("license_generated", target=f"plan={plan}", details=f"{days} days")
         db.session.commit()
         flash(tr("flash_license_generated", code=lic.code), "success")
 
@@ -463,6 +528,97 @@ def admin_licenses():
 
     return render_template("admin_licenses.html", codes=pager.items, pager=pager,
                             q=q, status_filter=status_filter)
+
+
+# ── ADMIN: payment validation — activate / renew pro & premium subscriptions ─
+@app.route("/admin/payments")
+@login_required
+def admin_payments():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    status_filter = request.args.get("status", "pending").strip()
+    q = request.args.get("q", "").strip()
+    page = request.args.get("page", 1, type=int)
+
+    query = PaymentRequest.query.join(User, PaymentRequest.user_id == User.id)
+    if status_filter in ("pending", "approved", "rejected"):
+        query = query.filter(PaymentRequest.status == status_filter)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(User.first_name.ilike(like), User.last_name.ilike(like),
+                                     User.email.ilike(like), PaymentRequest.reference.ilike(like)))
+
+    query = query.order_by(PaymentRequest.created_at.desc())
+    pager = query.paginate(page=page, per_page=20, error_out=False)
+
+    return render_template("admin_payments.html", pager=pager, q=q, status_filter=status_filter)
+
+
+@app.route("/admin/payments/<int:req_id>/approve", methods=["POST"])
+@login_required
+def admin_approve_payment(req_id):
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    preq = PaymentRequest.query.get_or_404(req_id)
+    if preq.status != "pending":
+        flash(tr("flash_payment_already_reviewed"), "error")
+        return redirect(url_for("admin_payments"))
+
+    days = request.form.get("days", 365, type=int)
+    is_renewal = apply_payment_approval(preq.user, preq.plan, days=days)
+
+    log_payment(preq.user_id, preq.plan, amount=preq.amount_claimed,
+                note=f"PaymentRequest #{preq.id} ({preq.reference})")
+
+    preq.status = "approved"
+    preq.reviewed_at = datetime.utcnow()
+    preq.reviewed_by = current_user.id
+
+    kind = "renewal" if is_renewal else "activation"
+    log_admin_action("payment_approved", target=preq.user.email,
+                      details=f"plan={preq.plan} {kind} +{days}d")
+
+    notif_body = tr("msg_payment_approved", plan=preq.user.subscription.plan_label(),
+                     date=preq.user.subscription.expires_at.strftime("%d/%m/%Y"))
+    db.session.add(Message(user_id=preq.user_id, sender="admin", body=notif_body,
+                            read_by_admin=True, read_by_teacher=False))
+
+    db.session.commit()
+    flash(tr("flash_payment_approved", name=preq.user.full_name), "success")
+    return redirect(url_for("admin_payments"))
+
+
+@app.route("/admin/payments/<int:req_id>/reject", methods=["POST"])
+@login_required
+def admin_reject_payment(req_id):
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    preq = PaymentRequest.query.get_or_404(req_id)
+    if preq.status != "pending":
+        flash(tr("flash_payment_already_reviewed"), "error")
+        return redirect(url_for("admin_payments"))
+
+    reason = request.form.get("reason", "").strip()
+    preq.status = "rejected"
+    preq.reviewed_at = datetime.utcnow()
+    preq.reviewed_by = current_user.id
+    preq.admin_note = reason
+
+    log_admin_action("payment_rejected", target=preq.user.email, details=reason)
+
+    notif_body = tr("msg_payment_rejected", reason=reason or tr("msg_payment_rejected_generic"))
+    db.session.add(Message(user_id=preq.user_id, sender="admin", body=notif_body,
+                            read_by_admin=True, read_by_teacher=False))
+
+    db.session.commit()
+    flash(tr("flash_payment_rejected", name=preq.user.full_name), "success")
+    return redirect(url_for("admin_payments"))
 
 
 # ── ADMIN: advanced statistics dashboard ─────────────────────────────────────
@@ -519,11 +675,46 @@ def admin_stats():
         ).all()
     )
 
+    # Top 5 most active teachers by number of documents generated
+    top_rows = (
+        db.session.query(User, func.count(Document.id).label("cnt"))
+        .join(Document, Document.user_id == User.id)
+        .group_by(User.id)
+        .order_by(func.count(Document.id).desc())
+        .limit(5)
+        .all()
+    )
+
+    pending_payments = PaymentRequest.query.filter_by(status="pending").count()
+
     return render_template("admin_stats.html",
                            total_teachers=total_teachers, plan_counts=plan_counts,
                            total_docs=total_docs, chart_labels=chart_labels, chart_values=chart_values,
                            total_revenue=total_revenue, month_revenue=month_revenue,
-                           recent_payments=recent_payments, expiring=expiring)
+                           recent_payments=recent_payments, expiring=expiring,
+                           top_teachers=top_rows, pending_payments=pending_payments)
+
+
+# ── ADMIN: audit log (accountability trail of admin actions) ────────────────
+@app.route("/admin/audit-log")
+@login_required
+def admin_audit_log():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    q = request.args.get("q", "").strip()
+    page = request.args.get("page", 1, type=int)
+
+    query = AdminLog.query
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(AdminLog.action.ilike(like), AdminLog.target.ilike(like),
+                                     AdminLog.details.ilike(like)))
+    query = query.order_by(AdminLog.created_at.desc())
+    pager = query.paginate(page=page, per_page=30, error_out=False)
+
+    return render_template("admin_audit_log.html", pager=pager, q=q)
 
 
 def generate_password(length=12):
@@ -571,6 +762,7 @@ def admin_teachers():
                 ))
                 log_payment(user.id, plan, note="Created by admin")
 
+            log_admin_action("teacher_created", target=email, details=f"plan={plan}")
             db.session.commit()
             generated = (email, password)
             flash(tr("flash_teacher_created", name=f"{first_name} {last_name}"), "success")
@@ -593,6 +785,46 @@ def admin_teachers():
 
     return render_template("admin_teachers.html", teachers=pager.items, pager=pager,
                             q=q, plan_filter=plan_filter, generated=generated)
+
+
+@app.route("/admin/teachers/export.csv")
+@login_required
+def admin_teachers_export():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    import csv, io as _io
+    q = request.args.get("q", "").strip()
+    plan_filter = request.args.get("plan", "").strip()
+
+    query = User.query.filter_by(role="user")
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(User.first_name.ilike(like),
+                                     User.last_name.ilike(like),
+                                     User.email.ilike(like)))
+    if plan_filter:
+        query = query.join(Subscription).filter(Subscription.plan == plan_filter)
+    teachers = query.order_by(User.created_at.desc()).all()
+
+    buf = _io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["#", "Prénom", "Nom", "Email", "Abonnement", "Statut", "Expire le",
+                      "Documents générés", "Créé le", "Actif"])
+    for i, t in enumerate(teachers, start=1):
+        sub = t.subscription
+        writer.writerow([
+            i, t.first_name, t.last_name, t.email,
+            sub.plan if sub else "", sub.status if sub else "",
+            sub.expires_at.strftime("%d/%m/%Y") if sub and sub.expires_at else "",
+            len(t.documents), t.created_at.strftime("%d/%m/%Y"),
+            "Oui" if t.is_active else "Non",
+        ])
+    log_admin_action("export_csv", target="teachers")
+    db.session.commit()
+    return app.response_class(buf.getvalue(), mimetype="text/csv",
+                               headers={"Content-Disposition": "attachment; filename=enseignants.csv"})
 
 
 @app.route("/admin/teachers/<int:user_id>")
@@ -639,6 +871,7 @@ def admin_reset_quota(user_id):
         sub.docs_used_today = 0
         sub.docs_used = 0
         sub.last_reset_date = None
+        log_admin_action("quota_reset", target=teacher.email)
         db.session.commit()
         flash(tr("flash_quota_reset", name=teacher.full_name), "success")
     return redirect(url_for("admin_teacher_detail", user_id=user_id))
@@ -659,6 +892,7 @@ def admin_extend_subscription(user_id):
         sub.expires_at = base + timedelta(days=days)
         sub.status = "active"
         sub.expiry_reminder_sent = False
+        log_admin_action("subscription_extended", target=teacher.email, details=f"+{days}d")
         db.session.commit()
         flash(tr("flash_subscription_extended", name=teacher.full_name, days=days), "success")
     return redirect(url_for("admin_teacher_detail", user_id=user_id))
@@ -696,6 +930,41 @@ def admin_documents():
 
     return render_template("admin_documents.html", pager=pager, q=q,
                             doc_type=doc_type, doc_type_options=doc_type_options)
+
+
+@app.route("/admin/documents/export.csv")
+@login_required
+def admin_documents_export():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    import csv, io as _io
+    q = request.args.get("q", "").strip()
+    doc_type = request.args.get("doc_type", "").strip()
+
+    query = Document.query.join(User, Document.user_id == User.id)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(Document.title.ilike(like), Document.subject.ilike(like),
+                                     Document.level.ilike(like), User.first_name.ilike(like),
+                                     User.last_name.ilike(like), User.email.ilike(like)))
+    if doc_type:
+        query = query.filter(Document.doc_type == doc_type)
+    docs = query.order_by(Document.created_at.desc()).all()
+
+    buf = _io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["#", "Enseignant", "Email", "Titre", "Matière", "Niveau", "Type",
+                      "Format", "Date"])
+    for i, d in enumerate(docs, start=1):
+        writer.writerow([i, d.user.full_name if d.user else "", d.user.email if d.user else "",
+                          d.title, d.subject, d.level, d.doc_type, d.fmt,
+                          d.created_at.strftime("%d/%m/%Y %H:%M")])
+    log_admin_action("export_csv", target="documents")
+    db.session.commit()
+    return app.response_class(buf.getvalue(), mimetype="text/csv",
+                               headers={"Content-Disposition": "attachment; filename=documents.csv"})
 
 
 # ── MESSAGING: teacher <-> admin, free & unlimited ───────────────────────────
@@ -821,6 +1090,7 @@ def admin_edit_teacher(user_id):
                 sub.expires_at = datetime.utcnow() + timedelta(days=365)
                 log_payment(teacher.id, plan, note="Plan changed by admin")
 
+        log_admin_action("teacher_updated", target=teacher.email)
         db.session.commit()
         flash(tr("flash_teacher_updated", name=teacher.full_name), "success")
         return redirect(url_for("admin_teachers"))
@@ -838,6 +1108,7 @@ def admin_reset_password(user_id):
     user = User.query.get_or_404(user_id)
     new_password = generate_password()
     user.set_password(new_password)
+    log_admin_action("password_reset", target=user.email)
     db.session.commit()
     flash(tr("flash_password_reset", email=user.email, password=new_password), "success")
     return redirect(url_for("admin_teachers"))
@@ -846,18 +1117,29 @@ def admin_reset_password(user_id):
 @app.route("/admin/teachers/<int:user_id>/delete", methods=["POST"])
 @login_required
 def admin_delete_teacher(user_id):
+    """Soft-delete: deactivates the account (blocks login) rather than erasing it,
+    so document history, payments and messages are preserved. Toggles back on if
+    the account is already deactivated (reactivation)."""
     if current_user.role != "admin":
         flash(tr("flash_admin_only"), "error")
         return redirect(url_for("dashboard"))
 
     user = User.query.get_or_404(user_id)
+    redirect_to = request.form.get("redirect_to") or url_for("admin_teachers")
+
     if user.role == "admin":
         flash(tr("flash_admin_delete_protected"), "error")
-    else:
-        db.session.delete(user)
+    elif user.is_active:
+        user.is_active = False
+        log_admin_action("teacher_deactivated", target=user.email)
         db.session.commit()
-        flash(tr("flash_teacher_deleted", email=user.email), "success")
-    return redirect(url_for("admin_teachers"))
+        flash(tr("flash_teacher_deactivated", email=user.email), "success")
+    else:
+        user.is_active = True
+        log_admin_action("teacher_reactivated", target=user.email)
+        db.session.commit()
+        flash(tr("flash_teacher_reactivated", email=user.email), "success")
+    return redirect(redirect_to)
 
 
 # ── MAIN GENERATOR PAGE ───────────────────────────────────────────────────────
@@ -889,6 +1171,8 @@ def check_quota():
 # ── API: LOG USAGE (after successful AI generation) ──────────────────────────
 @app.route("/api/log-usage", methods=["POST"])
 @login_required
+@csrf.exempt
+@limiter.limit("60/hour")
 def log_usage():
     data = request.get_json() or {}
     sub = current_user.subscription
@@ -916,6 +1200,8 @@ def log_usage():
 # ── API: EXTRACT SOURCES (NotebookLM-style: files + links) ──────────────────
 @app.route("/api/extract-sources", methods=["POST"])
 @login_required
+@csrf.exempt
+@limiter.limit("30/hour")
 def extract_sources():
     files = request.files.getlist("files")
     urls_raw = request.form.get("urls", "")
@@ -1247,6 +1533,8 @@ def make_pdf(content, meta, colors_cfg, lang="fr"):
 # ── API: DOWNLOAD ──────────────────────────────────────────────────────────────
 @app.route("/api/download", methods=["POST"])
 @login_required
+@csrf.exempt
+@limiter.limit("60/hour")
 def download():
     data = request.get_json()
     content = data.get("content", "")

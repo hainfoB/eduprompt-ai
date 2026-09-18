@@ -42,6 +42,7 @@
   </div>
 
   <form class="compose-card" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <textarea name="body" placeholder="{{ t.msg_placeholder }}" required></textarea>
     <button type="submit" class="btn-send"><i class="bi bi-send-fill"></i></button>
   </form>

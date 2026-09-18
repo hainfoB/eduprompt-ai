@@ -32,6 +32,20 @@
 
 .contact-note{background:var(--sky);border-radius:10px;padding:14px 18px;font-size:12px;color:var(--navy2);margin-top:18px;display:flex;gap:8px;align-items:flex-start}
 
+.declare-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:28px;margin-top:20px}
+.declare-card h3{font-size:15px;font-weight:800;color:var(--navy);margin:0 0 6px}
+.declare-card p{font-size:12px;color:var(--muted);margin:0 0 18px}
+.form-label{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;margin-bottom:6px;display:block}
+.dc-control{border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px;width:100%;background:var(--ivory)}
+.btn-declare{width:100%;background:var(--navy);color:#fff;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px}
+
+.my-requests{margin-top:20px}
+.req-mini{background:var(--paper);border-radius:12px;box-shadow:var(--shadow);padding:14px 16px;margin-bottom:10px;font-size:12.5px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.status-tag{padding:3px 10px;border-radius:7px;font-size:10px;font-weight:800}
+.status-pending{background:#fff7ed;color:#c2410c}
+.status-approved{background:#ecfdf5;color:#065f46}
+.status-rejected{background:#fef2f2;color:var(--red)}
+
 @media(max-width:600px){ .plan-grid{grid-template-columns:1fr} }
 </style>
 {% endblock %}
@@ -78,6 +92,7 @@
     <h3><i class="bi bi-key-fill"></i> {{ t.activate_title }}</h3>
     <p>{{ t.activate_subtitle }}</p>
     <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="text" name="code" class="form-control" placeholder="XXXXXXXXXXXX" required maxlength="40"/>
       <button type="submit" class="btn-activate"><i class="bi bi-unlock-fill"></i> {{ t.btn_activate }}</button>
     </form>
@@ -86,5 +101,46 @@
       <div>{{ t.contact_note }}</div>
     </div>
   </div>
+
+  <div class="declare-card">
+    <h3><i class="bi bi-cash-coin"></i> {{ t.declare_payment_title }}</h3>
+    <p>{{ t.declare_payment_subtitle }}</p>
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="declare_payment">
+      <div class="row g-2 mb-2">
+        <div class="col-sm-6">
+          <label class="form-label">{{ t.label_plan }}</label>
+          <select name="plan" class="dc-control">
+            <option value="pro">{{ t.plan_pro_name }} — {{ t.price_pro_price }}</option>
+            <option value="premium">{{ t.plan_premium_name }} — {{ t.price_premium_price }}</option>
+          </select>
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label">{{ t.label_amount_claimed }}</label>
+          <input type="number" name="amount" class="dc-control" placeholder="1500"/>
+        </div>
+      </div>
+      <label class="form-label" style="margin-top:10px">{{ t.label_reference }}</label>
+      <input type="text" name="reference" class="dc-control" placeholder="{{ t.reference_placeholder }}" required/>
+      <label class="form-label" style="margin-top:10px">{{ t.label_note }}</label>
+      <textarea name="note" class="dc-control" rows="2" placeholder="{{ t.note_placeholder }}"></textarea>
+      <button type="submit" class="btn-declare"><i class="bi bi-send-fill"></i> {{ t.btn_declare_payment }}</button>
+    </form>
+  </div>
+
+  {% if my_requests %}
+  <div class="my-requests">
+    <div class="section-title" style="font-size:14px;font-weight:800;color:var(--navy);margin-bottom:10px">
+      <i class="bi bi-clock-history"></i> {{ t.my_payment_requests }}
+    </div>
+    {% for r in my_requests %}
+    <div class="req-mini">
+      <div><b>{{ r.plan|upper }}</b> — {{ r.amount_claimed }} DA — {{ r.created_at.strftime('%d/%m/%Y') }}</div>
+      <span class="status-tag status-{{ r.status }}">{{ r.status_label() }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
