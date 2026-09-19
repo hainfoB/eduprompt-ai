@@ -119,6 +119,9 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
         <i class="bi bi-cash-coin"></i><span class="label">{{ t.nav_payments }}</span>
         {% if notif_payments %}<span class="nav-badge">{{ notif_payments }}</span>{% endif %}
       </a>
+      <a class="nav-link {% if request.endpoint=='admin_cashbox' %}active{% endif %}" href="{{ url_for('admin_cashbox') }}">
+        <i class="bi bi-wallet2"></i><span class="label">{{ t.nav_cashbox }}</span>
+      </a>
       <a class="nav-link {% if request.endpoint=='admin_licenses' %}active{% endif %}" href="{{ url_for('admin_licenses') }}">
         <i class="bi bi-key-fill"></i><span class="label">{{ t.nav_codes }}</span>
       </a>
@@ -147,6 +150,11 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
           {% if current_user.role == 'admin' and notif_payments %}
           <a class="bell-item" href="{{ url_for('admin_payments') }}">
             <i class="bi bi-cash-coin"></i> {{ t.bell_pending_payments.format(count=notif_payments) }}
+          </a>
+          {% endif %}
+          {% if current_user.role == 'admin' and notif_payments_overdue %}
+          <a class="bell-item" href="{{ url_for('admin_payments') }}" style="color:var(--red)">
+            <i class="bi bi-exclamation-octagon-fill" style="color:var(--red)"></i> {{ t.bell_payments_overdue.format(count=notif_payments_overdue) }}
           </a>
           {% endif %}
           {% if current_user.role == 'admin' and notif_expiring %}

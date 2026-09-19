@@ -18,7 +18,7 @@
 .req-email{color:var(--muted);font-size:12px}
 .plan-tag{padding:3px 10px;border-radius:7px;font-size:11px;font-weight:800;display:inline-block}
 .plan-pro{background:#ecfdf5;color:#065f46}
-.plan-premium{background:#f5f3ff;color:#6d28d9}
+.plan-ultimate{background:#f5f3ff;color:#6d28d9}
 .status-tag{padding:3px 10px;border-radius:7px;font-size:10px;font-weight:800}
 .status-pending{background:#fff7ed;color:#c2410c}
 .status-approved{background:#ecfdf5;color:#065f46}
@@ -68,8 +68,13 @@
     </div>
     <div class="req-details">
       <div><b>{{ t.label_amount_claimed }}:</b> {{ r.amount_claimed }} DA</div>
+      <div><b>{{ t.label_payment_method }}:</b> {{ r.method_label() }}</div>
       <div><b>{{ t.label_reference }}:</b> {{ r.reference or "—" }}</div>
       <div><b>{{ t.table_date }}:</b> {{ r.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
+      {% if r.receipt_number %}<div><b>{{ t.table_receipt_number }}:</b> {{ r.receipt_number }}</div>{% endif %}
+      {% if r.receipt_path %}
+      <div><a href="{{ url_for('admin_view_receipt', req_id=r.id) }}" target="_blank" style="color:var(--navy);font-weight:700;text-decoration:none"><i class="bi bi-image-fill"></i> {{ t.label_view_receipt }}</a></div>
+      {% endif %}
       {% if r.note %}<div style="grid-column:1/-1"><b>{{ t.label_note }}:</b> {{ r.note }}</div>{% endif %}
     </div>
 

@@ -46,6 +46,13 @@
 .status-approved{background:#ecfdf5;color:#065f46}
 .status-rejected{background:#fef2f2;color:var(--red)}
 
+.method-toggle{display:flex;gap:10px;margin-top:6px}
+.method-opt{flex:1;position:relative}
+.method-opt input{position:absolute;opacity:0;inset:0;cursor:pointer;margin:0}
+.method-opt span{display:block;text-align:center;padding:10px;border-radius:10px;border:1.5px solid var(--line);font-size:12.5px;font-weight:700;color:var(--muted)}
+.method-opt input:checked + span{border-color:var(--orange);background:#fff7ed;color:#c2410c}
+.file-drop{border:1.5px dashed var(--line);border-radius:10px;padding:12px;font-size:12.5px;color:var(--muted);background:var(--ivory);width:100%}
+
 @media(max-width:600px){ .plan-grid{grid-template-columns:1fr} }
 </style>
 {% endblock %}
@@ -77,13 +84,13 @@
     </div>
     <div class="plan-card featured">
       <span class="badge-top">{{ t.price_popular_badge }}</span>
-      <h3>{{ t.price_premium_name }}</h3>
-      <div class="price">{{ t.price_premium_price }} <small>{{ t.price_premium_period }}</small></div>
+      <h3>{{ t.price_ultimate_name }}</h3>
+      <div class="price">{{ t.price_ultimate_price }} <small>{{ t.price_ultimate_period }}</small></div>
       <ul>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_premium_f1 }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_premium_f2 }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_premium_f3 }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_premium_f4 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_ultimate_f1 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_ultimate_f2 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_ultimate_f3 }}</li>
+        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_ultimate_f4 }}</li>
       </ul>
     </div>
   </div>
@@ -105,7 +112,7 @@
   <div class="declare-card">
     <h3><i class="bi bi-cash-coin"></i> {{ t.declare_payment_title }}</h3>
     <p>{{ t.declare_payment_subtitle }}</p>
-    <form method="POST">
+    <form method="POST" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="declare_payment">
       <div class="row g-2 mb-2">
@@ -113,7 +120,7 @@
           <label class="form-label">{{ t.label_plan }}</label>
           <select name="plan" class="dc-control">
             <option value="pro">{{ t.plan_pro_name }} — {{ t.price_pro_price }}</option>
-            <option value="premium">{{ t.plan_premium_name }} — {{ t.price_premium_price }}</option>
+            <option value="ultimate">{{ t.plan_ultimate_name }} — {{ t.price_ultimate_price }}</option>
           </select>
         </div>
         <div class="col-sm-6">
@@ -121,8 +128,21 @@
           <input type="number" name="amount" class="dc-control" placeholder="1500"/>
         </div>
       </div>
-      <label class="form-label" style="margin-top:10px">{{ t.label_reference }}</label>
-      <input type="text" name="reference" class="dc-control" placeholder="{{ t.reference_placeholder }}" required/>
+      <label class="form-label" style="margin-top:10px">{{ t.label_payment_method }}</label>
+      <div class="method-toggle">
+        <label class="method-opt">
+          <input type="radio" name="method" value="cash" checked required>
+          <span><i class="bi bi-cash"></i> {{ t.method_cash }}</span>
+        </label>
+        <label class="method-opt">
+          <input type="radio" name="method" value="ccp" required>
+          <span><i class="bi bi-bank"></i> {{ t.method_ccp }}</span>
+        </label>
+      </div>
+      <label class="form-label" style="margin-top:10px">{{ t.label_reference }} <span style="text-transform:none;font-weight:400">({{ t.reference_ccp_only }})</span></label>
+      <input type="text" name="reference" class="dc-control" placeholder="{{ t.reference_placeholder }}"/>
+      <label class="form-label" style="margin-top:10px">{{ t.label_receipt_upload }}</label>
+      <input type="file" name="receipt" class="file-drop" accept="image/*,.pdf" required/>
       <label class="form-label" style="margin-top:10px">{{ t.label_note }}</label>
       <textarea name="note" class="dc-control" rows="2" placeholder="{{ t.note_placeholder }}"></textarea>
       <button type="submit" class="btn-declare"><i class="bi bi-send-fill"></i> {{ t.btn_declare_payment }}</button>
@@ -136,7 +156,7 @@
     </div>
     {% for r in my_requests %}
     <div class="req-mini">
-      <div><b>{{ r.plan|upper }}</b> — {{ r.amount_claimed }} DA — {{ r.created_at.strftime('%d/%m/%Y') }}</div>
+      <div><b>{{ r.plan|upper }}</b> — {{ r.amount_claimed }} DA — {{ r.method_label() }} — {{ r.created_at.strftime('%d/%m/%Y') }}{% if r.receipt_number %} — {{ r.receipt_number }}{% endif %}</div>
       <span class="status-tag status-{{ r.status }}">{{ r.status_label() }}</span>
     </div>
     {% endfor %}

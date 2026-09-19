@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 340" width="420" height="340">
+  <rect width="420" height="340" fill="#ffffff"/>
+  <ellipse cx="210" cy="170" rx="180" ry="130" fill="#fdf2e9" stroke="#c2410c" stroke-width="4"/>
+  <ellipse cx="200" cy="170" rx="55" ry="42" fill="#c4b5fd" stroke="#5b21b6" stroke-width="2"/>
+  <circle cx="200" cy="170" r="14" fill="#4c1d95"/>
+  <ellipse cx="120" cy="120" rx="26" ry="14" fill="#fca5a5" stroke="#991b1b" stroke-width="2"/>
+  <ellipse cx="300" cy="130" rx="26" ry="14" fill="#fca5a5" stroke="#991b1b" stroke-width="2"/>
+  <ellipse cx="290" cy="220" rx="26" ry="14" fill="#fca5a5" stroke="#991b1b" stroke-width="2"/>
+  <circle cx="130" cy="220" r="16" fill="#93c5fd" stroke="#1d4ed8" stroke-width="2"/>
+  <circle cx="270" cy="90" r="9" fill="#facc15" stroke="#a16207"/>
+  <circle cx="150" cy="90" r="9" fill="#facc15" stroke="#a16207"/>
+  <g font-family="Arial, sans-serif" font-size="12" fill="#102a53">
+    <text x="200" y="173" text-anchor="middle" fill="#fff">Noyau</text>
+    <text x="120" y="106" text-anchor="middle">Mitochondrie</text>
+    <text x="300" y="116" text-anchor="middle">Mitochondrie</text>
+    <text x="290" y="206" text-anchor="middle">Mitochondrie</text>
+    <text x="130" y="245" text-anchor="middle">Vacuole</text>
+    <text x="210" y="316" text-anchor="middle" font-weight="bold">Membrane cellulaire</text>
+  </g>
+  <text x="210" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#102a53">Cellule animale — HaithemEduAI</text>
+</svg>

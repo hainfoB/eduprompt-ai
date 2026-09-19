@@ -1,6 +1,7 @@
 import os
 import re
 import io
+import base64
 import secrets
 import string
 from datetime import datetime, timedelta
@@ -29,7 +30,9 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from models import (db, User, Subscription, Document, LicenseCode, Payment, Message,
-                     PaymentRequest, AdminLog, PLAN_PRICES, create_trial_subscription)
+                     PaymentRequest, AdminLog, PlanChangeHistory, PLAN_PRICES, PAYMENT_METHODS,
+                     create_trial_subscription, next_receipt_number)
+from werkzeug.utils import secure_filename
 from utils import build_sources_context
 from translations import get_translations, TRANSLATIONS
 from notifications import check_and_send_expiry_reminders, send_email
@@ -57,6 +60,23 @@ os.makedirs(DATA_DIR, exist_ok=True)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(DATA_DIR, "eduprompt.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024  # 15 MB uploads
+
+RECEIPTS_DIR = os.path.join(DATA_DIR, "receipts")
+os.makedirs(RECEIPTS_DIR, exist_ok=True)
+ALLOWED_RECEIPT_EXT = {"png", "jpg", "jpeg", "webp", "gif", "pdf"}
+
+
+def save_receipt_file(file_storage, user_id):
+    """Save an uploaded payment receipt (screenshot/photo) to the persistent volume.
+    Returns the stored filename, or None if no valid file was provided."""
+    if not file_storage or not file_storage.filename:
+        return None
+    ext = file_storage.filename.rsplit(".", 1)[-1].lower() if "." in file_storage.filename else ""
+    if ext not in ALLOWED_RECEIPT_EXT:
+        return None
+    fname = f"u{user_id}_{secrets.token_hex(6)}.{ext}"
+    file_storage.save(os.path.join(RECEIPTS_DIR, secure_filename(fname)))
+    return secure_filename(fname)
 
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "haithemcomputing@gmail.com")
 
@@ -91,7 +111,8 @@ def inject_i18n():
 def inject_notifications():
     """Feeds the navbar notification bell for both teachers and admins."""
     if not current_user.is_authenticated:
-        return dict(notif_unread_msgs=0, notif_expiring=0, notif_reminder=False, notif_payments=0)
+        return dict(notif_unread_msgs=0, notif_expiring=0, notif_reminder=False, notif_payments=0,
+                    notif_payments_overdue=0)
 
     if current_user.role == "admin":
         unread_msgs = Message.query.filter_by(sender="teacher", read_by_admin=False).count()
@@ -104,16 +125,21 @@ def inject_notifications():
             Subscription.expires_at <= soon,
         ).count()
         pending_payments = PaymentRequest.query.filter_by(status="pending").count()
+        overdue_cutoff = now - timedelta(hours=48)
+        overdue_payments = PaymentRequest.query.filter(
+            PaymentRequest.status == "pending",
+            PaymentRequest.created_at <= overdue_cutoff,
+        ).count()
         return dict(notif_unread_msgs=unread_msgs, notif_expiring=expiring, notif_reminder=False,
-                    notif_payments=pending_payments)
+                    notif_payments=pending_payments, notif_payments_overdue=overdue_payments)
     else:
         unread_msgs = Message.query.filter_by(user_id=current_user.id, sender="admin",
                                                read_by_teacher=False).count()
         sub = current_user.subscription
         days_left = sub.days_until_expiry() if sub else None
-        reminder = days_left is not None and 0 <= days_left <= 5
+        reminder = days_left is not None and 0 <= days_left <= 7
         return dict(notif_unread_msgs=unread_msgs, notif_expiring=0, notif_reminder=reminder,
-                    notif_payments=0)
+                    notif_payments=0, notif_payments_overdue=0)
 
 
 def paginate_list(items, page, per_page=15):
@@ -151,20 +177,38 @@ def _migrate_sqlite_schema():
                 "docs_used_today": "INTEGER DEFAULT 0",
                 "last_reset_date": "DATE",
                 "expiry_reminder_sent": "BOOLEAN DEFAULT 0",
+                "last_reminder_stage": "INTEGER",
             },
             "user": {
                 "gemini_api_key": "VARCHAR(255)",
                 "preferred_lang": "VARCHAR(5) DEFAULT 'fr'",
                 "is_active": "BOOLEAN DEFAULT 1",
             },
+            "payment_request": {
+                "method": "VARCHAR(10)",
+                "receipt_path": "VARCHAR(255)",
+                "receipt_number": "VARCHAR(30)",
+                "source": "VARCHAR(20) DEFAULT 'upgrade'",
+            },
         }
         for table, additions in table_additions.items():
             cur.execute(f"PRAGMA table_info({table})")
             existing_cols = {row[1] for row in cur.fetchall()}
+            if not existing_cols:
+                continue  # table doesn't exist yet — db.create_all() will make it fresh
             for col, col_type in additions.items():
                 if col not in existing_cols:
                     cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
                     print(f"✅ Migrated: added {table}.{col}")
+
+        # One-time data migration: the "premium" plan was renamed to "ultimate".
+        for table in ("subscription", "payment_request", "license_code"):
+            cur.execute(f"PRAGMA table_info({table})")
+            if not cur.fetchall():
+                continue
+            cur.execute(f"UPDATE {table} SET plan='ultimate' WHERE plan='premium'")
+            if cur.rowcount:
+                print(f"✅ Migrated: {table}.plan premium→ultimate ({cur.rowcount} rows)")
         conn.commit()
     finally:
         conn.close()
@@ -188,7 +232,7 @@ with app.app_context():
         db.session.add(_admin)
         db.session.flush()
         db.session.add(Subscription(
-            user_id=_admin.id, plan="premium", status="active",
+            user_id=_admin.id, plan="ultimate", status="active",
             expires_at=datetime.utcnow() + timedelta(days=3650),
             docs_used=0,
         ))
@@ -216,7 +260,7 @@ def log_admin_action(action, target="", details=""):
     ))
 
 
-def apply_payment_approval(teacher, plan, days=365):
+def apply_payment_approval(teacher, plan, days=365, reason="payment_approved"):
     """Activate or renew a teacher's subscription after a payment has been validated.
     Renewing the same plan extends from the later of (now, current expiry);
     switching plan (or reactivating an expired/trial account) starts a fresh period."""
@@ -228,6 +272,7 @@ def apply_payment_approval(teacher, plan, days=365):
 
     is_renewal = (sub.plan == plan and sub.status == "active" and not sub.is_expired())
     base = sub.expires_at if (is_renewal and sub.expires_at) else datetime.utcnow()
+    previous_plan = sub.plan
 
     sub.plan = plan
     sub.status = "active"
@@ -236,6 +281,11 @@ def apply_payment_approval(teacher, plan, days=365):
     sub.docs_used_today = 0
     sub.last_reset_date = None
     sub.expiry_reminder_sent = False
+    sub.last_reminder_stage = None
+
+    if previous_plan != plan or not is_renewal:
+        db.session.add(PlanChangeHistory(user_id=teacher.id, from_plan=previous_plan,
+                                          to_plan=plan, reason=reason))
     return is_renewal
 
 
@@ -325,6 +375,7 @@ def register():
         email      = request.form.get("email", "").strip().lower()
         password   = request.form.get("password", "")
         api_key    = request.form.get("api_key", "").strip()
+        wanted_plan = request.form.get("wanted_plan", "trial").strip()
 
         if not all([first_name, last_name, email, password, api_key]):
             flash(tr("flash_all_fields_required"), "error")
@@ -338,16 +389,38 @@ def register():
             flash(tr("flash_email_exists"), "error")
             return render_template("register.html")
 
+        # A paid plan chosen at signup requires proof of payment, validated afterwards.
+        method = request.form.get("method", "").strip()
+        reference = request.form.get("reference", "").strip()
+        receipt_file = request.files.get("receipt")
+        if wanted_plan in ("pro", "ultimate"):
+            if method not in PAYMENT_METHODS or not receipt_file or not receipt_file.filename:
+                flash(tr("flash_payment_proof_required"), "error")
+                return render_template("register.html")
+
         user = User(first_name=first_name, last_name=last_name, email=email,
                     gemini_api_key=api_key, preferred_lang=current_lang())
         user.set_password(password)
         db.session.add(user)
         db.session.flush()  # get user.id before commit
-        create_trial_subscription(user)
+        create_trial_subscription(user)  # immediate access while any payment is reviewed
+
+        if wanted_plan in ("pro", "ultimate"):
+            receipt_name = save_receipt_file(receipt_file, user.id)
+            db.session.add(PaymentRequest(
+                user_id=user.id, plan=wanted_plan, method=method,
+                amount_claimed=PLAN_PRICES.get(wanted_plan),
+                reference=reference or None, receipt_path=receipt_name,
+                source="registration",
+            ))
+
         db.session.commit()
 
         login_user(user)
-        flash(tr("flash_welcome_trial"), "success")
+        if wanted_plan in ("pro", "ultimate"):
+            flash(tr("flash_welcome_trial_pending_payment"), "success")
+        else:
+            flash(tr("flash_welcome_trial"), "success")
         return redirect(url_for("generator"))
 
     return render_template("register.html")
@@ -454,17 +527,27 @@ def upgrade():
         if action == "declare_payment":
             plan = request.form.get("plan", "pro")
             amount = request.form.get("amount", "").strip()
+            method = request.form.get("method", "").strip()
             reference = request.form.get("reference", "").strip()
             note = request.form.get("note", "").strip()
+            receipt_file = request.files.get("receipt")
 
-            if plan not in ("pro", "premium") or not reference:
+            if plan not in ("pro", "ultimate") or method not in PAYMENT_METHODS:
                 flash(tr("flash_payment_fields_required"), "error")
                 return redirect(url_for("upgrade"))
+            if method == "ccp" and not reference:
+                flash(tr("flash_payment_fields_required"), "error")
+                return redirect(url_for("upgrade"))
+            if not receipt_file or not receipt_file.filename:
+                flash(tr("flash_payment_proof_required"), "error")
+                return redirect(url_for("upgrade"))
 
+            receipt_name = save_receipt_file(receipt_file, current_user.id)
             db.session.add(PaymentRequest(
-                user_id=current_user.id, plan=plan,
+                user_id=current_user.id, plan=plan, method=method,
                 amount_claimed=int(amount) if amount.isdigit() else PLAN_PRICES.get(plan),
-                reference=reference, note=note,
+                reference=reference or None, note=note, receipt_path=receipt_name,
+                source="upgrade",
             ))
             db.session.commit()
             flash(tr("flash_payment_declared"), "success")
@@ -477,7 +560,7 @@ def upgrade():
             flash(tr("flash_invalid_code"), "error")
             return redirect(url_for("upgrade"))
 
-        apply_payment_approval(current_user, lic.plan, days=lic.duration_days)
+        apply_payment_approval(current_user, lic.plan, days=lic.duration_days, reason="license_code")
 
         lic.used = True
         lic.used_by = current_user.id
@@ -572,11 +655,12 @@ def admin_approve_payment(req_id):
     is_renewal = apply_payment_approval(preq.user, preq.plan, days=days)
 
     log_payment(preq.user_id, preq.plan, amount=preq.amount_claimed,
-                note=f"PaymentRequest #{preq.id} ({preq.reference})")
+                note=f"PaymentRequest #{preq.id} ({preq.reference or preq.method})")
 
     preq.status = "approved"
     preq.reviewed_at = datetime.utcnow()
     preq.reviewed_by = current_user.id
+    preq.receipt_number = next_receipt_number()
 
     kind = "renewal" if is_renewal else "activation"
     log_admin_action("payment_approved", target=preq.user.email,
@@ -621,6 +705,129 @@ def admin_reject_payment(req_id):
     return redirect(url_for("admin_payments"))
 
 
+@app.route("/admin/payments/<int:req_id>/receipt")
+@login_required
+def admin_view_receipt(req_id):
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+    preq = PaymentRequest.query.get_or_404(req_id)
+    if not preq.receipt_path:
+        flash(tr("flash_no_receipt"), "error")
+        return redirect(url_for("admin_payments"))
+    path = os.path.join(RECEIPTS_DIR, preq.receipt_path)
+    if not os.path.exists(path):
+        flash(tr("flash_no_receipt"), "error")
+        return redirect(url_for("admin_payments"))
+    return send_file(path)
+
+
+# ── ADMIN: cash register — approved payments by date / method ───────────────
+@app.route("/admin/cashbox")
+@login_required
+def admin_cashbox():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    from sqlalchemy import func
+
+    date_from = request.args.get("from", "").strip()
+    date_to = request.args.get("to", "").strip()
+    method_filter = request.args.get("method", "").strip()
+    page = request.args.get("page", 1, type=int)
+
+    query = PaymentRequest.query.filter_by(status="approved")
+    if method_filter in PAYMENT_METHODS:
+        query = query.filter(PaymentRequest.method == method_filter)
+    if date_from:
+        try:
+            query = query.filter(PaymentRequest.reviewed_at >= datetime.strptime(date_from, "%Y-%m-%d"))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            end = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            query = query.filter(PaymentRequest.reviewed_at < end)
+        except ValueError:
+            pass
+
+    query = query.order_by(PaymentRequest.reviewed_at.desc())
+    pager = query.paginate(page=page, per_page=25, error_out=False)
+
+    totals_query = query
+    total_amount = db.session.query(func.sum(PaymentRequest.amount_claimed)) \
+        .filter(PaymentRequest.id.in_([p.id for p in totals_query.all()])).scalar() or 0
+
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    year_start = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    def sum_since(since):
+        return db.session.query(func.sum(PaymentRequest.amount_claimed)).filter(
+            PaymentRequest.status == "approved", PaymentRequest.reviewed_at >= since
+        ).scalar() or 0
+
+    def sum_by_method(method):
+        return db.session.query(func.sum(PaymentRequest.amount_claimed)).filter(
+            PaymentRequest.status == "approved", PaymentRequest.method == method
+        ).scalar() or 0
+
+    return render_template("admin_cashbox.html", pager=pager, date_from=date_from,
+                            date_to=date_to, method_filter=method_filter,
+                            filtered_total=total_amount,
+                            total_today=sum_since(today_start),
+                            total_month=sum_since(month_start),
+                            total_year=sum_since(year_start),
+                            total_cash=sum_by_method("cash"),
+                            total_ccp=sum_by_method("ccp"))
+
+
+@app.route("/admin/cashbox/export.csv")
+@login_required
+def admin_cashbox_export():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    import csv, io as _io
+    date_from = request.args.get("from", "").strip()
+    date_to = request.args.get("to", "").strip()
+    method_filter = request.args.get("method", "").strip()
+
+    query = PaymentRequest.query.filter_by(status="approved")
+    if method_filter in PAYMENT_METHODS:
+        query = query.filter(PaymentRequest.method == method_filter)
+    if date_from:
+        try:
+            query = query.filter(PaymentRequest.reviewed_at >= datetime.strptime(date_from, "%Y-%m-%d"))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            end = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            query = query.filter(PaymentRequest.reviewed_at < end)
+        except ValueError:
+            pass
+    rows = query.order_by(PaymentRequest.reviewed_at.desc()).all()
+
+    buf = _io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["#", "Reçu N°", "Date", "Enseignant", "Email", "Offre", "Montant (DA)",
+                      "Mode de paiement", "Référence"])
+    for i, p in enumerate(rows, start=1):
+        writer.writerow([
+            i, p.receipt_number or "", p.reviewed_at.strftime("%d/%m/%Y %H:%M") if p.reviewed_at else "",
+            p.user.full_name if p.user else "", p.user.email if p.user else "",
+            p.plan, p.amount_claimed or 0, p.method_label(), p.reference or "",
+        ])
+    log_admin_action("export_csv", target="cashbox")
+    db.session.commit()
+    return app.response_class(buf.getvalue(), mimetype="text/csv",
+                               headers={"Content-Disposition": "attachment; filename=caisse.csv"})
+
+
 # ── ADMIN: advanced statistics dashboard ─────────────────────────────────────
 @app.route("/admin/stats")
 @login_required
@@ -633,7 +840,7 @@ def admin_stats():
 
     total_teachers = User.query.filter_by(role="user").count()
     plan_counts = {}
-    for p in ("trial", "pro", "premium"):
+    for p in ("trial", "pro", "ultimate"):
         plan_counts[p] = Subscription.query.filter_by(plan=p).count()
 
     total_docs = Document.query.count()
@@ -687,12 +894,31 @@ def admin_stats():
 
     pending_payments = PaymentRequest.query.filter_by(status="pending").count()
 
+    # Monthly leaderboard — top active teachers for a selectable month (default: current)
+    month_param = request.args.get("month", "").strip()
+    try:
+        month_ref = datetime.strptime(month_param, "%Y-%m") if month_param else datetime.utcnow()
+    except ValueError:
+        month_ref = datetime.utcnow()
+    lb_start = month_ref.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    lb_end = (lb_start + timedelta(days=32)).replace(day=1)
+    leaderboard = (
+        db.session.query(User, func.count(Document.id).label("cnt"))
+        .join(Document, Document.user_id == User.id)
+        .filter(Document.created_at >= lb_start, Document.created_at < lb_end)
+        .group_by(User.id)
+        .order_by(func.count(Document.id).desc())
+        .limit(10)
+        .all()
+    )
+
     return render_template("admin_stats.html",
                            total_teachers=total_teachers, plan_counts=plan_counts,
                            total_docs=total_docs, chart_labels=chart_labels, chart_values=chart_values,
                            total_revenue=total_revenue, month_revenue=month_revenue,
                            recent_payments=recent_payments, expiring=expiring,
-                           top_teachers=top_rows, pending_payments=pending_payments)
+                           top_teachers=top_rows, pending_payments=pending_payments,
+                           leaderboard=leaderboard, leaderboard_month=lb_start.strftime("%Y-%m"))
 
 
 # ── ADMIN: audit log (accountability trail of admin actions) ────────────────
@@ -761,6 +987,8 @@ def admin_teachers():
                     docs_used=0, docs_used_today=0, last_reset_date=None,
                 ))
                 log_payment(user.id, plan, note="Created by admin")
+                db.session.add(PlanChangeHistory(user_id=user.id, from_plan=None,
+                                                  to_plan=plan, reason="admin_manual"))
 
             log_admin_action("teacher_created", target=email, details=f"plan={plan}")
             db.session.commit()
@@ -852,10 +1080,12 @@ def admin_teacher_detail(user_id):
 
     payments = Payment.query.filter_by(user_id=teacher.id).order_by(Payment.created_at.desc()).all()
     total_docs = Document.query.filter_by(user_id=teacher.id).count()
+    plan_history = PlanChangeHistory.query.filter_by(user_id=teacher.id) \
+        .order_by(PlanChangeHistory.created_at.desc()).all()
 
     return render_template("admin_teacher_detail.html", teacher=teacher, sub=sub,
                             docs_pager=docs_pager, payments=payments, q=q,
-                            total_docs=total_docs)
+                            total_docs=total_docs, plan_history=plan_history)
 
 
 @app.route("/admin/teachers/<int:user_id>/reset-quota", methods=["POST"])
@@ -892,6 +1122,7 @@ def admin_extend_subscription(user_id):
         sub.expires_at = base + timedelta(days=days)
         sub.status = "active"
         sub.expiry_reminder_sent = False
+        sub.last_reminder_stage = None
         log_admin_action("subscription_extended", target=teacher.email, details=f"+{days}d")
         db.session.commit()
         flash(tr("flash_subscription_extended", name=teacher.full_name, days=days), "success")
@@ -1082,6 +1313,7 @@ def admin_edit_teacher(user_id):
             sub.docs_used_today = 0
             sub.last_reset_date = None
             sub.expiry_reminder_sent = False
+            sub.last_reminder_stage = None
             if plan == "trial" and old_plan != "trial":
                 sub.docs_used = 0
                 sub.docs_limit = 5
@@ -1089,6 +1321,8 @@ def admin_edit_teacher(user_id):
             elif plan != "trial":
                 sub.expires_at = datetime.utcnow() + timedelta(days=365)
                 log_payment(teacher.id, plan, note="Plan changed by admin")
+            db.session.add(PlanChangeHistory(user_id=teacher.id, from_plan=old_plan,
+                                              to_plan=plan, reason="admin_manual"))
 
         log_admin_action("teacher_updated", target=teacher.email)
         db.session.commit()
@@ -1265,7 +1499,25 @@ HEADER_LABELS = {
 }
 
 
-def make_docx(content, meta, colors_cfg, lang="fr"):
+def _visuals_by_id(visuals):
+    """Build a lookup dict {id: base64_png_bytes} from the client-supplied visuals list.
+    Tolerant of missing/malformed entries — a bad entry is simply skipped."""
+    out = {}
+    for v in (visuals or []):
+        try:
+            vid = int(v.get("id"))
+            data_url = v.get("data", "")
+            b64 = data_url.split(",", 1)[1] if "," in data_url else data_url
+            out[vid] = base64.b64decode(b64)
+        except Exception:
+            continue
+    return out
+
+
+VISUAL_ID_RE = re.compile(r'\[\[VISUAL_ID:(\d+)\]\]')
+
+
+def make_docx(content, meta, colors_cfg, lang="fr", visuals=None):
     """
     meta: dict with teacher_first, teacher_last, level, palier, subject, lesson
     colors_cfg: dict with c1 (header bg), c2 (H1), c3 (accent/H2), text (body text)
@@ -1342,6 +1594,7 @@ def make_docx(content, meta, colors_cfg, lang="fr"):
     lesson_p.paragraph_format.space_after = Pt(16)
 
     # ── Body content (markdown-ish parsing, with real tables) ──
+    visuals_map = _visuals_by_id(visuals)
     lines = content.split("\n")
     i = 0
     while i < len(lines):
@@ -1349,6 +1602,19 @@ def make_docx(content, meta, colors_cfg, lang="fr"):
 
         if not line:
             doc.add_paragraph("")
+            i += 1
+            continue
+
+        visual_match = VISUAL_ID_RE.fullmatch(line)
+        if visual_match:
+            img_bytes = visuals_map.get(int(visual_match.group(1)))
+            if img_bytes:
+                try:
+                    img_p = doc.add_paragraph()
+                    img_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    img_p.add_run().add_picture(io.BytesIO(img_bytes), width=Inches(5.2))
+                except Exception:
+                    pass
             i += 1
             continue
 
@@ -1417,7 +1683,7 @@ def make_docx(content, meta, colors_cfg, lang="fr"):
     return buf
 
 
-def make_pdf(content, meta, colors_cfg, lang="fr"):
+def make_pdf(content, meta, colors_cfg, lang="fr", visuals=None):
     c1 = colors_cfg.get("c1", "#102a53")
     c2 = colors_cfg.get("c2", "#f97316")
     c3 = colors_cfg.get("c3", "#173f6c")
@@ -1482,6 +1748,7 @@ def make_pdf(content, meta, colors_cfg, lang="fr"):
     cell_head_s = ParagraphStyle("CellH", parent=styles["Normal"], textColor=rl_colors.white,
                                   fontSize=9, leading=13, alignment=align, fontName="Helvetica-Bold")
 
+    visuals_map = _visuals_by_id(visuals)
     lines = content.split("\n")
     i = 0
     while i < len(lines):
@@ -1489,6 +1756,21 @@ def make_pdf(content, meta, colors_cfg, lang="fr"):
 
         if not line:
             story.append(Spacer(1, 0.2*cm))
+            i += 1
+            continue
+
+        visual_match = VISUAL_ID_RE.fullmatch(line)
+        if visual_match:
+            img_bytes = visuals_map.get(int(visual_match.group(1)))
+            if img_bytes:
+                try:
+                    from reportlab.platypus import Image as RLImage
+                    rl_img = RLImage(io.BytesIO(img_bytes), width=13*cm, height=9*cm, kind="proportional")
+                    rl_img.hAlign = "CENTER"
+                    story.append(rl_img)
+                    story.append(Spacer(1, 0.3*cm))
+                except Exception:
+                    pass
             i += 1
             continue
 
@@ -1553,15 +1835,16 @@ def download():
         "activite":      data.get("activite", ""),
     }
     colors_cfg = data.get("colors", {})
+    visuals = data.get("visuals", [])
 
     safe_name = re.sub(r'[^\w\-]', '_', meta["lesson"][:40] or "document")
 
     if fmt == "pdf":
-        buf = make_pdf(content, meta, colors_cfg, lang)
+        buf = make_pdf(content, meta, colors_cfg, lang, visuals=visuals)
         return send_file(buf, as_attachment=True, download_name=f"{safe_name}.pdf",
                          mimetype="application/pdf")
     else:
-        buf = make_docx(content, meta, colors_cfg, lang)
+        buf = make_docx(content, meta, colors_cfg, lang, visuals=visuals)
         return send_file(buf, as_attachment=True, download_name=f"{safe_name}.docx",
                          mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 

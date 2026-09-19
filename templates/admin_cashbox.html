@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ t.nav_cashbox }} — HaithemEduAI{% endblock %}
+{% block extra_head %}
+<style>
+.cb-wrap{max-width:1100px;margin:32px auto;padding:0 max(4vw,16px)}
+.cb-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:20px}
+.cb-header h1{font-size:22px;font-weight:800;color:var(--navy);margin:0}
+.btn-export{font-size:12px;font-weight:700;color:var(--navy);text-decoration:none;background:var(--sky);padding:9px 16px;border-radius:9px;display:inline-flex;align-items:center;gap:6px}
+
+.cb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px}
+.cb-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:16px}
+.cb-card .label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.cb-card .value{font-size:20px;font-weight:800;color:var(--navy)}
+
+.filter-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:14px 16px;margin-bottom:18px;display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.filter-card .fg{display:flex;flex-direction:column;gap:4px}
+.filter-card label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase}
+.filter-card input, .filter-card select{border:1.5px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12.5px}
+.btn-filter{background:var(--navy);color:#fff;border:none;border-radius:9px;padding:9px 18px;font-size:12.5px;font-weight:700;cursor:pointer}
+
+.cb-table{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.cb-row{display:grid;grid-template-columns:32px 110px 1fr 1fr 90px 100px 110px;gap:10px;padding:11px 18px;align-items:center;border-bottom:1px solid var(--line);font-size:12px}
+.cb-row.header{background:var(--navy);color:#fff;font-weight:700;text-transform:uppercase;font-size:10px}
+.cb-row:last-child{border-bottom:none}
+.cb-num{color:var(--muted);font-weight:700}
+.method-tag{padding:3px 8px;border-radius:6px;font-size:10px;font-weight:800;display:inline-block}
+.method-cash{background:#ecfdf5;color:#065f46}
+.method-ccp{background:#eff6ff;color:#1d4ed8}
+.empty-state{text-align:center;padding:32px;color:var(--muted);font-size:13px}
+.pager{display:flex;justify-content:center;gap:6px;padding:16px;flex-wrap:wrap}
+.pager a,.pager span{padding:7px 12px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;color:var(--navy);background:var(--sky)}
+.pager .current{background:var(--navy);color:#fff}
+
+@media(max-width:750px){
+  .cb-row{grid-template-columns:1fr}
+  .cb-row.header{display:none}
+}
+</style>
+{% endblock %}
+{% block content %}
+<div class="cb-wrap">
+  <div class="cb-header">
+    <h1><i class="bi bi-wallet2"></i> {{ t.nav_cashbox }}</h1>
+    <a class="btn-export" href="{{ url_for('admin_cashbox_export', **request.args) }}"><i class="bi bi-download"></i> {{ t.btn_export_csv }}</a>
+  </div>
+
+  <div class="cb-grid">
+    <div class="cb-card"><div class="label">{{ t.cashbox_total_today }}</div><div class="value">{{ total_today }} DA</div></div>
+    <div class="cb-card"><div class="label">{{ t.cashbox_total_month }}</div><div class="value">{{ total_month }} DA</div></div>
+    <div class="cb-card"><div class="label">{{ t.cashbox_total_year }}</div><div class="value">{{ total_year }} DA</div></div>
+    <div class="cb-card"><div class="label">{{ t.method_cash }}</div><div class="value">{{ total_cash }} DA</div></div>
+    <div class="cb-card"><div class="label">{{ t.method_ccp }}</div><div class="value">{{ total_ccp }} DA</div></div>
+  </div>
+
+  <form class="filter-card" method="GET">
+    <div class="fg"><label>{{ t.label_date_from }}</label><input type="date" name="from" value="{{ date_from }}"/></div>
+    <div class="fg"><label>{{ t.label_date_to }}</label><input type="date" name="to" value="{{ date_to }}"/></div>
+    <div class="fg">
+      <label>{{ t.label_method_filter }}</label>
+      <select name="method">
+        <option value="">{{ t.all_methods }}</option>
+        <option value="cash" {% if method_filter=='cash' %}selected{% endif %}>{{ t.method_cash }}</option>
+        <option value="ccp" {% if method_filter=='ccp' %}selected{% endif %}>{{ t.method_ccp }}</option>
+      </select>
+    </div>
+    <button type="submit" class="btn-filter"><i class="bi bi-funnel-fill"></i> {{ t.btn_filter }}</button>
+  </form>
+
+  <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">{{ t.cashbox_filtered_total }}: <b style="color:var(--navy)">{{ filtered_total }} DA</b></div>
+
+  <div class="cb-table">
+    {% if pager.items %}
+    <div class="cb-row header">
+      <div>#</div><div>{{ t.table_receipt_number }}</div><div>{{ t.table_teacher }}</div><div>{{ t.label_plan }}</div>
+      <div>{{ t.table_amount }}</div><div>{{ t.label_payment_method }}</div><div>{{ t.table_date }}</div>
+    </div>
+    {% for p in pager.items %}
+    <div class="cb-row">
+      <div class="cb-num">{{ (pager.page - 1) * pager.per_page + loop.index }}</div>
+      <div>{{ p.receipt_number or "—" }}</div>
+      <div>{{ p.user.full_name if p.user else "—" }}</div>
+      <div>{{ p.plan|upper }}</div>
+      <div>{{ p.amount_claimed or 0 }} DA</div>
+      <div><span class="method-tag method-{{ p.method }}">{{ p.method_label() }}</span></div>
+      <div>{{ p.reviewed_at.strftime('%d/%m/%Y') if p.reviewed_at else "—" }}</div>
+    </div>
+    {% endfor %}
+    {% if pager.pages > 1 %}
+    <div class="pager">
+      {% for pn in range(1, pager.pages + 1) %}
+        {% if pn == pager.page %}<span class="current">{{ pn }}</span>
+        {% else %}<a href="{{ url_for('admin_cashbox', **dict(request.args, page=pn)) }}">{{ pn }}</a>{% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">{{ t.empty_cashbox }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

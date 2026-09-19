@@ -46,7 +46,7 @@
       <div class="st-plan-row">
         <span class="st-plan-chip">Essai: {{ plan_counts.trial }}</span>
         <span class="st-plan-chip">Pro: {{ plan_counts.pro }}</span>
-        <span class="st-plan-chip">Premium: {{ plan_counts.premium }}</span>
+        <span class="st-plan-chip">Ultimate: {{ plan_counts.ultimate }}</span>
       </div>
     </div>
     <div class="st-card">
@@ -102,6 +102,29 @@
     {% if top_teachers %}
     <div class="pay-row header"><div>#</div><div>{{ t.table_teacher }}</div><div>{{ t.stats_doc_count }}</div><div></div></div>
     {% for u, cnt in top_teachers %}
+    <div class="pay-row">
+      <div class="row-num">{{ loop.index }}</div>
+      <div>{{ u.full_name }} ({{ u.email }})</div>
+      <div>{{ cnt }}</div>
+      <div></div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">—</div>
+    {% endif %}
+  </div>
+
+  <div class="st-section">
+    <h3 style="justify-content:space-between">
+      <span><i class="bi bi-award-fill"></i> {{ t.stats_leaderboard_title }}</span>
+      <form method="GET" style="display:flex;gap:6px;align-items:center">
+        <input type="month" name="month" value="{{ leaderboard_month }}" onchange="this.form.submit()"
+               style="border:1.5px solid var(--line);border-radius:8px;padding:5px 8px;font-size:11px"/>
+      </form>
+    </h3>
+    {% if leaderboard %}
+    <div class="pay-row header"><div>#</div><div>{{ t.table_teacher }}</div><div>{{ t.stats_doc_count }}</div><div></div></div>
+    {% for u, cnt in leaderboard %}
     <div class="pay-row">
       <div class="row-num">{{ loop.index }}</div>
       <div>{{ u.full_name }} ({{ u.email }})</div>

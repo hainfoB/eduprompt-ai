@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 260" width="460" height="260">
+  <rect width="460" height="260" fill="#0b1026"/>
+  <circle cx="30" cy="130" r="22" fill="#fbbf24"/>
+  <g stroke="#334155" stroke-width="1" fill="none">
+    <circle cx="30" cy="130" r="45"/>
+    <circle cx="30" cy="130" r="72"/>
+    <circle cx="30" cy="130" r="102"/>
+    <circle cx="30" cy="130" r="135"/>
+    <circle cx="30" cy="130" r="170"/>
+    <circle cx="30" cy="130" r="210"/>
+  </g>
+  <circle cx="75" cy="130" r="4" fill="#a1a1aa"/>
+  <circle cx="102" cy="130" r="6" fill="#fca5a5"/>
+  <circle cx="132" cy="130" r="7" fill="#60a5fa"/>
+  <circle cx="165" cy="130" r="5" fill="#f97316"/>
+  <circle cx="200" cy="130" r="13" fill="#f59e0b"/>
+  <circle cx="240" cy="130" r="11" fill="#fde68a"/>
+  <g font-family="Arial, sans-serif" font-size="9" fill="#e2e8f0">
+    <text x="70" y="150">Mercure</text>
+    <text x="93" y="150">Vénus</text>
+    <text x="124" y="150">Terre</text>
+    <text x="158" y="150">Mars</text>
+    <text x="190" y="152">Jupiter</text>
+    <text x="228" y="152">Saturne</text>
+  </g>
+  <text x="230" y="20" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#e2e8f0">Système solaire (schématique) — HaithemEduAI</text>
+</svg>

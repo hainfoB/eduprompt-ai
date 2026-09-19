@@ -12,14 +12,16 @@ TRIAL_DOCS  = 5
 # Daily lesson quotas per paid plan (used instead of a total document cap)
 PLAN_DAILY_LIMITS = {
     "pro": 2,
-    "premium": 5,
+    "ultimate": 5,
 }
 
 # Reference prices (DA / year) — used to log payments automatically
 PLAN_PRICES = {
     "pro": 1500,
-    "premium": 1800,
+    "ultimate": 1800,
 }
+
+PAYMENT_METHODS = ("cash", "ccp")
 
 
 class User(UserMixin, db.Model):
@@ -54,7 +56,7 @@ class User(UserMixin, db.Model):
 class Subscription(db.Model):
     id         = db.Column(db.Integer, primary_key=True)
     user_id    = db.Column(db.Integer, db.ForeignKey("user.id"), unique=True, nullable=False)
-    plan       = db.Column(db.String(20), default="trial")     # trial | pro | premium
+    plan       = db.Column(db.String(20), default="trial")     # trial | pro | ultimate
     status     = db.Column(db.String(20), default="active")    # active | expired | cancelled
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime)
@@ -67,6 +69,9 @@ class Subscription(db.Model):
 
     # Expiry reminder (5-day heads-up email), reset whenever the plan is renewed
     expiry_reminder_sent = db.Column(db.Boolean, default=False)
+    # Multi-stage reminder tracking: last threshold (7, 3 or 0 days) already notified for.
+    # Reset to None whenever the plan is renewed/changed so reminders fire again next cycle.
+    last_reminder_stage = db.Column(db.Integer, nullable=True)
 
     def is_expired(self):
         return bool(self.expires_at and datetime.utcnow() > self.expires_at)
@@ -120,9 +125,9 @@ class Subscription(db.Model):
         except Exception:
             lang = "fr"
         labels = {
-            "fr": {"trial": "Essai gratuit", "pro": "Pro", "premium": "Premium"},
-            "en": {"trial": "Free trial", "pro": "Pro", "premium": "Premium"},
-            "ar": {"trial": "تجربة مجانية", "pro": "برو", "premium": "بريميوم"},
+            "fr": {"trial": "Essai gratuit", "pro": "Pro", "ultimate": "Ultimate"},
+            "en": {"trial": "Free trial", "pro": "Pro", "ultimate": "Ultimate"},
+            "ar": {"trial": "تجربة مجانية", "pro": "برو", "ultimate": "ألتيميت"},
         }
         return labels.get(lang, labels["fr"]).get(self.plan, self.plan)
 
@@ -141,19 +146,23 @@ class Payment(db.Model):
 
 
 class PaymentRequest(db.Model):
-    """A teacher's self-declared payment (bank transfer / CCP / WhatsApp), awaiting
+    """A teacher's self-declared payment (cash / CCP transfer), awaiting
     admin validation before the corresponding plan is activated or renewed."""
     id             = db.Column(db.Integer, primary_key=True)
     user_id        = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    plan           = db.Column(db.String(20), nullable=False)   # pro | premium
+    plan           = db.Column(db.String(20), nullable=False)   # pro | ultimate
     amount_claimed = db.Column(db.Integer, nullable=True)
-    reference      = db.Column(db.String(120), nullable=True)   # transfer/CCP/WhatsApp reference
+    method         = db.Column(db.String(10), nullable=True)    # cash | ccp
+    reference      = db.Column(db.String(120), nullable=True)   # CCP transfer reference
+    receipt_path   = db.Column(db.String(255), nullable=True)   # uploaded screenshot/photo of the receipt
     note           = db.Column(db.Text, nullable=True)
     status         = db.Column(db.String(20), default="pending")  # pending | approved | rejected
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
     reviewed_at    = db.Column(db.DateTime, nullable=True)
     reviewed_by    = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     admin_note     = db.Column(db.Text, nullable=True)
+    receipt_number = db.Column(db.String(30), nullable=True)    # assigned on approval, e.g. REC-2026-00042
+    source         = db.Column(db.String(20), default="upgrade")  # upgrade | registration
 
     user     = db.relationship("User", foreign_keys=[user_id])
     reviewer = db.relationship("User", foreign_keys=[reviewed_by])
@@ -170,6 +179,37 @@ class PaymentRequest(db.Model):
         except Exception:
             lang = "fr"
         return labels.get(lang, labels["fr"]).get(self.status, self.status)
+
+    def method_label(self):
+        labels = {
+            "fr": {"cash": "Espèces", "ccp": "Virement CCP"},
+            "en": {"cash": "Cash", "ccp": "CCP transfer"},
+            "ar": {"cash": "نقدًا", "ccp": "تحويل CCP"},
+        }
+        try:
+            from flask import session
+            lang = session.get("lang", "fr")
+        except Exception:
+            lang = "fr"
+        return labels.get(lang, labels["fr"]).get(self.method, self.method or "—")
+
+    def is_pending_overdue(self, hours=48):
+        if self.status != "pending":
+            return False
+        return (datetime.utcnow() - self.created_at) > timedelta(hours=hours)
+
+
+class PlanChangeHistory(db.Model):
+    """Audit trail of every plan transition for a teacher (upgrade, renewal,
+    manual admin change, or automatic downgrade at expiry)."""
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    from_plan  = db.Column(db.String(20), nullable=True)
+    to_plan    = db.Column(db.String(20), nullable=False)
+    reason     = db.Column(db.String(40), nullable=False)  # payment_approved | admin_manual | auto_downgrade | license_code
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User")
 
 
 class AdminLog(db.Model):
@@ -223,6 +263,24 @@ class LicenseCode(db.Model):
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
 
     used_by_user  = db.relationship("User", foreign_keys=[used_by])
+
+
+def next_receipt_number():
+    """Sequential, year-scoped receipt number: REC-2026-00001, REC-2026-00002, ..."""
+    year = datetime.utcnow().year
+    prefix = f"REC-{year}-"
+    last = (PaymentRequest.query
+            .filter(PaymentRequest.receipt_number.like(f"{prefix}%"))
+            .order_by(PaymentRequest.receipt_number.desc())
+            .first())
+    if last and last.receipt_number:
+        try:
+            n = int(last.receipt_number.rsplit("-", 1)[-1]) + 1
+        except ValueError:
+            n = 1
+    else:
+        n = 1
+    return f"{prefix}{n:05d}"
 
 
 def create_trial_subscription(user):

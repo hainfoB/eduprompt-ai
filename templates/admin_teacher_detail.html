@@ -11,7 +11,7 @@
 .plan-tag{padding:4px 10px;border-radius:7px;font-size:11px;font-weight:800;display:inline-block;margin-top:8px}
 .plan-trial{background:#fff7ed;color:#c2410c}
 .plan-pro{background:#ecfdf5;color:#065f46}
-.plan-premium{background:#f5f3ff;color:#6d28d9}
+.plan-ultimate{background:#f5f3ff;color:#6d28d9}
 
 .stat-mini-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:22px}
 .stat-mini{background:var(--paper);border-radius:12px;box-shadow:var(--shadow);padding:14px 16px}
@@ -154,6 +154,23 @@
       <div>{{ p.created_at.strftime('%d/%m/%Y') }}</div>
       <div>{{ p.plan }}</div>
       <div>{{ p.amount }} {{ p.currency }}</div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">—</div>
+    {% endif %}
+  </div>
+
+  <div class="section-title"><i class="bi bi-arrow-left-right"></i> {{ t.plan_history_title }}</div>
+  <div class="doc-table">
+    {% if plan_history %}
+    <div class="pay-row header"><div>#</div><div>{{ t.table_date }}</div><div>{{ t.plan_history_change }}</div><div>{{ t.plan_history_reason }}</div></div>
+    {% for h in plan_history %}
+    <div class="pay-row">
+      <div class="doc-num">{{ loop.index }}</div>
+      <div>{{ h.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
+      <div>{{ h.from_plan or "—" }} → {{ h.to_plan }}</div>
+      <div>{{ h.reason }}</div>
     </div>
     {% endfor %}
     {% else %}

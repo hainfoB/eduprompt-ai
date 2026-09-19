@@ -35,7 +35,7 @@
 .plan-tag{padding:3px 8px;border-radius:6px;font-size:10px;font-weight:800;text-align:center}
 .plan-trial{background:#fff7ed;color:#c2410c}
 .plan-pro{background:#ecfdf5;color:#065f46}
-.plan-premium{background:#f5f3ff;color:#6d28d9}
+.plan-ultimate{background:#f5f3ff;color:#6d28d9}
 .btn-mini{border:none;border-radius:7px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer}
 .btn-reset{background:var(--sky);color:var(--navy)}
 .btn-delete{background:#fef2f2;color:var(--red)}
@@ -91,7 +91,7 @@
           <select name="plan" class="form-select">
             <option value="trial">{{ t.plan_trial_option }}</option>
             <option value="pro">{{ t.plan_pro_option }}</option>
-            <option value="premium">{{ t.plan_premium_option }}</option>
+            <option value="ultimate">{{ t.plan_ultimate_option }}</option>
           </select>
         </div>
       </div>
@@ -115,7 +115,7 @@
         <option value="">{{ t.filter_all_plans }}</option>
         <option value="trial" {% if plan_filter=='trial' %}selected{% endif %}>{{ t.plan_trial_option }}</option>
         <option value="pro" {% if plan_filter=='pro' %}selected{% endif %}>{{ t.plan_pro_option }}</option>
-        <option value="premium" {% if plan_filter=='premium' %}selected{% endif %}>{{ t.plan_premium_option }}</option>
+        <option value="ultimate" {% if plan_filter=='ultimate' %}selected{% endif %}>{{ t.plan_ultimate_option }}</option>
       </select>
     </div>
     <button type="submit" class="btn-search"><i class="bi bi-search"></i> {{ t.btn_search }}</button>

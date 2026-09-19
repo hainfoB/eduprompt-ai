@@ -17,6 +17,19 @@
 .auth-switch{text-align:center;margin-top:20px;font-size:13px;color:var(--muted)}
 .auth-switch a{color:var(--orange);font-weight:700;text-decoration:none}
 .trial-badge{background:var(--sky);border:1px solid #c8ddf0;border-radius:10px;padding:10px 14px;font-size:12px;color:var(--navy2);margin-bottom:20px;display:flex;align-items:center;gap:8px}
+
+.plan-toggle{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:18px}
+.plan-opt{position:relative}
+.plan-opt input{position:absolute;opacity:0;inset:0;cursor:pointer;margin:0}
+.plan-opt span{display:block;text-align:center;padding:10px 4px;border-radius:10px;border:1.5px solid var(--line);font-size:12px;font-weight:700;color:var(--muted)}
+.plan-opt input:checked + span{border-color:var(--orange);background:#fff7ed;color:#c2410c}
+.payment-fields{display:none;background:var(--sky);border-radius:12px;padding:16px;margin-bottom:16px}
+.payment-fields.visible{display:block}
+.method-toggle{display:flex;gap:10px;margin:8px 0 12px}
+.method-opt{flex:1;position:relative}
+.method-opt input{position:absolute;opacity:0;inset:0;cursor:pointer;margin:0}
+.method-opt span{display:block;text-align:center;padding:9px;border-radius:9px;border:1.5px solid var(--line);font-size:12px;font-weight:700;color:var(--muted);background:#fff}
+.method-opt input:checked + span{border-color:var(--orange);background:#fff7ed;color:#c2410c}
 </style>
 {% endblock %}
 {% block content %}
@@ -31,7 +44,7 @@
       <i class="bi bi-gift-fill"></i>
       {{ t.trial_badge }}
     </div>
-    <form method="POST">
+    <form method="POST" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="row g-2">
         <div class="col-6">
@@ -63,8 +76,57 @@
           <a href="{{ url_for('home') }}#tuto" style="color:var(--orange);font-weight:600">↗</a>
         </div>
       </div>
+
+      <div class="form-group">
+        <label class="form-label">{{ t.label_choose_plan }}</label>
+        <div class="plan-toggle">
+          <label class="plan-opt">
+            <input type="radio" name="wanted_plan" value="trial" checked onclick="togglePaymentFields()">
+            <span>{{ t.plan_trial_name }}</span>
+          </label>
+          <label class="plan-opt">
+            <input type="radio" name="wanted_plan" value="pro" onclick="togglePaymentFields()">
+            <span>{{ t.plan_pro_name }}</span>
+          </label>
+          <label class="plan-opt">
+            <input type="radio" name="wanted_plan" value="ultimate" onclick="togglePaymentFields()">
+            <span>{{ t.plan_ultimate_name }}</span>
+          </label>
+        </div>
+      </div>
+
+      <div id="paymentFields" class="payment-fields">
+        <div style="font-size:12px;color:var(--navy2);margin-bottom:10px">{{ t.register_payment_hint }}</div>
+        <div class="method-toggle">
+          <label class="method-opt">
+            <input type="radio" name="method" value="cash" checked>
+            <span><i class="bi bi-cash"></i> {{ t.method_cash }}</span>
+          </label>
+          <label class="method-opt">
+            <input type="radio" name="method" value="ccp">
+            <span><i class="bi bi-bank"></i> {{ t.method_ccp }}</span>
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t.label_reference }} <span style="text-transform:none;font-weight:400">({{ t.reference_ccp_only }})</span></label>
+          <input type="text" name="reference" class="form-control" placeholder="{{ t.reference_placeholder }}"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">{{ t.label_receipt_upload }}</label>
+          <input type="file" name="receipt" class="form-control" accept="image/*,.pdf"/>
+        </div>
+      </div>
+
       <button type="submit" class="btn-auth"><i class="bi bi-rocket-takeoff-fill"></i> {{ t.btn_register }}</button>
     </form>
+    <script>
+    function togglePaymentFields(){
+      const paid = document.querySelector('input[name="wanted_plan"]:checked').value !== "trial";
+      const box = document.getElementById("paymentFields");
+      box.classList.toggle("visible", paid);
+      box.querySelector('input[name="receipt"]').required = paid;
+    }
+    </script>
     <div class="auth-switch">
       {{ t.already_account }} <a href="{{ url_for('login') }}">{{ t.login_link }}</a>
     </div>

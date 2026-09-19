@@ -15,10 +15,12 @@
 .plan-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;font-size:12px;font-weight:700}
 .plan-trial{background:#fff7ed;color:#c2410c}
 .plan-pro{background:#ecfdf5;color:#065f46}
-.plan-premium{background:#f5f3ff;color:#6d28d9}
+.plan-ultimate{background:#f5f3ff;color:#6d28d9}
 
 .progress-bar-wrap{background:var(--sky);border-radius:99px;height:8px;overflow:hidden;margin-top:10px}
 .progress-bar-fill{background:linear-gradient(90deg,var(--orange),var(--orange2));height:100%;border-radius:99px;transition:width .3s}
+.progress-bar-fill.warn{background:linear-gradient(90deg,#f59e0b,#dc2626)}
+.progress-bar-fill.crit{background:#dc2626}
 
 .upgrade-cta{background:linear-gradient(135deg,var(--navy3),var(--navy));border-radius:14px;padding:24px;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px;flex-wrap:wrap}
 .upgrade-cta h3{margin:0 0 4px;font-size:16px;font-weight:800}
@@ -60,13 +62,23 @@
   </div>
 
   {% set days_left = sub.days_until_expiry() %}
-  {% if days_left is not none and 0 <= days_left <= 5 %}
-  <div class="upgrade-cta" style="background:#fff7ed;color:#c2410c;margin-bottom:20px">
+  {% if days_left is not none and 0 <= days_left <= 7 and sub.plan != 'trial' %}
+  <div class="upgrade-cta" style="background:{{ '#fee2e2' if days_left <= 3 else '#fff7ed' }};color:{{ '#991b1b' if days_left <= 3 else '#c2410c' }};margin-bottom:20px">
     <div>
-      <h3 style="color:#c2410c">{{ t.expiry_banner_text.format(plan=sub.plan_label(), days=days_left) }}</h3>
+      <h3 style="color:inherit">
+        {% if days_left == 0 %}{{ t.expiry_banner_today.format(plan=sub.plan_label()) }}
+        {% else %}{{ t.expiry_banner_text.format(plan=sub.plan_label(), days=days_left) }}{% endif %}
+      </h3>
     </div>
-    <a href="mailto:{{ contact_email }}?subject={{ t.contact_us_subject_upgrade | urlencode }}" class="btn-upgrade">
-      <i class="bi bi-envelope-fill"></i> {{ t.expiry_banner_cta }}
+    <a href="{{ url_for('upgrade') }}" class="btn-upgrade">
+      <i class="bi bi-arrow-repeat"></i> {{ t.expiry_banner_cta }}
+    </a>
+  </div>
+  {% elif days_left is not none and days_left < 0 %}
+  <div class="upgrade-cta" style="background:#fee2e2;color:#991b1b;margin-bottom:20px">
+    <div><h3 style="color:inherit">{{ t.expiry_banner_expired }}</h3></div>
+    <a href="{{ url_for('upgrade') }}" class="btn-upgrade">
+      <i class="bi bi-arrow-repeat"></i> {{ t.expiry_banner_cta }}
     </a>
   </div>
   {% endif %}
@@ -88,12 +100,19 @@
       <div class="label">{{ t.stat_docs_remaining }}</div>
       <div class="value">{{ sub.remaining() }}{% if sub.is_daily_plan() %}/{{ sub.daily_limit() }}{% endif %}</div>
       {% if sub.plan == 'trial' %}
-      <div class="progress-bar-wrap">
-        <div class="progress-bar-fill" style="width:{{ (sub.docs_used / sub.docs_limit * 100) if sub.docs_limit else 0 }}%"></div>
-      </div>
-      <div class="sub">{{ sub.docs_used }} / {{ sub.docs_limit }} {{ t.stat_docs_used }}</div>
+        {% set used_pct = (sub.docs_used / sub.docs_limit * 100) if sub.docs_limit else 0 %}
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill {{ 'crit' if used_pct >= 100 else ('warn' if used_pct >= 70 else '') }}" style="width:{{ used_pct }}%"></div>
+        </div>
+        <div class="sub">{{ sub.docs_used }} / {{ sub.docs_limit }} {{ t.stat_docs_used }}</div>
+        {% if used_pct >= 70 %}<div class="sub" style="color:#c2410c;font-weight:700">{{ t.quota_warning_trial }}</div>{% endif %}
       {% else %}
-      <div class="sub">{{ t.quota_remaining_suffix }}</div>
+        {% set daily_used_pct = (sub.docs_used_today / sub.daily_limit() * 100) if sub.daily_limit() else 0 %}
+        <div class="progress-bar-wrap">
+          <div class="progress-bar-fill {{ 'crit' if daily_used_pct >= 100 else ('warn' if daily_used_pct >= 70 else '') }}" style="width:{{ daily_used_pct }}%"></div>
+        </div>
+        <div class="sub">{{ sub.docs_used_today }} / {{ sub.daily_limit() }} {{ t.quota_remaining_suffix }}</div>
+        {% if daily_used_pct >= 100 %}<div class="sub" style="color:#c2410c;font-weight:700">{{ t.quota_warning_daily_full }}</div>{% endif %}
       {% endif %}
     </div>
 

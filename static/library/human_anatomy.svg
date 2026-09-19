@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 560" width="400" height="560">
+  <rect width="400" height="560" fill="#ffffff"/>
+  <!-- Body silhouette -->
+  <path d="M200 30 c22 0 40 18 40 40 c0 14 -6 24 -14 32 c26 10 46 34 50 64 l10 90 c2 18 -12 32 -30 32 l-4 60 c14 4 24 16 24 30 v130 c0 16 -13 29 -29 29 h-94 c-16 0 -29 -13 -29 -29 v-130 c0 -14 10 -26 24 -30 l-4 -60 c-18 0 -32 -14 -30 -32 l10 -90 c4 -30 24 -54 50 -64 c-8 -8 -14 -18 -14 -32 c0 -22 18 -40 40 -40 z"
+        fill="#fde7d2" stroke="#c2410c" stroke-width="3"/>
+  <!-- Brain -->
+  <circle cx="200" cy="55" r="16" fill="#f4a58a" stroke="#c2410c" stroke-width="2"/>
+  <!-- Lungs -->
+  <path d="M172 150 c-18 -6 -32 8 -30 28 c2 18 16 30 30 26 z" fill="#f9c9d6" stroke="#c2410c" stroke-width="2"/>
+  <path d="M228 150 c18 -6 32 8 30 28 c-2 18 -16 30 -30 26 z" fill="#f9c9d6" stroke="#c2410c" stroke-width="2"/>
+  <!-- Heart -->
+  <path d="M200 165 c-8 -10 -24 -10 -26 4 c-2 12 10 22 26 34 c16 -12 28 -22 26 -34 c-2 -14 -18 -14 -26 -4 z" fill="#ef4444" stroke="#991b1b" stroke-width="2"/>
+  <!-- Liver -->
+  <path d="M178 210 c-14 4 -22 16 -20 28 l50 4 c4 -14 -2 -26 -14 -30 z" fill="#a16207" stroke="#78350f" stroke-width="2" opacity="0.85"/>
+  <!-- Stomach -->
+  <ellipse cx="180" cy="228" rx="14" ry="18" fill="#fb923c" stroke="#c2410c" stroke-width="2"/>
+  <!-- Intestines -->
+  <path d="M170 250 q15 10 0 20 q-15 10 0 20 q15 10 0 20 q15 10 30 0 q15 -10 0 -20 q-15 -10 0 -20 q15 -10 0 -20"
+        fill="none" stroke="#d97706" stroke-width="6" stroke-linecap="round"/>
+  <!-- Kidneys -->
+  <ellipse cx="155" cy="235" rx="7" ry="12" fill="#7f1d1d" opacity="0.8"/>
+  <ellipse cx="245" cy="235" rx="7" ry="12" fill="#7f1d1d" opacity="0.8"/>
+  <!-- Labels + leader lines -->
+  <g font-family="Arial, sans-serif" font-size="14" fill="#102a53">
+    <line x1="216" y1="55" x2="300" y2="45" stroke="#102a53" stroke-width="1.5"/>
+    <text x="305" y="49">Cerveau / Brain</text>
+
+    <line x1="255" y1="160" x2="320" y2="140" stroke="#102a53" stroke-width="1.5"/>
+    <text x="325" y="144">Poumons / Lungs</text>
+
+    <line x1="222" y1="185" x2="320" y2="185" stroke="#102a53" stroke-width="1.5"/>
+    <text x="325" y="189">Cœur / Heart</text>
+
+    <line x1="205" y1="215" x2="320" y2="222" stroke="#102a53" stroke-width="1.5"/>
+    <text x="325" y="226">Foie / Liver</text>
+
+    <line x1="194" y1="228" x2="320" y2="258" stroke="#102a53" stroke-width="1.5"/>
+    <text x="325" y="262">Estomac / Stomach</text>
+
+    <line x1="252" y1="235" x2="320" y2="292" stroke="#102a53" stroke-width="1.5"/>
+    <text x="325" y="296">Reins / Kidneys</text>
+
+    <line x1="200" y1="285" x2="320" y2="326" stroke="#102a53" stroke-width="1.5"/>
+    <text x="325" y="330">Intestins / Intestines</text>
+  </g>
+  <text x="200" y="545" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="bold" fill="#102a53">Schéma simplifié du corps humain — HaithemEduAI</text>
+</svg>

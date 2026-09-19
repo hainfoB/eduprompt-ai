@@ -34,7 +34,7 @@
       <select name="plan" class="form-select mb-2">
         <option value="trial" {% if sub and sub.plan=='trial' %}selected{% endif %}>{{ t.plan_trial_option }}</option>
         <option value="pro" {% if sub and sub.plan=='pro' %}selected{% endif %}>{{ t.plan_pro_option }}</option>
-        <option value="premium" {% if sub and sub.plan=='premium' %}selected{% endif %}>{{ t.plan_premium_option }}</option>
+        <option value="ultimate" {% if sub and sub.plan=='ultimate' %}selected{% endif %}>{{ t.plan_ultimate_option }}</option>
       </select>
 
       <label class="form-label" style="margin-top:12px">{{ t.profile_section_apikey }}</label>
