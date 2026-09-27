@@ -108,8 +108,8 @@
       <a href="{{ url_for('generator') if current_user.is_authenticated else url_for('register') }}" class="btn-lp-primary">
         <i class="bi bi-rocket-takeoff-fill"></i> {{ t.landing_hero_cta_primary }}
       </a>
-      <a href="#pricing" class="btn-lp-secondary">
-        <i class="bi bi-tag-fill"></i> {{ t.landing_hero_cta_secondary }}
+      <a href="#how" class="btn-lp-secondary">
+        <i class="bi bi-play-circle-fill"></i> {{ t.landing_hero_cta_secondary }}
       </a>
     </div>
     <div class="lp-hero-note">{{ t.landing_hero_note }}</div>
@@ -151,7 +151,7 @@
 </section>
 
 <!-- ══ HOW IT WORKS ══ -->
-<section class="lp-section" style="padding-top:0">
+<section class="lp-section" style="padding-top:0" id="how">
   <div class="lp-section-head">
     <h2>{{ t.landing_how_title }}</h2>
   </div>
@@ -163,59 +163,20 @@
   </div>
 </section>
 
-<!-- ══ TUTORIAL: Google AI Studio key ══ -->
-<!-- ══ PRICING ══ -->
-<section class="lp-section" id="pricing">
-  <div class="lp-section-head">
-    <h2>{{ t.landing_pricing_title }}</h2>
-    <p>{{ t.landing_pricing_subtitle }}</p>
-  </div>
-  <div class="lp-pricing-grid">
-    <div class="lp-price-card">
-      <h3>{{ t.price_trial_name }}</h3>
-      <div class="lp-price-value">{{ t.price_trial_price }}</div>
-      <div class="lp-price-period">{{ t.price_trial_period }}</div>
-      <ul class="lp-price-features">
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_trial_f1 }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_trial_f2 }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_trial_f3 }}</li>
-      </ul>
-      <a href="{{ url_for('register') }}" class="btn-price outline">
-        <i class="bi bi-arrow-right-circle"></i> {{ t.price_trial_cta }}
-      </a>
-    </div>
-    <div class="lp-price-card">
-      <h3>{{ t.price_pro_name }}</h3>
-      <div class="lp-price-value">{{ t.price_pro_price }}</div>
-      <div class="lp-price-period">{{ t.price_pro_period }}</div>
-      <ul class="lp-price-features">
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_pro_f1 }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_pro_f2 }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_pro_f3 }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_pro_f4 }}</li>
-      </ul>
-      <a href="mailto:{{ contact_email }}?subject={{ t.contact_us_subject_upgrade | urlencode }}" class="btn-price primary">
-        <i class="bi bi-envelope-fill"></i> {{ t.price_pro_cta }}
-      </a>
-    </div>
-    <div class="lp-price-card featured">
-      <span class="lp-price-badge">{{ t.price_popular_badge }}</span>
-      <h3>{{ t.price_ultimate_name }}</h3>
-      <div class="lp-price-value">{{ t.price_ultimate_price }}</div>
-      <div class="lp-price-period">{{ t.price_ultimate_period }}</div>
-      <ul class="lp-price-features">
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_ultimate_f1 }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_ultimate_f2 }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_ultimate_f3 }}</li>
-        <li><i class="bi bi-check-circle-fill"></i> {{ t.price_ultimate_f4 }}</li>
-      </ul>
-      <a href="mailto:{{ contact_email }}?subject={{ t.contact_us_subject_upgrade | urlencode }}" class="btn-price primary">
-        <i class="bi bi-envelope-fill"></i> {{ t.price_ultimate_cta }}
-      </a>
-    </div>
-  </div>
-  <div class="lp-price-note">
-    <i class="bi bi-info-circle"></i> {{ t.price_subscribe_note }}
+<!-- ══ FREE START (prices are shown only after the free quota) ══ -->
+<section class="lp-section" id="start">
+  <div class="lp-price-card featured" style="max-width:560px;margin:0 auto;transform:none">
+    <span class="lp-price-badge" style="align-self:center">{{ t.landing_start_badge }}</span>
+    <h3 style="font-size:24px">{{ t.landing_start_title }}</h3>
+    <div class="lp-price-period" style="font-size:14px">{{ t.landing_start_subtitle }}</div>
+    <ul class="lp-price-features">
+      <li><i class="bi bi-check-circle-fill"></i> {{ t.landing_start_f1 }}</li>
+      <li><i class="bi bi-check-circle-fill"></i> {{ t.landing_start_f2 }}</li>
+      <li><i class="bi bi-check-circle-fill"></i> {{ t.landing_start_f3 }}</li>
+    </ul>
+    <a href="{{ url_for('generator') if current_user.is_authenticated else url_for('register') }}" class="btn-price primary">
+      <i class="bi bi-rocket-takeoff-fill"></i> {{ t.landing_hero_cta_primary }}
+    </a>
   </div>
 </section>
 
