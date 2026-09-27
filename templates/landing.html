@@ -202,6 +202,13 @@
   </div>
   <div class="demo-card">
     <div class="demo-form">
+      <div class="demo-lesson">
+        <span class="demo-label">{{ t.register_profile_label }}</span>
+        <div class="demo-profile" role="radiogroup">
+          <label><input type="radio" name="demoProfile" value="teacher" checked onchange="demoProfileChanged()"><span><i class="bi bi-person-video3"></i> {{ t.profile_teacher }}</span></label>
+          <label><input type="radio" name="demoProfile" value="parent" onchange="demoProfileChanged()"><span><i class="bi bi-people-fill"></i> {{ t.profile_parent }}</span></label>
+        </div>
+      </div>
       <div>
         <label class="demo-label" for="demoLevel">{{ t.demo_level }}</label>
         <select id="demoLevel" class="form-select">
@@ -230,7 +237,7 @@
       <div class="demo-cta">
         <h3>{{ t.demo_cta_title }}</h3>
         <p>{{ t.demo_cta_desc }}</p>
-        <a href="{{ url_for('generator') if current_user.is_authenticated else url_for('register') }}" class="btn-price primary" style="max-width:360px;margin:0 auto">
+        <a id="demoCta" href="{{ url_for('generator') if current_user.is_authenticated else url_for('register') }}" data-parent-href="{{ url_for('generator') if current_user.is_authenticated else url_for('register', profile='parent') }}" data-teacher-href="{{ url_for('generator') if current_user.is_authenticated else url_for('register') }}" class="btn-price primary" style="max-width:360px;margin:0 auto">
           <i class="bi bi-file-earmark-word-fill"></i> {{ t.demo_cta_btn }}
         </a>
       </div>
@@ -245,6 +252,12 @@
 .demo-btn{grid-column:1 / -1;padding:14px;font-size:15px}
 .demo-card .form-control,.demo-card .form-select{display:block;border:1.5px solid var(--line);border-radius:10px;padding:11px 14px;font-size:14px;width:100%;background:var(--ivory);color:var(--ink);font-family:inherit}
 .demo-card .form-control:focus,.demo-card .form-select:focus{outline:none;border-color:var(--orange);background:#fff}
+.demo-profile{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.demo-profile label{position:relative;margin:0}
+.demo-profile input{position:absolute;opacity:0;inset:0;cursor:pointer;margin:0}
+.demo-profile span{display:block;text-align:center;padding:11px 6px;border-radius:10px;border:1.5px solid var(--line);font-size:14px;font-weight:700;color:var(--muted);background:var(--ivory)}
+.demo-profile input:checked + span{border-color:var(--orange);background:#fff7ed;color:#c2410c}
+.demo-profile input:focus-visible + span{outline:2px solid var(--orange);outline-offset:2px}
 .demo-label{display:block;font-size:12px;font-weight:800;color:var(--navy);margin-bottom:6px}
 .demo-error{display:none;margin-top:14px;background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;border-radius:10px;padding:10px 14px;font-size:13px}
 .demo-loading{display:none;margin-top:18px;text-align:center;color:var(--muted);font-size:13px;font-weight:600}
@@ -286,6 +299,14 @@ function demoMarkdown(md){
   }
   close(); return out.join("");
 }
+function demoProfile(){
+  const el=document.querySelector('input[name="demoProfile"]:checked'); return el ? el.value : "teacher";
+}
+function demoProfileChanged(){
+  const cta=document.getElementById("demoCta");
+  cta.href = demoProfile()==="parent" ? cta.dataset.parentHref : cta.dataset.teacherHref;
+  document.getElementById("demoResult").style.display="none";
+}
 async function runDemo(){
   const level=document.getElementById("demoLevel").value;
   const subject=document.getElementById("demoSubject").value;
@@ -297,7 +318,7 @@ async function runDemo(){
   btn.disabled=true; res.style.display="none"; load.style.display="block";
   try{
     const r=await fetch({{ url_for('api_demo') | tojson }},{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({lang:DEMO_LANG, level, subject, lesson})});
+      body:JSON.stringify({lang:DEMO_LANG, profile:demoProfile(), level, subject, lesson})});
     const data=await r.json().catch(()=>({}));
     if(!r.ok || !data.text){
       err.textContent = (r.status===429) ? DEMO_UI.limit : DEMO_UI.generic;

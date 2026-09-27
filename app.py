@@ -1525,6 +1525,25 @@ DEMO_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]
 DEMO_DAILY_CAP = int(os.environ.get("DEMO_DAILY_CAP", "300"))
 _demo_counter = {"day": None, "count": 0}
 
+_DEMO_PROMPT_PARENT = {
+    "fr": ("Tu aides un parent algérien à accompagner son enfant à la maison. Rédige un "
+           "APERÇU COURT de fiche de révision (300 mots maximum), en français, pour un enfant "
+           "de niveau « {level} », matière « {subject} », leçon « {lesson} », conforme au "
+           "programme algérien. Mots simples, ton bienveillant. Structure en Markdown : "
+           "## titre, ### L'essentiel (3 puces), ### Un exemple du quotidien, "
+           "### Mini-quiz (3 questions puis les réponses). Rien d'autre."),
+    "en": ("You help an Algerian parent support their child at home. Write a SHORT PREVIEW "
+           "of a revision sheet (300 words max), in English, for a child at level \"{level}\", "
+           "subject \"{subject}\", lesson \"{lesson}\", aligned with the Algerian curriculum. "
+           "Simple words, warm tone. Markdown structure: ## title, ### Key points (3 bullets), "
+           "### An everyday example, ### Mini-quiz (3 questions then the answers). Nothing else."),
+    "ar": ("أنت تساعد وليّ أمر جزائري على مرافقة طفله في البيت. اكتب معاينة مختصرة لبطاقة "
+           "مراجعة (300 كلمة كحد أقصى) باللغة العربية، لطفل في مستوى «{level}»، المادة "
+           "«{subject}»، الدرس «{lesson}»، مطابقة للمنهاج الجزائري. كلمات بسيطة وأسلوب لطيف. "
+           "البنية بصيغة Markdown: ## العنوان، ### الأهم (3 نقاط)، ### مثال من الحياة اليومية، "
+           "### اختبار قصير (3 أسئلة ثم الأجوبة). لا شيء غير ذلك."),
+}
+
 _DEMO_PROMPT = {
     "fr": ("Tu es un expert en ingénierie pédagogique en Algérie. Rédige un APERÇU COURT "
            "de fiche de cours (350 mots maximum), en français, niveau « {level} », matière "
@@ -1567,7 +1586,8 @@ def api_demo():
         return jsonify({"error": "busy"}), 429
     _demo_counter["count"] += 1
 
-    prompt = _DEMO_PROMPT[lang].format(level=level, subject=subject, lesson=lesson)
+    templates = _DEMO_PROMPT_PARENT if data.get("profile") == "parent" else _DEMO_PROMPT
+    prompt = templates[lang].format(level=level, subject=subject, lesson=lesson)
     body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"maxOutputTokens": 1200, "temperature": 0.7}}
     for model in DEMO_MODELS:
