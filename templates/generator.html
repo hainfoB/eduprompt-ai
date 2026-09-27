@@ -119,7 +119,7 @@
   <div class="card-shell">
     <div class="card-header-bar">
       <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-      <span>{{ t.gen_card_header }}</span>
+      <span>{{ t.gen_card_header_parent if is_parent else t.gen_card_header }}</span>
     </div>
     <div class="card-body-inner">
 
@@ -136,7 +136,7 @@
       {% endif %}
 
       <div class="section-block">
-        <div class="section-title"><i class="bi bi-person-badge-fill"></i> {{ t.section_teacher }}</div>
+        <div class="section-title"><i class="bi bi-person-badge-fill"></i> {{ t.section_parent if is_parent else t.section_teacher }}</div>
         <div class="row g-2 mb-2">
           <div class="col-sm-6">
             <div class="form-group mb-0">
@@ -151,7 +151,7 @@
             </div>
           </div>
         </div>
-        <div class="row g-2">
+        <div class="row g-2"{% if is_parent %} style="display:none"{% endif %}>
           <div class="col-sm-4">
             <div class="form-group mb-0">
               <label class="form-label">{{ t.label_etablissement }}</label>
@@ -477,11 +477,14 @@ const PROFILE_URL = {{ url_for('profile') | tojson }};
 const ALL_LEVELS = {{ levels | tojson }};
 const ALL_SUBJECTS = {{ subjects | tojson }};
 const ALL_DOC_TYPES = {{ doc_types | tojson }};
+const IS_PARENT = {{ (is_parent or False) | tojson }};
 let docLang = CURRENT_LANG;
 const DOC_ICONS = {
   lesson_plan:"bi-journal-text", activity:"bi-pencil", quiz:"bi-check2-square",
   rubric:"bi-grid-3x3-gap-fill", differentiated:"bi-layers-fill",
-  summary:"bi-card-text", course_plan:"bi-calendar3", homework:"bi-house-fill"
+  summary:"bi-card-text", course_plan:"bi-calendar3", homework:"bi-house-fill",
+  revision_sheet:"bi-journal-bookmark-fill", exercises_corrected:"bi-pencil-square",
+  simple_explanation:"bi-lightbulb-fill", exam_prep:"bi-award-fill"
 };
 
 const UI = {
@@ -511,7 +514,7 @@ const UI = {
   loader_visuals: {{ t.loader_visuals | tojson }},
 };
 
-let docType="lesson_plan", fmt="docx", lastContent="", sourcesContext="", lastVisuals=[];
+let docType=ALL_DOC_TYPES[CURRENT_LANG][0].id, fmt="docx", lastContent="", sourcesContext="", lastVisuals=[];
 let uploadedFiles=[];
 
 buildDocGrid();
@@ -522,7 +525,7 @@ loadQuota();
 function onDocLangChange(){
   docLang = document.getElementById("docLangSel").value;
   // Reset selections since option values change language
-  docType = "lesson_plan";
+  docType = ALL_DOC_TYPES[docLang][0].id;
   document.getElementById("levelSel").value = "";
   document.getElementById("subjectSel").value = "";
   buildDocGrid();
@@ -804,7 +807,53 @@ const NORMS_KIND = {
   quiz: "quality", rubric: "quality", summary: "quality",
 };
 
+// ── PARENT MODE: documents a parent uses to help their child at home ─────────
+const PARENT_TASKS = {
+  revision_sheet: {
+    fr: "Rédige une FICHE DE RÉVISION destinée à l'enfant, que le parent peut imprimer :\n1) L'essentiel à retenir, en phrases courtes et simples.\n2) Définitions et mots clés expliqués avec des mots d'enfant.\n3) 2 ou 3 exemples concrets tirés du quotidien algérien.\n4) Astuces pour mémoriser (moyens mnémotechniques, schéma simple).\n5) Mini-quiz de 5 questions, puis les réponses à la fin pour le parent.",
+    ar: "اكتب بطاقة مراجعة موجهة للطفل يمكن للولي طباعتها:\n1) أهم ما يجب حفظه، بجمل قصيرة وبسيطة.\n2) التعاريف والكلمات المفتاحية مشروحة بلغة يفهمها الطفل.\n3) مثالان أو ثلاثة من الحياة اليومية في الجزائر.\n4) حيل للحفظ (طرق تذكّر، مخطط بسيط).\n5) اختبار قصير من 5 أسئلة، ثم الأجوبة في النهاية للولي.",
+    en: "Write a REVISION SHEET for the child that the parent can print:\n1) The key points to remember, in short simple sentences.\n2) Definitions and key words explained in child-friendly words.\n3) 2 or 3 concrete examples from everyday Algerian life.\n4) Memory tips (mnemonics, a simple diagram).\n5) A 5-question mini-quiz, then the answers at the end for the parent.",
+  },
+  exercises_corrected: {
+    fr: "Rédige une SÉRIE D'EXERCICES pour l'enfant avec CORRIGÉ pour le parent :\n1) 8 à 10 exercices progressifs (facile, moyen, difficile), consignes claires, conformes au programme.\n2) Une partie « Corrigé » séparée à la fin, détaillée étape par étape.\n3) Pour chaque exercice, une phrase « Conseil au parent » : l'erreur fréquente à surveiller et comment aider sans donner la réponse.",
+    ar: "اكتب سلسلة تمارين للطفل مع التصحيح للولي:\n1) من 8 إلى 10 تمارين متدرجة (سهل، متوسط، صعب) بتعليمات واضحة ومطابقة للمنهاج.\n2) قسم «التصحيح» منفصل في النهاية، مفصّل خطوة بخطوة.\n3) لكل تمرين جملة «نصيحة للولي»: الخطأ الشائع الذي يجب الانتباه إليه وكيف يساعد دون إعطاء الجواب.",
+    en: "Write an EXERCISE SET for the child with an ANSWER KEY for the parent:\n1) 8 to 10 progressive exercises (easy, medium, hard), clear instructions, aligned with the curriculum.\n2) A separate detailed step-by-step \"Answer key\" section at the end.\n3) For each exercise, one \"Tip for the parent\" line: the common mistake to watch for and how to help without giving the answer.",
+  },
+  simple_explanation: {
+    fr: "Rédige une EXPLICATION SIMPLIFIÉE de la leçon, à lire avec l'enfant :\n1) Explique la notion comme à un enfant de ce niveau, avec des analogies du quotidien algérien.\n2) Découpe en petites étapes numérotées, une idée par étape.\n3) Un exemple résolu pas à pas.\n4) 3 questions pour vérifier que l'enfant a compris, avec les réponses attendues.\n5) Un encadré « Pour le parent » : comment expliquer autrement si l'enfant bloque.",
+    ar: "اكتب شرحاً مبسّطاً للدرس يُقرأ مع الطفل:\n1) اشرح المفهوم كما لو كنت تشرحه لطفل في هذا المستوى، بتشبيهات من الحياة اليومية في الجزائر.\n2) قسّمه إلى مراحل صغيرة مرقّمة، فكرة واحدة في كل مرحلة.\n3) مثال محلول خطوة بخطوة.\n4) 3 أسئلة للتأكد من فهم الطفل مع الأجوبة المنتظرة.\n5) فقرة «للولي»: كيف يشرح بطريقة أخرى إذا توقف الطفل.",
+    en: "Write a SIMPLE EXPLANATION of the lesson to read with the child:\n1) Explain the idea as you would to a child at this level, with analogies from everyday Algerian life.\n2) Break it into small numbered steps, one idea per step.\n3) One worked example, step by step.\n4) 3 questions to check the child understood, with expected answers.\n5) A \"For the parent\" box: how to explain it differently if the child gets stuck.",
+  },
+  exam_prep: {
+    fr: "Rédige un SUJET D'ENTRAÎNEMENT à l'examen, au format officiel algérien correspondant au niveau (examen de fin de cycle primaire, BEM pour le moyen, BAC pour le lycée ; sinon un devoir surveillé type) :\n1) Sujet complet avec parties et barème sur 20 (ou sur 10 au primaire), durée indiquée.\n2) Corrigé type détaillé avec la répartition des points.\n3) 5 conseils méthodologiques pour le jour de l'examen, adressés à l'élève.",
+    ar: "اكتب موضوعاً تدريبياً للامتحان بالصيغة الرسمية الجزائرية المناسبة للمستوى (امتحان نهاية المرحلة الابتدائية، شهادة التعليم المتوسط BEM، البكالوريا BAC؛ وإلا فرض محروس نموذجي):\n1) موضوع كامل بأجزائه وسلّم التنقيط على 20 (أو على 10 في الابتدائي) مع المدة.\n2) تصحيح نموذجي مفصّل مع توزيع النقاط.\n3) 5 نصائح منهجية ليوم الامتحان موجهة للتلميذ.",
+    en: "Write an EXAM PRACTICE PAPER in the official Algerian format matching the level (end-of-primary exam, BEM for middle school, BAC for high school; otherwise a typical class test):\n1) A full paper with parts and marking scheme out of 20 (or 10 in primary), with the duration.\n2) A detailed model answer with the points breakdown.\n3) 5 method tips for exam day, addressed to the student.",
+  },
+};
+
+function buildParentPrompt(level, palier, subject, lesson, dt, ctx){
+  const task = (PARENT_TASKS[dt] || PARENT_TASKS.revision_sheet)[docLang];
+  const intro = {
+    fr: `CONTEXTE : Un parent algérien veut aider son enfant à la maison. Niveau : ${level}${palier?", classe : "+palier:""}. Matière : ${subject}. Leçon : "${lesson}". Respecte strictement le programme officiel algérien en vigueur pour ce niveau. Le document s'adresse au parent et à l'enfant : ton bienveillant, vocabulaire simple, aucun jargon pédagogique.`,
+    ar: `السياق: وليّ أمر جزائري يريد مساعدة طفله في البيت. المستوى: ${level}${palier?"، القسم: "+palier:""}. المادة: ${subject}. الدرس: "${lesson}". احترم بدقة المنهاج الجزائري الرسمي الساري لهذا المستوى. الوثيقة موجهة للولي والطفل: أسلوب لطيف، مفردات بسيطة، دون مصطلحات بيداغوجية.`,
+    en: `CONTEXT: An Algerian parent wants to help their child at home. Level: ${level}${palier?", class: "+palier:""}. Subject: ${subject}. Lesson: "${lesson}". Strictly follow the current official Algerian curriculum for this level. The document is for the parent and the child: warm tone, simple words, no teaching jargon.`,
+  };
+  const sources = ctx && ctx.trim() ? {
+    fr: `\n\nCONTENU FOURNI PAR LE PARENT (cours de l'enfant, à utiliser comme référence principale) :\n${ctx}\n`,
+    ar: `\n\nمحتوى قدّمه الولي (درس الطفل، يُستعمل كمرجع أساسي):\n${ctx}\n`,
+    en: `\n\nCONTENT PROVIDED BY THE PARENT (the child's lesson, use as the primary reference):\n${ctx}\n`,
+  }[docLang] : "";
+  const format = {
+    fr: "Utilise # pour le titre principal et ## pour les parties. Quand un schéma simple aide à comprendre, insère [[MERMAID]]…[[/MERMAID]] ou [[IMAGE: courte description en anglais]] (2 visuels maximum).",
+    ar: "استخدم # للعنوان الرئيسي و## للأقسام. عندما يساعد رسم بسيط على الفهم، أدرج [[MERMAID]]…[[/MERMAID]] أو [[IMAGE: وصف قصير بالإنجليزية]] (عنصران بصريان كحد أقصى).",
+    en: "Use # for the main title and ## for sections. When a simple diagram helps, insert [[MERMAID]]…[[/MERMAID]] or [[IMAGE: short English description]] (2 visuals max).",
+  };
+  return [LANG_LOCK_TOP[docLang], intro[docLang], task, format[docLang], sources, LANG_LOCK_BOTTOM[docLang]]
+    .filter(Boolean).join("\n\n");
+}
+
 function buildPrompt(level, palier, subject, lesson, dt, ctx, etablissement, projet, activite){
+  if(IS_PARENT) return buildParentPrompt(level, palier, subject, lesson, dt, ctx);
   const docLabels={}; ALL_DOC_TYPES[docLang].forEach(d=>docLabels[d.id]=d.label);
   const docLabel=docLabels[dt]||dt;
 

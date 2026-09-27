@@ -34,6 +34,11 @@ class User(UserMixin, db.Model):
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     gemini_api_key = db.Column(db.String(255), nullable=True)
     preferred_lang = db.Column(db.String(5), default="fr")
+    profile = db.Column(db.String(10), default="teacher")  # "teacher" | "parent"
+
+    @property
+    def is_parent(self):
+        return self.profile == "parent"
     is_active      = db.Column(db.Boolean, default=True)  # soft-delete: False = deactivated account
 
     subscription  = db.relationship("Subscription", backref="user", uselist=False,

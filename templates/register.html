@@ -46,6 +46,20 @@
     </div>
     <form method="POST" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% set want_parent = (request.form.get('profile') or request.args.get('profile')) == 'parent' %}
+      <div class="form-group">
+        <label class="form-label">{{ t.register_profile_label }}</label>
+        <div class="plan-toggle" style="grid-template-columns:1fr 1fr">
+          <label class="plan-opt">
+            <input type="radio" name="profile" value="teacher" {% if not want_parent %}checked{% endif %}>
+            <span style="padding:12px 4px;font-size:13px"><i class="bi bi-person-video3"></i> {{ t.profile_teacher }}</span>
+          </label>
+          <label class="plan-opt">
+            <input type="radio" name="profile" value="parent" {% if want_parent %}checked{% endif %}>
+            <span style="padding:12px 4px;font-size:13px"><i class="bi bi-people-fill"></i> {{ t.profile_parent }}</span>
+          </label>
+        </div>
+      </div>
       <div class="row g-2">
         <div class="col-6">
           <div class="form-group">

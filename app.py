@@ -183,6 +183,7 @@ def _migrate_sqlite_schema():
                 "gemini_api_key": "VARCHAR(255)",
                 "preferred_lang": "VARCHAR(5) DEFAULT 'fr'",
                 "is_active": "BOOLEAN DEFAULT 1",
+                "profile": "VARCHAR(10) DEFAULT 'teacher'",
             },
             "payment_request": {
                 "method": "VARCHAR(10)",
@@ -338,6 +339,28 @@ DOCUMENT_TYPES = {
     ],
 }
 
+# Tools offered to parents (profile == "parent") instead of the teacher documents.
+PARENT_DOCUMENT_TYPES = {
+    "ar": [
+        {"id": "revision_sheet",      "label": "بطاقة مراجعة"},
+        {"id": "exercises_corrected", "label": "تمارين مع التصحيح"},
+        {"id": "simple_explanation",  "label": "شرح مبسّط للدرس"},
+        {"id": "exam_prep",           "label": "تحضير للامتحان"},
+    ],
+    "fr": [
+        {"id": "revision_sheet",      "label": "Fiche de révision"},
+        {"id": "exercises_corrected", "label": "Exercices + corrigé"},
+        {"id": "simple_explanation",  "label": "Explication simplifiée"},
+        {"id": "exam_prep",           "label": "Préparation aux examens"},
+    ],
+    "en": [
+        {"id": "revision_sheet",      "label": "Revision sheet"},
+        {"id": "exercises_corrected", "label": "Exercises + answer key"},
+        {"id": "simple_explanation",  "label": "Simple explanation"},
+        {"id": "exam_prep",           "label": "Exam preparation"},
+    ],
+}
+
 LEVELS = {
     "ar": ["ابتدائي","متوسط","ثانوي","تكوين مهني","جامعي"],
     "fr": ["Primaire","Moyen","Lycée","Formation professionnelle","Université"],
@@ -376,6 +399,7 @@ def register():
         password   = request.form.get("password", "")
         api_key    = request.form.get("api_key", "").strip()
         wanted_plan = request.form.get("wanted_plan", "trial").strip()
+        profile    = "parent" if request.form.get("profile") == "parent" else "teacher"
 
         if not all([first_name, last_name, email, password]):
             flash(tr("flash_all_fields_required"), "error")
@@ -399,7 +423,8 @@ def register():
                 return render_template("register.html")
 
         user = User(first_name=first_name, last_name=last_name, email=email,
-                    gemini_api_key=api_key or None, preferred_lang=current_lang())
+                    gemini_api_key=api_key or None, preferred_lang=current_lang(),
+                    profile=profile)
         user.set_password(password)
         db.session.add(user)
         db.session.flush()  # get user.id before commit
@@ -1380,8 +1405,10 @@ def admin_delete_teacher(user_id):
 @app.route("/generator")
 @login_required
 def generator():
-    return render_template("generator.html",
-                           levels=LEVELS, subjects=SUBJECTS, doc_types=DOCUMENT_TYPES)
+    is_parent = current_user.is_parent
+    return render_template("generator.html", levels=LEVELS, subjects=SUBJECTS,
+                           doc_types=PARENT_DOCUMENT_TYPES if is_parent else DOCUMENT_TYPES,
+                           is_parent=is_parent)
 
 
 # ── API: QUOTA CHECK ──────────────────────────────────────────────────────────

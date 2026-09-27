@@ -163,6 +163,37 @@
   </div>
 </section>
 
+<!-- ══ FOR PARENTS ══ -->
+<section class="lp-section" id="parents" style="padding-top:0">
+  <div class="lp-section-head">
+    <h2><i class="bi bi-people-fill" style="color:var(--orange)"></i> {{ t.landing_parents_title }}</h2>
+    <p>{{ t.landing_parents_subtitle }}</p>
+  </div>
+  <div class="lp-features-grid">
+    <div class="lp-feature-card">
+      <div class="lp-feature-icon"><i class="bi bi-journal-bookmark-fill"></i></div>
+      <h3>{{ t.parents_t1_title }}</h3><p>{{ t.parents_t1_desc }}</p>
+    </div>
+    <div class="lp-feature-card">
+      <div class="lp-feature-icon"><i class="bi bi-pencil-square"></i></div>
+      <h3>{{ t.parents_t2_title }}</h3><p>{{ t.parents_t2_desc }}</p>
+    </div>
+    <div class="lp-feature-card">
+      <div class="lp-feature-icon"><i class="bi bi-lightbulb-fill"></i></div>
+      <h3>{{ t.parents_t3_title }}</h3><p>{{ t.parents_t3_desc }}</p>
+    </div>
+    <div class="lp-feature-card">
+      <div class="lp-feature-icon"><i class="bi bi-award-fill"></i></div>
+      <h3>{{ t.parents_t4_title }}</h3><p>{{ t.parents_t4_desc }}</p>
+    </div>
+  </div>
+  <div style="text-align:center;margin-top:26px">
+    <a href="{{ url_for('generator') if current_user.is_authenticated else url_for('register', profile='parent') }}" class="btn-price primary" style="max-width:380px;padding:14px 22px">
+      <i class="bi bi-people-fill"></i> {{ t.landing_parents_cta }}
+    </a>
+  </div>
+</section>
+
 <!-- ══ LIVE DEMO (no account) ══ -->
 <section class="lp-section" id="demo">
   <div class="lp-section-head">
