@@ -377,7 +377,7 @@ def register():
         api_key    = request.form.get("api_key", "").strip()
         wanted_plan = request.form.get("wanted_plan", "trial").strip()
 
-        if not all([first_name, last_name, email, password, api_key]):
+        if not all([first_name, last_name, email, password]):
             flash(tr("flash_all_fields_required"), "error")
             return render_template("register.html")
 
@@ -399,7 +399,7 @@ def register():
                 return render_template("register.html")
 
         user = User(first_name=first_name, last_name=last_name, email=email,
-                    gemini_api_key=api_key, preferred_lang=current_lang())
+                    gemini_api_key=api_key or None, preferred_lang=current_lang())
         user.set_password(password)
         db.session.add(user)
         db.session.flush()  # get user.id before commit
@@ -1429,6 +1429,64 @@ def log_usage():
     db.session.commit()
 
     return jsonify({"ok": True, "remaining": sub.remaining()})
+
+
+# ── API: GEMINI PROXY (platform key — users no longer need their own) ────────
+# The browser never sees an API key: it posts the Gemini request body here and
+# the server forwards it with the teacher's personal key if they set one, or
+# the platform key (GEMINI_API_KEY env var) otherwise. The response is passed
+# back unchanged (same JSON shape and status), so client retry/fallback logic
+# keeps working as before.
+_GEMINI_MODEL_RE = re.compile(r"^gemini-[a-z0-9.\-]{1,60}$")
+
+
+def _ai_rate_key():
+    return f"user:{current_user.id}" if current_user.is_authenticated else get_remote_address()
+
+
+@app.route("/api/ai/generate", methods=["POST"])
+@login_required
+@csrf.exempt
+@limiter.limit("150/hour", key_func=_ai_rate_key)
+def ai_generate():
+    import requests as http
+
+    data = request.get_json(silent=True) or {}
+    model = str(data.get("model", ""))
+    contents = data.get("contents")
+    if not _GEMINI_MODEL_RE.match(model) or not isinstance(contents, list):
+        return jsonify({"error": {"message": "invalid request"}}), 400
+
+    personal_key = (current_user.gemini_api_key or "").strip()
+    api_key = personal_key or os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"error": {"message": "AI service not configured"}}), 503
+
+    # Generations billed on the platform key must respect the plan quota.
+    if not personal_key:
+        sub = current_user.subscription
+        if not sub or not sub.has_quota():
+            db.session.commit()
+            return jsonify({"error": {"message": "quota_exceeded"}}), 403
+
+    body = {"contents": contents}
+    if isinstance(data.get("generationConfig"), dict):
+        body["generationConfig"] = data["generationConfig"]
+
+    try:
+        resp = http.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+            json=body, timeout=180)
+    except http.RequestException:
+        return jsonify({"error": {"message": "upstream unavailable"}}), 503
+
+    status = resp.status_code
+    # Never let the platform key's auth errors look like the user's problem.
+    if not personal_key and status in (400, 401, 403) and "API key" in resp.text:
+        app.logger.error("Platform GEMINI_API_KEY rejected by Google: %s", resp.text[:300])
+        return jsonify({"error": {"message": "AI service temporarily unavailable"}}), 503
+    return app.response_class(resp.content, status=status, mimetype="application/json")
 
 
 # ── API: EXTRACT SOURCES (NotebookLM-style: files + links) ──────────────────
