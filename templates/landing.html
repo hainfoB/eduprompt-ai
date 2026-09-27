@@ -108,13 +108,134 @@
       <a href="{{ url_for('generator') if current_user.is_authenticated else url_for('register') }}" class="btn-lp-primary">
         <i class="bi bi-rocket-takeoff-fill"></i> {{ t.landing_hero_cta_primary }}
       </a>
-      <a href="#how" class="btn-lp-secondary">
-        <i class="bi bi-play-circle-fill"></i> {{ t.landing_hero_cta_secondary }}
+      <a href="#demo" class="btn-lp-secondary">
+        <i class="bi bi-magic"></i> {{ t.landing_hero_cta_secondary }}
       </a>
     </div>
     <div class="lp-hero-note">{{ t.landing_hero_note }}</div>
   </div>
 </section>
+
+<!-- ══ LIVE DEMO (no account) ══ -->
+<section class="lp-section" id="demo">
+  <div class="lp-section-head">
+    <h2><i class="bi bi-magic" style="color:var(--orange)"></i> {{ t.demo_title }}</h2>
+    <p>{{ t.demo_subtitle }}</p>
+  </div>
+  <div class="demo-card">
+    <div class="demo-form">
+      <div>
+        <label class="demo-label" for="demoLevel">{{ t.demo_level }}</label>
+        <select id="demoLevel" class="form-select">
+          {% for l in levels[lang] %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="demo-label" for="demoSubject">{{ t.demo_subject }}</label>
+        <select id="demoSubject" class="form-select">
+          {% for s in subjects[lang] %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="demo-lesson">
+        <label class="demo-label" for="demoLesson">{{ t.demo_lesson }}</label>
+        <input id="demoLesson" class="form-control" maxlength="120" placeholder="{{ t.demo_lesson_ph }}"/>
+      </div>
+      <button type="button" id="demoBtn" class="btn-price primary demo-btn" onclick="runDemo()">
+        <i class="bi bi-stars"></i> {{ t.demo_btn }}
+      </button>
+    </div>
+    <div id="demoError" class="demo-error" role="alert"></div>
+    <div id="demoLoading" class="demo-loading"><span class="demo-spin"></span> {{ t.demo_loading }}</div>
+    <div id="demoResult" class="demo-result">
+      <div id="demoText" class="demo-text"></div>
+      <div class="demo-fade"></div>
+      <div class="demo-cta">
+        <h3>{{ t.demo_cta_title }}</h3>
+        <p>{{ t.demo_cta_desc }}</p>
+        <a href="{{ url_for('generator') if current_user.is_authenticated else url_for('register') }}" class="btn-price primary" style="max-width:360px;margin:0 auto">
+          <i class="bi bi-file-earmark-word-fill"></i> {{ t.demo_cta_btn }}
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+.demo-card{background:var(--paper);border-radius:16px;box-shadow:var(--shadow2);padding:26px;max-width:900px;margin:0 auto}
+.demo-form{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:end}
+.demo-lesson{grid-column:1 / -1}
+.demo-btn{grid-column:1 / -1;padding:14px;font-size:15px}
+.demo-card .form-control,.demo-card .form-select{display:block;border:1.5px solid var(--line);border-radius:10px;padding:11px 14px;font-size:14px;width:100%;background:var(--ivory);color:var(--ink);font-family:inherit}
+.demo-card .form-control:focus,.demo-card .form-select:focus{outline:none;border-color:var(--orange);background:#fff}
+.demo-label{display:block;font-size:12px;font-weight:800;color:var(--navy);margin-bottom:6px}
+.demo-error{display:none;margin-top:14px;background:#fef2f2;border:1px solid #fca5a5;color:#991b1b;border-radius:10px;padding:10px 14px;font-size:13px}
+.demo-loading{display:none;margin-top:18px;text-align:center;color:var(--muted);font-size:13px;font-weight:600}
+.demo-spin{display:inline-block;width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--orange);border-radius:50%;animation:demospin .8s linear infinite;vertical-align:-3px;margin-inline-end:6px}
+@keyframes demospin{to{transform:rotate(360deg)}}
+.demo-result{display:none;margin-top:20px;position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.demo-text{padding:22px 24px;max-height:420px;overflow:hidden;font-size:14px;line-height:1.7;color:var(--ink)}
+.demo-text h3{font-size:18px;font-weight:800;color:var(--navy);margin:0 0 10px}
+.demo-text h4{font-size:15px;font-weight:800;color:var(--orange);margin:14px 0 6px}
+.demo-text ul,.demo-text ol{margin:0 0 8px;padding-inline-start:20px}
+.demo-fade{position:absolute;left:0;right:0;top:330px;height:95px;background:linear-gradient(transparent,var(--paper))}
+.demo-cta{background:var(--sky);text-align:center;padding:20px 22px 24px;position:relative}
+.demo-cta h3{font-size:17px;font-weight:800;color:var(--navy);margin:0 0 6px}
+.demo-cta p{font-size:13px;color:var(--muted);margin:0 0 14px}
+@media(max-width:640px){.demo-form{grid-template-columns:1fr}.demo-card{padding:18px}}
+</style>
+
+<script>
+const DEMO_LANG = {{ lang | tojson }};
+const DEMO_UI = {
+  need_lesson: {{ t.demo_err_fields | tojson }},
+  limit: {{ t.demo_err_limit | tojson }},
+  generic: {{ t.demo_err_generic | tojson }},
+};
+function demoEsc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function demoInline(s){return demoEsc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/\*(.+?)\*/g,"<i>$1</i>");}
+function demoMarkdown(md){
+  const out=[]; let list=null;
+  const close=()=>{ if(list){ out.push("</"+list+">"); list=null; } };
+  for(const raw of md.split(/\r?\n/)){
+    const line=raw.trim();
+    if(!line){ close(); continue; }
+    let m;
+    if((m=line.match(/^#{1,2}\s+(.*)/))){ close(); out.push("<h3>"+demoInline(m[1])+"</h3>"); }
+    else if((m=line.match(/^#{3,6}\s+(.*)/))){ close(); out.push("<h4>"+demoInline(m[1])+"</h4>"); }
+    else if((m=line.match(/^[-*•]\s+(.*)/))){ if(list!=="ul"){ close(); out.push("<ul>"); list="ul"; } out.push("<li>"+demoInline(m[1])+"</li>"); }
+    else if((m=line.match(/^\d+[.)]\s+(.*)/))){ if(list!=="ol"){ close(); out.push("<ol>"); list="ol"; } out.push("<li>"+demoInline(m[1])+"</li>"); }
+    else { close(); out.push("<p style=\"margin:0 0 8px\">"+demoInline(line)+"</p>"); }
+  }
+  close(); return out.join("");
+}
+async function runDemo(){
+  const level=document.getElementById("demoLevel").value;
+  const subject=document.getElementById("demoSubject").value;
+  const lesson=document.getElementById("demoLesson").value.trim();
+  const err=document.getElementById("demoError"), load=document.getElementById("demoLoading");
+  const res=document.getElementById("demoResult"), btn=document.getElementById("demoBtn");
+  err.style.display="none";
+  if(lesson.length<3){ err.textContent=DEMO_UI.need_lesson; err.style.display="block"; return; }
+  btn.disabled=true; res.style.display="none"; load.style.display="block";
+  try{
+    const r=await fetch({{ url_for('api_demo') | tojson }},{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({lang:DEMO_LANG, level, subject, lesson})});
+    const data=await r.json().catch(()=>({}));
+    if(!r.ok || !data.text){
+      err.textContent = (r.status===429) ? DEMO_UI.limit : DEMO_UI.generic;
+      err.style.display="block"; return;
+    }
+    try{ sessionStorage.setItem("demoDraft", JSON.stringify({level, subject, lesson})); }catch(e){}
+    document.getElementById("demoText").innerHTML=demoMarkdown(data.text);
+    res.style.display="block";
+    res.scrollIntoView({behavior:"smooth", block:"start"});
+  }catch(e){
+    err.textContent=DEMO_UI.generic; err.style.display="block";
+  }finally{
+    load.style.display="none"; btn.disabled=false;
+  }
+}
+</script>
 
 <!-- ══ FEATURES ══ -->
 <section class="lp-section">

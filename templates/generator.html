@@ -1060,5 +1060,14 @@ async function downloadDoc(){
     btn.disabled=false;
   }
 }
+
+// Prefill from the landing-page demo (visitor tried a lesson, then signed up)
+(function(){
+  let d=null; try{ d=JSON.parse(sessionStorage.getItem("demoDraft")||"null"); sessionStorage.removeItem("demoDraft"); }catch(e){}
+  if(!d) return;
+  const setSel=(id,v)=>{ const el=document.getElementById(id); if(el && [...el.options].some(o=>o.value===v)){ el.value=v; el.dispatchEvent(new Event("change")); } };
+  setSel("levelSel", d.level); setSel("subjectSel", d.subject);
+  const li=document.getElementById("lessonInput"); if(li && d.lesson) li.value=d.lesson;
+})();
 </script>
 {% endblock %}

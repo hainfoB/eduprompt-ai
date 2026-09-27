@@ -354,7 +354,7 @@ SUBJECTS = {
 # ── AUTH ROUTES ───────────────────────────────────────────────────────────────
 @app.route("/")
 def home():
-    return render_template("landing.html")
+    return render_template("landing.html", levels=LEVELS, subjects=SUBJECTS)
 
 
 @app.route("/about")
@@ -1487,6 +1487,78 @@ def ai_generate():
         app.logger.error("Platform GEMINI_API_KEY rejected by Google: %s", resp.text[:300])
         return jsonify({"error": {"message": "AI service temporarily unavailable"}}), 503
     return app.response_class(resp.content, status=status, mimetype="application/json")
+
+
+# ── API: PUBLIC DEMO (show value before signup) ─────────────────────────────
+# Anonymous visitors can generate ONE short lesson preview from the landing
+# page. The prompt is built server-side from whitelisted fields only, so this
+# endpoint cannot be used as a general-purpose Gemini proxy. Cost is bounded
+# by a per-IP limit plus a global daily cap.
+DEMO_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]
+DEMO_DAILY_CAP = int(os.environ.get("DEMO_DAILY_CAP", "300"))
+_demo_counter = {"day": None, "count": 0}
+
+_DEMO_PROMPT = {
+    "fr": ("Tu es un expert en ingénierie pédagogique en Algérie. Rédige un APERÇU COURT "
+           "de fiche de cours (350 mots maximum), en français, niveau « {level} », matière "
+           "« {subject} », leçon « {lesson} ». Structure en Markdown : ## titre, ### Objectifs "
+           "(3 puces), ### Déroulement (3 étapes courtes), ### Activité (1 exercice). "
+           "Pas d'introduction ni de conclusion hors structure."),
+    "en": ("You are an instructional design expert in Algeria. Write a SHORT PREVIEW of a "
+           "lesson plan (350 words max), in English, level \"{level}\", subject \"{subject}\", "
+           "lesson \"{lesson}\". Markdown structure: ## title, ### Objectives (3 bullets), "
+           "### Lesson flow (3 short steps), ### Activity (1 exercise). Nothing outside it."),
+    "ar": ("أنت خبير في الهندسة البيداغوجية في الجزائر. اكتب معاينة مختصرة لمذكرة درس "
+           "(350 كلمة كحد أقصى) باللغة العربية، المستوى «{level}»، المادة «{subject}»، "
+           "الدرس «{lesson}». البنية بصيغة Markdown: ## العنوان، ### الأهداف (3 نقاط)، "
+           "### سير الدرس (3 مراحل قصيرة)، ### نشاط (تمرين واحد). لا شيء خارج هذه البنية."),
+}
+
+
+@app.route("/api/demo", methods=["POST"])
+@csrf.exempt
+@limiter.limit("3/day;2/hour", deduct_when=lambda response: response.status_code == 200)
+def api_demo():
+    import requests as http
+
+    data = request.get_json(silent=True) or {}
+    lang = data.get("lang") if data.get("lang") in LEVELS else current_lang()
+    level = str(data.get("level", "")).strip()
+    subject = str(data.get("subject", "")).strip()
+    lesson = " ".join(str(data.get("lesson", "")).split())[:120]
+    if level not in LEVELS[lang] or subject not in SUBJECTS[lang] or len(lesson) < 3:
+        return jsonify({"error": "invalid"}), 400
+
+    api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"error": "unavailable"}), 503
+
+    today = datetime.utcnow().date()
+    if _demo_counter["day"] != today:
+        _demo_counter.update(day=today, count=0)
+    if _demo_counter["count"] >= DEMO_DAILY_CAP:
+        return jsonify({"error": "busy"}), 429
+    _demo_counter["count"] += 1
+
+    prompt = _DEMO_PROMPT[lang].format(level=level, subject=subject, lesson=lesson)
+    body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": 1200, "temperature": 0.7}}
+    for model in DEMO_MODELS:
+        try:
+            resp = http.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                json=body, timeout=60)
+        except http.RequestException:
+            continue
+        if resp.status_code != 200:
+            continue
+        try:
+            text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+        except (ValueError, KeyError, IndexError, TypeError):
+            continue
+        return jsonify({"text": text})
+    return jsonify({"error": "unavailable"}), 503
 
 
 # ── API: EXTRACT SOURCES (NotebookLM-style: files + links) ──────────────────
