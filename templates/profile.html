@@ -45,7 +45,7 @@
 
   <div class="pf-card">
     <h3><i class="bi bi-key-fill"></i> {{ t.profile_section_apikey }}</h3>
-    <p style="font-size:12px;color:var(--muted);margin:-8px 0 14px">{{ t.apikey_stored_note }}</p>
+    <p style="font-size:12px;color:var(--muted);margin:-8px 0 14px">{{ t.apikey_profile_hint }}</p>
     <form method="POST">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="update_apikey"/>

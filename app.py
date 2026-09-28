@@ -533,10 +533,10 @@ def profile():
 
         elif action == "update_apikey":
             api_key = request.form.get("api_key", "").strip()
-            if api_key:
-                current_user.gemini_api_key = api_key
-                db.session.commit()
-                flash(tr("flash_apikey_updated"), "success")
+            # Empty field = go back to the AI service included with the platform.
+            current_user.gemini_api_key = api_key or None
+            db.session.commit()
+            flash(tr("flash_apikey_updated" if api_key else "flash_apikey_removed"), "success")
 
         return redirect(url_for("profile"))
 
@@ -1485,35 +1485,67 @@ def ai_generate():
         return jsonify({"error": {"message": "invalid request"}}), 400
 
     personal_key = (current_user.gemini_api_key or "").strip()
-    api_key = personal_key or os.environ.get("GEMINI_API_KEY", "").strip()
-    if not api_key:
+    platform_key = os.environ.get("GEMINI_API_KEY", "").strip()
+    if not personal_key and not platform_key:
         return jsonify({"error": {"message": "AI service not configured"}}), 503
-
-    # Generations billed on the platform key must respect the plan quota.
-    if not personal_key:
-        sub = current_user.subscription
-        if not sub or not sub.has_quota():
-            db.session.commit()
-            return jsonify({"error": {"message": "quota_exceeded"}}), 403
 
     body = {"contents": contents}
     if isinstance(data.get("generationConfig"), dict):
         body["generationConfig"] = data["generationConfig"]
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
+    def call(key):
+        return http.post(url, headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                         json=body, timeout=180)
+
+    # 1) Older accounts may still have their own key: try it first (free for us).
+    if personal_key:
+        try:
+            resp = call(personal_key)
+        except http.RequestException:
+            resp = None
+        if resp is not None and not _personal_key_failed(resp):
+            return app.response_class(resp.content, status=resp.status_code, mimetype="application/json")
+        # The personal key is invalid, revoked or out of quota: fall back silently
+        # to the platform key so the user never sees an API-key problem again.
+        if resp is not None and _personal_key_invalid(resp):
+            current_user.gemini_api_key = None  # broken for good: stop retrying it
+            db.session.commit()
+            app.logger.info("Cleared invalid personal Gemini key for user %s", current_user.id)
+        if not platform_key:
+            if resp is None:
+                return jsonify({"error": {"message": "upstream unavailable"}}), 503
+            return app.response_class(resp.content, status=resp.status_code, mimetype="application/json")
+
+    # 2) Platform key: billed to us, so the plan quota applies.
+    sub = current_user.subscription
+    if not sub or not sub.has_quota():
+        db.session.commit()
+        return jsonify({"error": {"message": "quota_exceeded"}}), 403
     try:
-        resp = http.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-            json=body, timeout=180)
+        resp = call(platform_key)
     except http.RequestException:
         return jsonify({"error": {"message": "upstream unavailable"}}), 503
 
-    status = resp.status_code
     # Never let the platform key's auth errors look like the user's problem.
-    if not personal_key and status in (400, 401, 403) and "API key" in resp.text:
+    if resp.status_code in (400, 401, 403) and "API key" in resp.text:
         app.logger.error("Platform GEMINI_API_KEY rejected by Google: %s", resp.text[:300])
         return jsonify({"error": {"message": "AI service temporarily unavailable"}}), 503
-    return app.response_class(resp.content, status=status, mimetype="application/json")
+    return app.response_class(resp.content, status=resp.status_code, mimetype="application/json")
+
+
+def _personal_key_invalid(resp):
+    """Google says the key itself is bad (wrong, deleted, API disabled)."""
+    if resp.status_code not in (400, 401, 403):
+        return False
+    text = resp.text
+    return ("API key" in text or "API_KEY" in text or "PERMISSION_DENIED" in text
+            or "SERVICE_DISABLED" in text or resp.status_code == 401)
+
+
+def _personal_key_failed(resp):
+    """Any failure that is the personal key's fault: invalid, or its own quota is exhausted."""
+    return _personal_key_invalid(resp) or resp.status_code == 429
 
 
 # ── API: PUBLIC DEMO (show value before signup) ─────────────────────────────
