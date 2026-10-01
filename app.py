@@ -40,6 +40,7 @@ from translations import get_translations, TRANSLATIONS
 from notifications import (check_and_send_expiry_reminders, send_email, send_activation_nudges,
                            smtp_configured, NUDGE_MAX_AGE_DAYS, NUDGE_STAGES)
 from itsdangerous import URLSafeSerializer, BadSignature
+from email_templates import nudge_email
 
 SUPPORTED_LANGS = ("ar", "fr", "en")
 
@@ -2722,7 +2723,11 @@ def admin_emails():
     if request.method == "POST":
         action = request.form.get("action")
         if action == "test":
-            ok = send_email(current_user.email, tr("email_test_subject"), tr("email_test_body"))
+            # The test sends the real first follow-up, so the admin sees exactly what teachers get.
+            subject, html, body = nudge_email(1, session.get("lang") or current_user.preferred_lang or "fr",
+                                              current_user.first_name, f"{APP_URL}/generator",
+                                              optout_link(current_user))
+            ok = send_email(current_user.email, "[Test] " + subject, body, html)
             flash(tr("flash_email_test_ok" if ok else "flash_email_test_fail").format(email=current_user.email),
                   "success" if ok else "error")
         elif action == "run":

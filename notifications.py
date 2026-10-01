@@ -6,11 +6,12 @@ from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 
 from translations import get_translations
+from email_templates import nudge_email
 
 REMINDER_STAGES = (7, 3, 0)  # days-before-expiry checkpoints, in order
 
 
-def _send_via_brevo(to_email, subject, body):
+def _send_via_brevo(to_email, subject, body, html=None):
     """Send through Brevo's HTTPS API. Railway blocks outbound SMTP on the
     Free/Trial/Hobby plans, so an HTTP email API is the only route there."""
     sender = os.environ.get("EMAIL_FROM") or os.environ.get("SMTP_FROM") or os.environ.get("SMTP_USER")
@@ -20,6 +21,8 @@ def _send_via_brevo(to_email, subject, body):
         "subject": subject,
         "textContent": body,
     }
+    if html:
+        payload["htmlContent"] = html
     req = urllib.request.Request(
         "https://api.brevo.com/v3/smtp/email", data=json.dumps(payload).encode("utf-8"),
         headers={"api-key": os.environ["BREVO_API_KEY"], "Content-Type": "application/json",
@@ -38,13 +41,13 @@ def _send_via_brevo(to_email, subject, body):
     return ok
 
 
-def send_email(to_email, subject, body):
+def send_email(to_email, subject, body, html=None):
     """Send a plain-text email via SMTP. Returns True on success.
     Requires SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD env vars.
     Degrades gracefully (logs + returns False) if not configured, so the
     app never crashes for lack of email credentials."""
     if os.environ.get("BREVO_API_KEY"):
-        return _send_via_brevo(to_email, subject, body)
+        return _send_via_brevo(to_email, subject, body, html)
     host = os.environ.get("SMTP_HOST")
     port = os.environ.get("SMTP_PORT")
     user = os.environ.get("SMTP_USER")
@@ -56,7 +59,13 @@ def send_email(to_email, subject, body):
         return False
 
     try:
-        msg = MIMEText(body, "plain", "utf-8")
+        if html:
+            from email.mime.multipart import MIMEMultipart
+            msg = MIMEMultipart("alternative")
+            msg.attach(MIMEText(body, "plain", "utf-8"))
+            msg.attach(MIMEText(html, "html", "utf-8"))
+        else:
+            msg = MIMEText(body, "plain", "utf-8")
         msg["Subject"] = subject
         msg["From"] = sender
         msg["To"] = to_email
@@ -201,11 +210,9 @@ def send_activation_nudges(app, db, User, Document, base_url, make_optout_link, 
             stage = max(due) if due else 0
             if stage <= (user.nudge_stage or 0):
                 continue
-            t = get_translations(user.preferred_lang or "fr")
-            body = t[f"email_nudge{stage}_body"].format(
-                name=user.first_name, link=f"{base_url}/generator",
-                optout=make_optout_link(user))
-            if send_email(user.email, t[f"email_nudge{stage}_subject"], body):
+            subject, html, body = nudge_email(stage, user.preferred_lang or "fr", user.first_name,
+                                              f"{base_url}/generator", make_optout_link(user))
+            if send_email(user.email, subject, body, html):
                 user.nudge_stage = stage
                 sent += 1
                 if track_event:
