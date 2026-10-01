@@ -1,5 +1,7 @@
 import os
+import json
 import smtplib
+import urllib.request
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 
@@ -8,11 +10,41 @@ from translations import get_translations
 REMINDER_STAGES = (7, 3, 0)  # days-before-expiry checkpoints, in order
 
 
+def _send_via_brevo(to_email, subject, body):
+    """Send through Brevo's HTTPS API. Railway blocks outbound SMTP on the
+    Free/Trial/Hobby plans, so an HTTP email API is the only route there."""
+    sender = os.environ.get("EMAIL_FROM") or os.environ.get("SMTP_FROM") or os.environ.get("SMTP_USER")
+    payload = {
+        "sender": {"email": sender, "name": os.environ.get("EMAIL_FROM_NAME", "HaithemEduAI")},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "textContent": body,
+    }
+    req = urllib.request.Request(
+        "https://api.brevo.com/v3/smtp/email", data=json.dumps(payload).encode("utf-8"),
+        headers={"api-key": os.environ["BREVO_API_KEY"], "Content-Type": "application/json",
+                 "Accept": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            ok = 200 <= r.status < 300
+    except urllib.error.HTTPError as e:
+        print(f"❌ Brevo refused email to {to_email}: {e.code} {e.read()[:300]!r}")
+        return False
+    except Exception as e:
+        print(f"❌ Failed to send email to {to_email} via Brevo: {e}")
+        return False
+    if ok:
+        print(f"✅ Email sent to {to_email} (Brevo)")
+    return ok
+
+
 def send_email(to_email, subject, body):
     """Send a plain-text email via SMTP. Returns True on success.
     Requires SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD env vars.
     Degrades gracefully (logs + returns False) if not configured, so the
     app never crashes for lack of email credentials."""
+    if os.environ.get("BREVO_API_KEY"):
+        return _send_via_brevo(to_email, subject, body)
     host = os.environ.get("SMTP_HOST")
     port = os.environ.get("SMTP_PORT")
     user = os.environ.get("SMTP_USER")
@@ -140,6 +172,8 @@ NUDGE_MAX_AGE_DAYS = 14             # older sign-ups are left alone
 
 
 def smtp_configured():
+    if os.environ.get("BREVO_API_KEY"):
+        return True
     return all(os.environ.get(k) for k in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD"))
 
 
