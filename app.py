@@ -194,6 +194,8 @@ def _migrate_sqlite_schema():
                 "expiry_reminder_sent": "BOOLEAN DEFAULT 0",
                 "last_reminder_stage": "INTEGER",
                 "bonus_docs": "INTEGER DEFAULT 0",
+                "bonus_expires_at": "DATETIME",
+                "bonus_renewed": "BOOLEAN DEFAULT 0",
             },
             "user": {
                 "gemini_api_key": "VARCHAR(255)",
@@ -204,6 +206,7 @@ def _migrate_sqlite_schema():
                 "referral_code": "VARCHAR(12)",
                 "referred_by_id": "INTEGER",
                 "referral_rewarded": "BOOLEAN DEFAULT 0",
+                "referral_docs_earned": "INTEGER DEFAULT 0",
             },
             "payment_request": {
                 "method": "VARCHAR(10)",
@@ -329,9 +332,20 @@ def track(event, profile=None, user_id=None):
 
 
 # ── REFERRAL PROGRAM ("invite a colleague") ─────────────────────────────────
-REFERRAL_BONUS_INVITEE = 3   # extra documents for the invited person, at signup
-REFERRAL_BONUS_REFERRER = 3  # extra documents for the inviter, at the invitee's 1st document
-REFERRAL_MAX_REWARDS = 20    # cap per inviter, to limit abuse with fake accounts
+# Rewards stay small and short-lived so they push towards a paid plan instead of
+# replacing it. Every bonus is valid REFERRAL_BONUS_DAYS, extendable once.
+REFERRAL_BONUS_INVITEE = 1   # welcome gift for the invited person, at signup
+REFERRAL_BONUS_DAYS = 30
+# Inviter reward, granted when the invitee generates a first document:
+# (documents per invitee, lifetime cap of documents earned this way)
+REFERRAL_REWARDS = {"free": (1, 3), "paid": (3, 9)}
+
+
+def referral_terms(user):
+    """(docs per invitee, lifetime cap) for this inviter, from their current plan."""
+    sub = user.subscription
+    paid = bool(sub and sub.plan in ("pro", "ultimate") and not sub.is_expired())
+    return REFERRAL_REWARDS["paid" if paid else "free"]
 _REF_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I confusion
 
 
@@ -367,13 +381,16 @@ def reward_referrer_if_due(user):
     user.referral_rewarded = True
     if not referrer or not referrer.subscription:
         return
-    rewarded = User.query.filter_by(referred_by_id=referrer.id, referral_rewarded=True).count()
-    if rewarded > REFERRAL_MAX_REWARDS:  # this user already counted above
-        return
-    referrer.subscription.bonus_docs = (referrer.subscription.bonus_docs or 0) + REFERRAL_BONUS_REFERRER
+    per_invitee, cap = referral_terms(referrer)
+    n = min(per_invitee, cap - (referrer.referral_docs_earned or 0))
+    if n <= 0:
+        return  # cap reached: the invitation still counts, but earns nothing more
+    referrer.referral_docs_earned = (referrer.referral_docs_earned or 0) + n
+    referrer.subscription.add_bonus(n, days=REFERRAL_BONUS_DAYS)
     lang = referrer.preferred_lang or "fr"
     db.session.add(Message(user_id=referrer.id, sender="admin", body=tr_lang(
-        lang, "referral_reward_message", name=user.first_name, n=REFERRAL_BONUS_REFERRER)))
+        lang, "referral_reward_message", name=user.first_name, n=n,
+        date=referrer.subscription.bonus_expires_at.strftime("%d/%m/%Y"))))
     db.session.add(FunnelEvent(event="referral_reward", profile=referrer.profile,
                                source=referrer.signup_source, user_id=referrer.id))
 
@@ -557,7 +574,7 @@ def register():
         referrer = pending_referrer()
         if referrer and referrer.email != email:
             user.referred_by_id = referrer.id
-            user.subscription.bonus_docs = (user.subscription.bonus_docs or 0) + REFERRAL_BONUS_INVITEE
+            user.subscription.add_bonus(REFERRAL_BONUS_INVITEE, days=REFERRAL_BONUS_DAYS)
             session.pop("ref", None)
 
         if wanted_plan in ("pro", "ultimate"):
@@ -625,11 +642,15 @@ def dashboard():
                                                  read_by_teacher=False).count()
     invited = User.query.filter_by(referred_by_id=current_user.id).count()
     invited_active = User.query.filter_by(referred_by_id=current_user.id, referral_rewarded=True).count()
+    per_invitee, cap = referral_terms(current_user)
     return render_template("dashboard.html", sub=sub, docs=recent_docs,
                             recent_messages=recent_messages, unread_admin_msgs=unread_admin_msgs,
                             ref_link=referral_link(current_user), ref_invited=invited,
-                            ref_active=invited_active, ref_bonus=REFERRAL_BONUS_REFERRER,
-                            ref_bonus_invitee=REFERRAL_BONUS_INVITEE)
+                            ref_active=invited_active, ref_bonus=per_invitee, ref_cap=cap,
+                            ref_cap_people=cap // per_invitee,
+                            ref_cap_reached=(current_user.referral_docs_earned or 0) >= cap,
+                            ref_bonus_invitee=REFERRAL_BONUS_INVITEE, ref_days=REFERRAL_BONUS_DAYS,
+                            ref_paid_terms=REFERRAL_REWARDS["paid"])
 
 
 # ── PROFILE (self-service) ───────────────────────────────────────────────────

@@ -41,6 +41,7 @@ class User(UserMixin, db.Model):
     referral_code = db.Column(db.String(12), unique=True, nullable=True, index=True)
     referred_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     referral_rewarded = db.Column(db.Boolean, default=False)
+    referral_docs_earned = db.Column(db.Integer, default=0)  # lifetime, as inviter (capped)
 
     @property
     def is_parent(self):
@@ -75,8 +76,11 @@ class Subscription(db.Model):
     docs_limit = db.Column(db.Integer, default=TRIAL_DOCS)      # trial: total docs cap
 
     # Extra documents earned (referral program). Used only once the normal
-    # quota is exhausted, and still usable after the plan has expired.
+    # quota is exhausted. They are valid for one month; the validity can be
+    # extended once (by a new reward earned while they are still valid).
     bonus_docs = db.Column(db.Integer, default=0)
+    bonus_expires_at = db.Column(db.DateTime, nullable=True)
+    bonus_renewed = db.Column(db.Boolean, default=False)
 
     # Daily quota tracking (used for pro / premium plans)
     docs_used_today  = db.Column(db.Integer, default=0)
@@ -112,8 +116,28 @@ class Subscription(db.Model):
         # trial (or any other non-daily plan): total cap
         return (self.docs_used or 0) < (self.docs_limit or 0)
 
+    def valid_bonus(self):
+        """Bonus documents still usable (0 once their validity has passed)."""
+        if not self.bonus_docs or not self.bonus_expires_at:
+            return 0
+        return self.bonus_docs if datetime.utcnow() < self.bonus_expires_at else 0
+
+    def add_bonus(self, n, days=30):
+        """Credit n bonus documents. A fresh grant is valid `days`; a grant made
+        while bonuses are still valid extends their validity once, then never again."""
+        now = datetime.utcnow()
+        if not self.valid_bonus():
+            self.bonus_docs = n                 # expired leftovers are dropped
+            self.bonus_expires_at = now + timedelta(days=days)
+            self.bonus_renewed = False
+        else:
+            self.bonus_docs += n
+            if not self.bonus_renewed:
+                self.bonus_expires_at = now + timedelta(days=days)
+                self.bonus_renewed = True
+
     def has_quota(self):
-        return self._plan_has_quota() or (self.bonus_docs or 0) > 0
+        return self._plan_has_quota() or self.valid_bonus() > 0
 
     def plan_remaining(self):
         if self.is_expired():
@@ -124,7 +148,7 @@ class Subscription(db.Model):
         return max(0, (self.docs_limit or 0) - (self.docs_used or 0))
 
     def remaining(self):
-        return self.plan_remaining() + (self.bonus_docs or 0)
+        return self.plan_remaining() + self.valid_bonus()
 
     def register_usage(self):
         """Call after a successful generation: plan quota first, then bonus documents."""
@@ -133,7 +157,7 @@ class Subscription(db.Model):
                 self.docs_used_today += 1
             else:
                 self.docs_used = (self.docs_used or 0) + 1
-        elif (self.bonus_docs or 0) > 0:
+        elif self.valid_bonus() > 0:
             self.bonus_docs -= 1
 
     def days_until_expiry(self):

@@ -127,8 +127,12 @@
     <div class="ref-top">
       <div class="ref-icon"><i class="bi bi-gift-fill"></i></div>
       <div>
-        <h3>{{ t.referral_title.format(n=ref_bonus) }}</h3>
-        <p>{{ t.referral_desc.format(n=ref_bonus, m=ref_bonus_invitee) }}</p>
+        <h3>{{ (t.referral_title_one if ref_bonus == 1 else t.referral_title).format(n=ref_bonus) }}</h3>
+        <p>{{ t.referral_desc.format(n=ref_bonus, m=ref_bonus_invitee, cap=ref_cap, people=ref_cap_people, days=ref_days) }}</p>
+        {% if ref_cap_reached %}<p style="margin-top:6px;color:#c2410c;font-weight:700">{{ t.referral_cap_reached }}</p>{% endif %}
+        {% if sub.plan not in ['pro', 'ultimate'] %}
+        <p style="margin-top:6px"><a href="{{ url_for('upgrade') }}" style="color:var(--orange);font-weight:800">{{ t.referral_upsell.format(n=ref_paid_terms[0], cap=ref_paid_terms[1]) }}</a></p>
+        {% endif %}
       </div>
     </div>
     <div class="ref-link-row">
@@ -143,7 +147,7 @@
     <div class="ref-stats">
       <div><b>{{ ref_invited }}</b><span>{{ t.referral_stat_invited }}</span></div>
       <div><b>{{ ref_active }}</b><span>{{ t.referral_stat_active }}</span></div>
-      <div><b>{{ sub.bonus_docs or 0 }}</b><span>{{ t.referral_stat_bonus }}</span></div>
+      <div><b>{{ sub.valid_bonus() }}</b><span>{{ t.referral_stat_bonus }}{% if sub.valid_bonus() %}<br>{{ t.referral_valid_until }} {{ sub.bonus_expires_at.strftime('%d/%m') }}{% endif %}</span></div>
     </div>
   </div>
 
