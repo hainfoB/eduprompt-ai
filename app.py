@@ -70,6 +70,9 @@ app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-in-pr
 DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
 os.makedirs(DATA_DIR, exist_ok=True)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(DATA_DIR, "eduprompt.db")
+# The server handles several requests at once (threads): wait for a lock
+# instead of failing, and use WAL so readers never block on a writer.
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"connect_args": {"timeout": 30}}
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAX_CONTENT_LENGTH"] = 15 * 1024 * 1024  # 15 MB uploads
 
@@ -245,6 +248,15 @@ def _migrate_sqlite_schema():
 
 
 with app.app_context():
+    from sqlalchemy import event as _sa_event
+
+    @_sa_event.listens_for(db.engine, "connect")
+    def _sqlite_pragmas(dbapi_conn, _record):
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA busy_timeout=30000")
+        cur.close()
+
     db.create_all()
     _migrate_sqlite_schema()
 
