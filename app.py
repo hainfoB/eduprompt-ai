@@ -7,7 +7,7 @@ import string
 from datetime import datetime, timedelta
 
 from flask import (Flask, render_template, request, jsonify, send_file, redirect, url_for, flash,
-                   session, after_this_request)
+                   session, after_this_request, abort)
 
 from flask_login import (LoginManager, login_user, logout_user, login_required,
                           current_user)
@@ -37,7 +37,9 @@ from models import (db, User, Subscription, Document, LicenseCode, Payment, Mess
 from werkzeug.utils import secure_filename
 from utils import build_sources_context
 from translations import get_translations, TRANSLATIONS
-from notifications import check_and_send_expiry_reminders, send_email
+from notifications import (check_and_send_expiry_reminders, send_email, send_activation_nudges,
+                           smtp_configured, NUDGE_MAX_AGE_DAYS, NUDGE_STAGES)
+from itsdangerous import URLSafeSerializer, BadSignature
 
 SUPPORTED_LANGS = ("ar", "fr", "en")
 
@@ -94,6 +96,8 @@ def save_receipt_file(file_storage, user_id):
     return secure_filename(fname)
 
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "haithemcomputing@gmail.com")
+# Public address used in emails sent by the scheduler (no request to read it from).
+APP_URL = os.environ.get("APP_URL", "https://eduprompt-web-production.up.railway.app").rstrip("/")
 
 db.init_app(app)
 csrf = CSRFProtect(app)
@@ -212,6 +216,8 @@ def _migrate_sqlite_schema():
                 "referred_by_id": "INTEGER",
                 "referral_rewarded": "BOOLEAN DEFAULT 0",
                 "referral_docs_earned": "INTEGER DEFAULT 0",
+                "nudge_stage": "INTEGER DEFAULT 0",
+                "email_optout": "BOOLEAN DEFAULT 0",
             },
             "document": {
                 "content": "TEXT",
@@ -503,6 +509,27 @@ def _backup_job():
         print(f"⚠️  Database backup failed: {e}")
 
 
+# ── ACTIVATION FOLLOW-UP EMAILS ──────────────────────────────────────────────
+def _optout_serializer():
+    return URLSafeSerializer(app.config["SECRET_KEY"], salt="email-optout")
+
+
+def optout_link(user):
+    return f"{APP_URL}/email/stop/{_optout_serializer().dumps(user.id)}"
+
+
+def _nudge_tracked(user, stage):
+    db.session.add(FunnelEvent(event=f"nudge_{stage}", profile=user.profile,
+                               source=user.signup_source, user_id=user.id))
+
+
+def _nudge_job():
+    try:
+        send_activation_nudges(app, db, User, Document, APP_URL, optout_link, _nudge_tracked)
+    except Exception as e:  # never let it crash the scheduler
+        print(f"⚠️  Activation emails failed: {e}")
+
+
 # ── DAILY REMINDER SCHEDULER (5-day heads-up before subscription expiry) ─────
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -519,6 +546,8 @@ try:
         # No recent backup (first deploy, or the app was down at 03:17): take one now.
         _scheduler.add_job(_backup_job, "date", run_date=datetime.now() + timedelta(seconds=60),
                            id="db_backup_catchup", replace_existing=True)
+    _scheduler.add_job(_nudge_job, "interval", hours=1, id="activation_nudges",
+                       replace_existing=True)
     _scheduler.start()
     print("✅ Expiry reminder scheduler started")
 except Exception as e:
@@ -2667,6 +2696,57 @@ def rate_document(doc_id):
     doc.rated_at = datetime.utcnow()
     db.session.commit()
     return jsonify({"ok": True})
+
+
+# ── Follow-up emails: unsubscribe link + admin page ──────────────────────────
+@app.route("/email/stop/<token>")
+def email_optout(token):
+    try:
+        uid = _optout_serializer().loads(token)
+    except BadSignature:
+        abort(404)
+    user = db.session.get(User, uid)
+    if user:
+        user.email_optout = True
+        db.session.commit()
+    flash(tr("flash_email_optout"), "success")
+    return redirect(url_for("home"))
+
+
+@app.route("/admin/emails", methods=["GET", "POST"])
+@login_required
+def admin_emails():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "test":
+            ok = send_email(current_user.email, tr("email_test_subject"), tr("email_test_body"))
+            flash(tr("flash_email_test_ok" if ok else "flash_email_test_fail").format(email=current_user.email),
+                  "success" if ok else "error")
+        elif action == "run":
+            n = send_activation_nudges(app, db, User, Document, APP_URL, optout_link, _nudge_tracked)
+            flash(tr("flash_nudges_sent").format(n=n), "success")
+        return redirect(url_for("admin_emails"))
+    now = datetime.utcnow()
+    base = User.query.filter(User.role == "user")
+    stats = []
+    for stage, hours in NUDGE_STAGES:
+        sent_q = base.filter(User.nudge_stage >= stage)
+        sent = sent_q.count()
+        activated = sent_q.filter(User.documents.any()).count()
+        stats.append({"stage": stage, "hours": hours, "sent": sent, "activated": activated})
+    pending = base.filter(User.is_active.is_(True),
+                          db.or_(User.email_optout.is_(False), User.email_optout.is_(None)),
+                          User.created_at >= now - timedelta(days=NUDGE_MAX_AGE_DAYS),
+                          User.created_at <= now - timedelta(hours=NUDGE_STAGES[0][1]),
+                          ~User.documents.any(),
+                          db.or_(User.nudge_stage.is_(None), User.nudge_stage < len(NUDGE_STAGES))).count()
+    missing = [k for k in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD") if not os.environ.get(k)]
+    optouts = base.filter(User.email_optout.is_(True)).count()
+    return render_template("admin_emails.html", configured=smtp_configured(), missing=missing,
+                           stats=stats, pending=pending, optouts=optouts)
 
 
 if __name__ == "__main__":

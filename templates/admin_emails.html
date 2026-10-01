@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ t.emails_title }}{% endblock %}
+{% block extra_head %}
+<style>
+.em-wrap{max-width:860px;margin:32px auto;padding:0 max(4vw,16px)}
+.em-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:6px}
+.em-head h1{font-size:22px;font-weight:800;color:var(--navy);margin:0}
+.em-sub{font-size:13px;color:var(--muted);margin:0 0 20px;line-height:1.6}
+.em-pill{font-size:12px;font-weight:700;padding:8px 14px;border-radius:9px;text-decoration:none;background:var(--paper);color:var(--navy);border:1.5px solid var(--line)}
+.em-status{border-radius:12px;padding:14px 16px;font-size:13px;line-height:1.6;margin-bottom:20px}
+.em-status.ok{background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46}
+.em-status.ko{background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12}
+.em-status code{background:rgba(0,0,0,.06);padding:1px 6px;border-radius:5px;direction:ltr}
+.em-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px}
+.em-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:18px}
+.em-card .label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.em-card .value{font-size:26px;font-weight:800;color:var(--navy)}
+.em-card .hint{font-size:12px;color:var(--muted);margin-top:4px}
+.em-actions{display:flex;gap:10px;flex-wrap:wrap}
+.em-btn{display:inline-flex;align-items:center;gap:8px;border:none;border-radius:10px;padding:12px 18px;font-size:14px;font-weight:800;cursor:pointer;min-height:44px;color:#fff}
+.em-btn.navy{background:var(--navy)}.em-btn.orange{background:var(--orange)}
+.em-btn:disabled{opacity:.45;cursor:not-allowed}
+</style>
+{% endblock %}
+{% block content %}
+<div class="em-wrap">
+  <div class="em-head">
+    <h1><i class="bi bi-envelope-paper-heart-fill" style="color:var(--orange)"></i> {{ t.emails_title }}</h1>
+    <a href="{{ url_for('admin_stats') }}" class="em-pill"><i class="bi bi-arrow-left-short"></i> {{ t.stats_title }}</a>
+  </div>
+  <p class="em-sub">{{ t.emails_subtitle }}</p>
+
+  {% if configured %}
+  <div class="em-status ok"><b><i class="bi bi-check-circle-fill"></i> {{ t.emails_smtp_ok }}</b></div>
+  {% else %}
+  <div class="em-status ko"><b><i class="bi bi-exclamation-triangle-fill"></i> {{ t.emails_smtp_missing }}</b><br>
+    {% for k in missing %}<code>{{ k }}</code> {% endfor %}<br>{{ t.emails_smtp_help }}</div>
+  {% endif %}
+
+  <div class="em-grid">
+    {% for s in stats %}
+    <div class="em-card"><div class="label">{{ t.emails_stage_label.format(h=s.hours) }}</div>
+      <div class="value">{{ s.sent }}</div>
+      <div class="hint">{{ t.emails_activated.format(n=s.activated) }}</div></div>
+    {% endfor %}
+    <div class="em-card"><div class="label">{{ t.emails_pending }}</div><div class="value">{{ pending }}</div></div>
+    <div class="em-card"><div class="label">{{ t.emails_optouts }}</div><div class="value">{{ optouts }}</div></div>
+  </div>
+
+  <form method="POST" class="em-actions">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="em-btn navy" name="action" value="test" {% if not configured %}disabled{% endif %}><i class="bi bi-send-check-fill"></i> {{ t.emails_test_btn }}</button>
+    <button class="em-btn orange" name="action" value="run" {% if not configured %}disabled{% endif %}><i class="bi bi-lightning-charge-fill"></i> {{ t.emails_run_btn }}</button>
+  </form>
+</div>
+{% endblock %}

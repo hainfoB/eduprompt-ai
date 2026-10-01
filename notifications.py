@@ -132,3 +132,51 @@ def check_and_send_expiry_reminders(app, db, User, Subscription, contact_email):
                                                          email=contact_email))
 
         db.session.commit()
+
+
+# ── Activation follow-up: sign-ups who never generated a document ────────────
+NUDGE_STAGES = ((1, 24), (2, 72))   # (stage, hours after sign-up)
+NUDGE_MAX_AGE_DAYS = 14             # older sign-ups are left alone
+
+
+def smtp_configured():
+    return all(os.environ.get(k) for k in ("SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD"))
+
+
+def send_activation_nudges(app, db, User, Document, base_url, make_optout_link, track_event=None):
+    """Email users who signed up but never generated a document: a first nudge
+    24 h after sign-up, a second one at 72 h. Only the most advanced stage due is
+    sent (never two emails in one run). Nothing is marked as sent when SMTP is
+    not configured, so the follow-up starts as soon as it is."""
+    if not smtp_configured():
+        return 0
+    sent = 0
+    with app.app_context():
+        now = datetime.utcnow()
+        candidates = User.query.filter(
+            User.role == "user",
+            User.is_active.is_(True),
+            db.or_(User.email_optout.is_(False), User.email_optout.is_(None)),
+            User.created_at >= now - timedelta(days=NUDGE_MAX_AGE_DAYS),
+            User.created_at <= now - timedelta(hours=NUDGE_STAGES[0][1]),
+            ~User.documents.any(),
+        ).all()
+        for user in candidates:
+            age_h = (now - user.created_at).total_seconds() / 3600
+            due = [st for st, h in NUDGE_STAGES if age_h >= h]
+            stage = max(due) if due else 0
+            if stage <= (user.nudge_stage or 0):
+                continue
+            t = get_translations(user.preferred_lang or "fr")
+            body = t[f"email_nudge{stage}_body"].format(
+                name=user.first_name, link=f"{base_url}/generator",
+                optout=make_optout_link(user))
+            if send_email(user.email, t[f"email_nudge{stage}_subject"], body):
+                user.nudge_stage = stage
+                sent += 1
+                if track_event:
+                    track_event(user, stage)
+        db.session.commit()
+    if sent:
+        print(f"✅ Activation emails sent: {sent}")
+    return sent

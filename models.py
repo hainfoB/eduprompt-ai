@@ -42,6 +42,10 @@ class User(UserMixin, db.Model):
     referred_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     referral_rewarded = db.Column(db.Boolean, default=False)
     referral_docs_earned = db.Column(db.Integer, default=0)  # lifetime, as inviter (capped)
+    # Activation follow-up for sign-ups who never generated a document:
+    # 0 = nothing sent, 1 = 24 h email sent, 2 = 72 h email sent.
+    nudge_stage = db.Column(db.Integer, default=0)
+    email_optout = db.Column(db.Boolean, default=False)  # unsubscribed from follow-up emails
 
     @property
     def is_parent(self):
