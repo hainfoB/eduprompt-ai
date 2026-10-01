@@ -473,6 +473,7 @@ async function resolveVisuals(rawText){
 const CURRENT_LANG = {{ lang | tojson }};
 const CONTACT_EMAIL = {{ contact_email | tojson }};
 const AI_ENDPOINT = {{ url_for('ai_generate') | tojson }};
+const AI_STREAM_ENDPOINT = {{ url_for('ai_stream') | tojson }};
 const REFERRAL_URL = {{ (url_for('dashboard') ~ '#parrainage') | tojson }};
 const PROFILE_URL = {{ url_for('profile') | tojson }};
 const ALL_LEVELS = {{ levels | tojson }};
@@ -929,15 +930,51 @@ const sleep = ms => new Promise(r=>setTimeout(r,ms));
 const MAX_OUTPUT_TOKENS = 8192;
 const MAX_CONTINUATIONS = 3; // safety cap so a runaway document can't loop forever
 
-async function callOneModel(model, contents, retries=3){
+// Reads Gemini's server-sent events as they arrive; onPartial(text) receives
+// the text written so far, so the document appears progressively.
+async function readGeminiStream(res, onPartial){
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "", text = "", finishReason = "STOP";
+  while(true){
+    const {done, value} = await reader.read();
+    if(done) break;
+    buffer += decoder.decode(value, {stream:true});
+    let nl;
+    while((nl = buffer.indexOf("\n")) >= 0){
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if(!line.startsWith("data:")) continue;
+      let evt; try{ evt = JSON.parse(line.slice(5).trim()); }catch(e){ continue; }
+      const cand = evt.candidates?.[0];
+      const parts = cand?.content?.parts || [];
+      for(const p of parts){ if(p.text) text += p.text; }
+      if(cand?.finishReason) finishReason = cand.finishReason;
+      if(onPartial && parts.length) onPartial(text);
+    }
+  }
+  return {text, finishReason};
+}
+
+async function callOneModel(model, contents, retries=3, onPartial=null){
   for(let attempt=0; attempt<retries; attempt++){
     let res;
     try{
-      res=await fetch(AI_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},
+      res=await fetch(AI_STREAM_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({model, contents, generationConfig:{maxOutputTokens:MAX_OUTPUT_TOKENS,temperature:0.85}})});
     }catch(e){ throw {type:"network", msg:e.message}; }
 
     if(res.ok){
+      if((res.headers.get("Content-Type")||"").includes("event-stream") && res.body){
+        try{
+          return await readGeminiStream(res, onPartial);
+        }catch(e){
+          // Connection dropped mid-document: try again from the start.
+          updateLoaderMsg(`⏳ ${UI.loader_overload} 2s…`);
+          await sleep(2000);
+          continue;
+        }
+      }
       const data=await res.json();
       const candidate = data.candidates?.[0];
       return {
@@ -962,7 +999,7 @@ async function callOneModel(model, contents, retries=3){
   throw {type:"skip", msg:"Max retries reached on "+model};
 }
 
-async function callGemini(prompt){
+async function callGemini(prompt, onLive=null){
   let lastMsg="";
   for(const model of GEMINI_MODELS){
     updateLoaderMsg(`${UI.loader_trying_model} ${model}…`);
@@ -972,7 +1009,9 @@ async function callGemini(prompt){
       let round = 0;
 
       while(true){
-        const {text, finishReason} = await callOneModel(model, contents);
+        const before = fullText;
+        const {text, finishReason} = await callOneModel(model, contents, 3,
+          onLive ? (partial => onLive(before + partial)) : null);
         fullText += text;
 
         if(finishReason !== "MAX_TOKENS" || round >= MAX_CONTINUATIONS) break;
@@ -994,6 +1033,22 @@ async function callGemini(prompt){
     }
   }
   throw new Error(lastMsg);
+}
+
+// Shows the document while it is being written (at most ~4 refreshes/second).
+// Diagram/image tags are shown as placeholders until they are drawn at the end.
+let _liveTimer = null, _liveText = "";
+function liveRender(text){
+  _liveText = text;
+  if(_liveTimer) return;
+  _liveTimer = setTimeout(()=>{
+    _liveTimer = null;
+    const preview = _liveText
+      .replace(/\[\[MERMAID\]\][\s\S]*?(\[\[\/MERMAID\]\]|$)/g, "\n\n📊 …\n\n")
+      .replace(/\[\[IMAGE:[^\]]*(\]\]|$)/g, "🖼️ …");
+    updateLoaderMsg(UI.loader_writing);
+    renderContent(preview);
+  }, 250);
 }
 
 // Report a failure to the server so the admin can count and diagnose them.
@@ -1040,7 +1095,8 @@ async function generate(){
     const projet = document.getElementById("projetInput").value.trim();
     const activite = document.getElementById("activiteInput").value.trim();
     const prompt=buildPrompt(level, palier, subject, lesson, docType, sourcesContext, etablissement, projet, activite);
-    const rawText=await callGemini(prompt);
+    const rawText=await callGemini(prompt, liveRender);
+    clearTimeout(_liveTimer); _liveTimer = null;
 
     updateLoaderMsg(UI.loader_visuals || UI.loader_writing);
     const {text, visuals} = await resolveVisuals(rawText);
@@ -1059,6 +1115,7 @@ async function generate(){
     document.getElementById("loaderWrap").classList.remove("visible");
     panel.classList.remove("visible");
     showError(UI.err_api_prefix+" ("+e.message+")");
+    clearTimeout(_liveTimer); _liveTimer = null;
     reportError("generate", e.message, subject);
   }finally{
     btn.disabled=false;

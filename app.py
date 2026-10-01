@@ -1928,27 +1928,66 @@ def _ai_rate_key():
 @csrf.exempt
 @limiter.limit("150/hour", key_func=_ai_rate_key)
 def ai_generate():
+    data = request.get_json(silent=True) or {}
+    resp, err = _gemini_call(data, stream=False)
+    if err is not None:
+        return err
+    return app.response_class(resp.content, status=resp.status_code, mimetype="application/json")
+
+
+@app.route("/api/ai/stream", methods=["POST"])
+@login_required
+@csrf.exempt
+@limiter.limit("150/hour", key_func=_ai_rate_key)
+def ai_stream():
+    """Same as /api/ai/generate, but relays Gemini's text as it is written
+    (server-sent events), so the user sees the document appear progressively."""
+    data = request.get_json(silent=True) or {}
+    resp, err = _gemini_call(data, stream=True)
+    if err is not None:
+        return err
+    if resp.status_code != 200:  # Google's JSON error: same handling as the classic route
+        body = resp.content
+        resp.close()
+        return app.response_class(body, status=resp.status_code, mimetype="application/json")
+
+    def relay():
+        try:
+            for chunk in resp.iter_content(chunk_size=None):
+                if chunk:
+                    yield chunk
+        finally:
+            resp.close()
+
+    return app.response_class(relay(), mimetype="text/event-stream",
+                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+def _gemini_call(data, stream=False):
+    """Send one Gemini request with the right key. Returns (response, None), where
+    the response may be a Google error to pass through (404, 429…), or
+    (None, flask_error_response) when we answer ourselves (bad input, quota…)."""
     import requests as http
 
-    data = request.get_json(silent=True) or {}
     model = str(data.get("model", ""))
     contents = data.get("contents")
     if not _GEMINI_MODEL_RE.match(model) or not isinstance(contents, list):
-        return jsonify({"error": {"message": "invalid request"}}), 400
+        return None, (jsonify({"error": {"message": "invalid request"}}), 400)
 
     personal_key = (current_user.gemini_api_key or "").strip()
     platform_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not personal_key and not platform_key:
-        return jsonify({"error": {"message": "AI service not configured"}}), 503
+        return None, (jsonify({"error": {"message": "AI service not configured"}}), 503)
 
     body = {"contents": contents}
     if isinstance(data.get("generationConfig"), dict):
         body["generationConfig"] = data["generationConfig"]
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    method = "streamGenerateContent?alt=sse" if stream else "generateContent"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:{method}"
 
     def call(key):
         return http.post(url, headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-                         json=body, timeout=180)
+                         json=body, timeout=(15, 240), stream=stream)
 
     # 1) Older accounts may still have their own key: try it first (free for us).
     if personal_key:
@@ -1957,7 +1996,7 @@ def ai_generate():
         except http.RequestException:
             resp = None
         if resp is not None and not _personal_key_failed(resp):
-            return app.response_class(resp.content, status=resp.status_code, mimetype="application/json")
+            return resp, None
         # The personal key is invalid, revoked or out of quota: fall back silently
         # to the platform key so the user never sees an API-key problem again.
         if resp is not None and _personal_key_invalid(resp):
@@ -1966,18 +2005,18 @@ def ai_generate():
             app.logger.info("Cleared invalid personal Gemini key for user %s", current_user.id)
         if not platform_key:
             if resp is None:
-                return jsonify({"error": {"message": "upstream unavailable"}}), 503
-            return app.response_class(resp.content, status=resp.status_code, mimetype="application/json")
+                return None, (jsonify({"error": {"message": "upstream unavailable"}}), 503)
+            return resp, None
 
     # 2) Platform key: billed to us, so the plan quota applies.
     sub = current_user.subscription
     if not sub or not sub.has_quota():
         db.session.commit()
-        return jsonify({"error": {"message": "quota_exceeded"}}), 403
+        return None, (jsonify({"error": {"message": "quota_exceeded"}}), 403)
     try:
         resp = call(platform_key)
     except http.RequestException:
-        return jsonify({"error": {"message": "upstream unavailable"}}), 503
+        return None, (jsonify({"error": {"message": "upstream unavailable"}}), 503)
 
     # Never let the platform key's auth errors look like the user's problem.
     if resp.status_code in (400, 401, 403) and "API key" in resp.text:
@@ -1985,8 +2024,8 @@ def ai_generate():
         db.session.add(GenerationError(user_id=current_user.id, stage="upstream",
                                        message="Platform Gemini key rejected: " + resp.text[:400]))
         db.session.commit()
-        return jsonify({"error": {"message": "AI service temporarily unavailable"}}), 503
-    return app.response_class(resp.content, status=resp.status_code, mimetype="application/json")
+        return None, (jsonify({"error": {"message": "AI service temporarily unavailable"}}), 503)
+    return resp, None
 
 
 def _personal_key_invalid(resp):
