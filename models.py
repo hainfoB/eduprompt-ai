@@ -324,6 +324,13 @@ class Document(db.Model):
     doc_type   = db.Column(db.String(50))
     fmt        = db.Column(db.String(10))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Saved so the user can download it again later (history), without quota:
+    content    = db.Column(db.Text, nullable=True)   # generated text, with [[VISUAL_ID:n]] tags
+    payload    = db.Column(db.Text, nullable=True)   # JSON: lang, header meta, colors, visuals
+    # User feedback on quality
+    rating     = db.Column(db.Integer, nullable=True)  # 1 = useful, -1 = not useful
+    rating_comment = db.Column(db.String(500), nullable=True)
+    rated_at   = db.Column(db.DateTime, nullable=True)
 
 
 class LicenseCode(db.Model):

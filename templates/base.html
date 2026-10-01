@@ -104,6 +104,9 @@ html[dir="rtl"] .brand-icon{border-radius:3px 10px 3px 10px;box-shadow:-3px 3px 
       <a class="nav-link {% if request.endpoint=='dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
         <i class="bi bi-speedometer2"></i><span class="label">{{ t.nav_dashboard }}</span>
       </a>
+      <a class="nav-link {% if request.endpoint=='my_documents' %}active{% endif %}" href="{{ url_for('my_documents') }}">
+        <i class="bi bi-folder2-open"></i><span class="label">{{ t.history_link }}</span>
+      </a>
       {% endif %}
       {% if current_user.role == 'admin' %}
       <a class="nav-link {% if request.endpoint=='admin_stats' %}active{% endif %}" href="{{ url_for('admin_stats') }}">

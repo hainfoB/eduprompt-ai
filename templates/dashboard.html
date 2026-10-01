@@ -208,7 +208,7 @@
     <a href="{{ url_for('messages') }}" class="btn-msg"><i class="bi bi-send-fill"></i> {{ t.dash_messages_cta }}</a>
   </div>
 
-  <div class="section-title"><i class="bi bi-clock-history"></i> {{ t.history_title }}</div>
+  <div class="section-title"><span><i class="bi bi-clock-history"></i> {{ t.history_title }}</span><a class="see-all" href="{{ url_for('my_documents') }}">{{ t.history_see_all }} →</a></div>
   <div class="doc-table">
     {% if docs %}
     <div class="doc-row header">

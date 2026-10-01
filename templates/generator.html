@@ -315,8 +315,34 @@
       <div class="loader-text" id="loaderText">{{ t.loader_default }}</div>
     </div>
     <div class="result-content" id="resultContent"></div>
+    <div class="rate-bar" id="rateBar">
+      <div class="rate-ask" id="rateAsk">
+        <span>{{ t.rate_question }}</span>
+        <button type="button" class="rate-btn" onclick="rateDoc(1)" aria-label="{{ t.rate_yes }}">👍 {{ t.rate_yes }}</button>
+        <button type="button" class="rate-btn" onclick="rateDoc(-1)" aria-label="{{ t.rate_no }}">👎 {{ t.rate_no }}</button>
+      </div>
+      <div class="rate-comment" id="rateComment">
+        <label for="rateText">{{ t.rate_comment_label }}</label>
+        <textarea id="rateText" maxlength="500" rows="2" placeholder="{{ t.rate_comment_ph }}"></textarea>
+        <button type="button" class="rate-btn send" onclick="sendRateComment()">{{ t.rate_send }}</button>
+      </div>
+      <div class="rate-thanks" id="rateThanks">{{ t.rate_thanks }} <a href="{{ url_for('my_documents') }}">{{ t.history_link }} →</a></div>
+    </div>
   </div>
 </section>
+<style>
+.rate-bar{display:none;border-top:1px solid var(--line);padding:14px 22px;background:var(--sky)}
+.rate-bar.visible{display:block}
+.rate-ask{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px;font-weight:700;color:var(--navy)}
+.rate-btn{border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;min-height:40px;color:var(--navy)}
+.rate-btn:hover{border-color:var(--orange)}
+.rate-btn.send{background:var(--orange);color:#fff;border-color:var(--orange);margin-top:8px}
+.rate-comment{display:none;margin-top:10px}
+.rate-comment label{display:block;font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px}
+.rate-comment textarea{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px;font-family:inherit}
+.rate-thanks{display:none;font-size:13px;font-weight:700;color:#047857}
+.rate-thanks a{color:var(--navy)}
+</style>
 
 <div class="toast-wrap" id="toastWrap"></div>
 
@@ -517,6 +543,7 @@ const UI = {
   loader_visuals: {{ t.loader_visuals | tojson }},
 };
 
+let lastDocId=null;
 let docType=ALL_DOC_TYPES[CURRENT_LANG][0].id, fmt="docx", lastContent="", sourcesContext="", lastVisuals=[];
 let uploadedFiles=[];
 
@@ -1051,6 +1078,32 @@ function liveRender(text){
   }, 250);
 }
 
+// ── Rating ("is this document useful?") ──
+function showRateBar(){
+  if(!lastDocId) return;
+  document.getElementById("rateAsk").style.display="flex";
+  document.getElementById("rateComment").style.display="none";
+  document.getElementById("rateThanks").style.display="none";
+  document.getElementById("rateText").value="";
+  document.getElementById("rateBar").classList.add("visible");
+}
+function postRating(value, comment){
+  if(!lastDocId) return Promise.resolve();
+  return fetch(`/api/documents/${lastDocId}/rate`, {method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({rating:value, comment:comment||""})}).catch(()=>{});
+}
+function rateDoc(value){
+  postRating(value);
+  document.getElementById("rateAsk").style.display="none";
+  if(value === -1){ document.getElementById("rateComment").style.display="block"; document.getElementById("rateText").focus(); }
+  else document.getElementById("rateThanks").style.display="block";
+}
+function sendRateComment(){
+  postRating(-1, document.getElementById("rateText").value.trim());
+  document.getElementById("rateComment").style.display="none";
+  document.getElementById("rateThanks").style.display="block";
+}
+
 // Report a failure to the server so the admin can count and diagnose them.
 function reportError(stage, message, subject){
   try{
@@ -1084,6 +1137,7 @@ async function generate(){
   setTimeout(()=>panel.scrollIntoView({behavior:"smooth",block:"start"}),80);
   document.getElementById("loaderWrap").classList.add("visible");
   document.getElementById("resultContent").innerHTML="";
+  document.getElementById("rateBar").classList.remove("visible");
   document.getElementById("downloadBtn").disabled=true;
 
   try{
@@ -1107,8 +1161,14 @@ async function generate(){
     renderContent(text);
     document.getElementById("downloadBtn").disabled=false;
 
-    await fetch("/api/log-usage",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({lesson,subject,level,palier,doc_type:docType,format:fmt})});
+    const logRes = await fetch("/api/log-usage",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({lesson,subject,level,palier,doc_type:docType,format:fmt,
+        content:text, visuals, lang:docLang, colors:getColors(),
+        teacher_first:document.getElementById("teacherFirst").value,
+        teacher_last:document.getElementById("teacherLast").value,
+        etablissement, projet, activite})});
+    try{ lastDocId = (await logRes.json()).doc_id || null; }catch(e){ lastDocId = null; }
+    showRateBar();
     loadQuota();
     toast(UI.toast_generated);
   }catch(e){
@@ -1163,6 +1223,7 @@ async function downloadDoc(){
         activite:document.getElementById("activiteInput").value,
         colors:getColors(),
         visuals:lastVisuals,
+        doc_id:lastDocId,
       })});
     if(!res.ok) throw new Error("Download failed");
     const blob=await res.blob();

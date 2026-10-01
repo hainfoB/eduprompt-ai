@@ -213,6 +213,13 @@ def _migrate_sqlite_schema():
                 "referral_rewarded": "BOOLEAN DEFAULT 0",
                 "referral_docs_earned": "INTEGER DEFAULT 0",
             },
+            "document": {
+                "content": "TEXT",
+                "payload": "TEXT",
+                "rating": "INTEGER",
+                "rating_comment": "VARCHAR(500)",
+                "rated_at": "DATETIME",
+            },
             "payment_request": {
                 "method": "VARCHAR(10)",
                 "receipt_path": "VARCHAR(255)",
@@ -1904,10 +1911,38 @@ def log_usage():
         doc_type=data.get("doc_type", ""),
         fmt=data.get("format", "docx"),
     )
+    if isinstance(data.get("content"), str):
+        doc.content = data["content"][:200000]
+        doc.payload = _document_payload(data)
     db.session.add(doc)
     db.session.commit()
 
-    return jsonify({"ok": True, "remaining": sub.remaining()})
+    return jsonify({"ok": True, "remaining": sub.remaining(), "doc_id": doc.id})
+
+
+DOC_PAYLOAD_MAX = 2_500_000  # bytes; beyond this, AI images are not kept in the history
+
+
+def _document_payload(data, previous=None):
+    """JSON needed to rebuild the Word/PDF file later (header, colours, visuals)."""
+    import json as _json
+    p = _json.loads(previous) if previous else {}
+    for k in ("lang", "teacher_first", "teacher_last", "level", "palier", "subject", "lesson",
+              "etablissement", "projet", "activite"):
+        if k in data:
+            p[k] = str(data.get(k) or "")[:300]
+    if isinstance(data.get("colors"), dict):
+        p["colors"] = data["colors"]
+    if isinstance(data.get("visuals"), list):
+        p["visuals"] = data["visuals"]
+    out = _json.dumps(p, ensure_ascii=False)
+    if len(out) > DOC_PAYLOAD_MAX:  # keep the text, drop the heaviest pictures
+        p["visuals"] = [v for v in p.get("visuals", []) if len(str(v.get("data", ""))) < 300_000]
+        out = _json.dumps(p, ensure_ascii=False)
+        if len(out) > DOC_PAYLOAD_MAX:
+            p["visuals"] = []
+            out = _json.dumps(p, ensure_ascii=False)
+    return out
 
 
 # ── API: GEMINI PROXY (platform key — users no longer need their own) ────────
@@ -2545,6 +2580,16 @@ def download():
     colors_cfg = data.get("colors", {})
     visuals = data.get("visuals", [])
 
+    # Keep the history copy in sync with what the user actually downloaded
+    doc_id = data.get("doc_id")
+    if isinstance(doc_id, int):
+        doc = Document.query.filter_by(id=doc_id, user_id=current_user.id).first()
+        if doc:
+            doc.content = content[:200000]
+            doc.fmt = fmt if fmt in ("docx", "pdf") else doc.fmt
+            doc.payload = _document_payload(data, doc.payload)
+            db.session.commit()
+
     safe_name = re.sub(r'[^\w\-]', '_', meta["lesson"][:40] or "document")
 
     if fmt == "pdf":
@@ -2555,6 +2600,73 @@ def download():
         buf = make_docx(content, meta, colors_cfg, lang, visuals=visuals)
         return send_file(buf, as_attachment=True, download_name=f"{safe_name}.docx",
                          mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+
+# ── MY DOCUMENTS (history, re-download without quota, rating) ───────────────
+@app.route("/mes-documents")
+@login_required
+def my_documents():
+    q = request.args.get("q", "").strip()
+    page = request.args.get("page", 1, type=int)
+    query = Document.query.filter_by(user_id=current_user.id)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(Document.title.ilike(like), Document.subject.ilike(like)))
+    pager = query.order_by(Document.created_at.desc()).paginate(page=page, per_page=15, error_out=False)
+    labels = {d["id"]: d["label"] for lst in (DOCUMENT_TYPES, PARENT_DOCUMENT_TYPES)
+              for d in lst.get(current_lang(), lst["fr"])}
+    return render_template("my_documents.html", pager=pager, q=q, type_labels=labels)
+
+
+@app.route("/mes-documents/<int:doc_id>/<fmt>")
+@login_required
+def my_document_download(doc_id, fmt):
+    import json as _json
+    doc = Document.query.filter_by(id=doc_id, user_id=current_user.id).first_or_404()
+    if not doc.content or fmt not in ("docx", "pdf"):
+        flash(tr("history_not_available"), "error")
+        return redirect(url_for("my_documents"))
+    p = _json.loads(doc.payload) if doc.payload else {}
+    meta = {k: p.get(k, "") for k in ("level", "palier", "subject", "lesson",
+                                      "etablissement", "projet", "activite")}
+    meta["teacher_first"] = p.get("teacher_first") or current_user.first_name
+    meta["teacher_last"] = p.get("teacher_last") or current_user.last_name
+    meta["lesson"] = meta["lesson"] or doc.title or ""
+    meta["subject"] = meta["subject"] or doc.subject or ""
+    meta["level"] = meta["level"] or doc.level or ""
+    lang = p.get("lang") or current_lang()
+    colors_cfg = p.get("colors") or {}
+    visuals = p.get("visuals") or []
+    safe_name = re.sub(r'[^\w\-]', '_', (meta["lesson"] or "document")[:40])
+    if fmt == "pdf":
+        buf = make_pdf(doc.content, meta, colors_cfg, lang, visuals=visuals)
+        return send_file(buf, as_attachment=True, download_name=f"{safe_name}.pdf",
+                         mimetype="application/pdf")
+    buf = make_docx(doc.content, meta, colors_cfg, lang, visuals=visuals)
+    return send_file(buf, as_attachment=True, download_name=f"{safe_name}.docx",
+                     mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+
+@app.route("/api/documents/<int:doc_id>/rate", methods=["POST"])
+@login_required
+@csrf.exempt
+@limiter.limit("120/hour")
+def rate_document(doc_id):
+    doc = Document.query.filter_by(id=doc_id, user_id=current_user.id).first_or_404()
+    data = request.get_json(silent=True) or request.form
+    try:
+        value = int(data.get("rating", 0))
+    except (TypeError, ValueError):
+        value = 0
+    if value not in (1, -1):
+        return jsonify({"error": "invalid"}), 400
+    doc.rating = value
+    comment = str(data.get("comment", "") or "").strip()[:500]
+    if comment or value == 1:
+        doc.rating_comment = comment or None
+    doc.rated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
