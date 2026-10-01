@@ -34,9 +34,14 @@
 <div class="st-wrap">
   <div class="st-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
     <h1 style="margin:0">{{ t.stats_title }}</h1>
-    <a href="{{ url_for('admin_audit_log') }}" style="font-size:12px;font-weight:700;color:var(--navy);text-decoration:none;background:var(--sky);padding:8px 14px;border-radius:9px">
-      <i class="bi bi-shield-lock-fill"></i> {{ t.audit_log_title }}
-    </a>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="{{ url_for('admin_funnel') }}" style="font-size:12px;font-weight:700;color:#fff;text-decoration:none;background:var(--orange);padding:8px 14px;border-radius:9px">
+        <i class="bi bi-funnel-fill"></i> {{ t.funnel_title }}
+      </a>
+      <a href="{{ url_for('admin_audit_log') }}" style="font-size:12px;font-weight:700;color:var(--navy);text-decoration:none;background:var(--sky);padding:8px 14px;border-radius:9px">
+        <i class="bi bi-shield-lock-fill"></i> {{ t.audit_log_title }}
+      </a>
+    </div>
   </div>
 
   <div class="st-grid">

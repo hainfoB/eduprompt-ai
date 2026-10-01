@@ -118,8 +118,16 @@
         <option value="ultimate" {% if plan_filter=='ultimate' %}selected{% endif %}>{{ t.plan_ultimate_option }}</option>
       </select>
     </div>
+    <div class="form-group" style="flex:0 0 150px">
+      <label class="form-label">{{ t.register_profile_label }}</label>
+      <select name="profile" class="form-select">
+        <option value="">{{ t.funnel_all }}</option>
+        <option value="teacher" {% if profile_filter=='teacher' %}selected{% endif %}>{{ t.profile_teacher }}</option>
+        <option value="parent" {% if profile_filter=='parent' %}selected{% endif %}>{{ t.profile_parent }}</option>
+      </select>
+    </div>
     <button type="submit" class="btn-search"><i class="bi bi-search"></i> {{ t.btn_search }}</button>
-    {% if q or plan_filter %}<a href="{{ url_for('admin_teachers') }}" class="btn-clear"><i class="bi bi-x-lg"></i></a>{% endif %}
+    {% if q or plan_filter or profile_filter %}<a href="{{ url_for('admin_teachers') }}" class="btn-clear"><i class="bi bi-x-lg"></i></a>{% endif %}
     <a href="{{ url_for('admin_teachers_export', q=q, plan=plan_filter) }}" class="btn-clear"><i class="bi bi-download"></i> {{ t.btn_export_csv }}</a>
   </form>
 
@@ -131,7 +139,7 @@
     {% for tch in teachers %}
     <div class="t-row">
       <div class="t-num">{{ (pager.page - 1) * pager.per_page + loop.index }}</div>
-      <div class="t-name">{{ tch.full_name }}{% if not tch.is_active %} <span class="plan-tag" style="background:#fef2f2;color:var(--red)">{{ t.status_inactive }}</span>{% endif %}</div>
+      <div class="t-name">{{ tch.full_name }}{% if tch.is_parent %} <span class="plan-tag" style="background:#fff7ed;color:#c2410c">{{ t.profile_parent }}</span>{% endif %}{% if not tch.is_active %} <span class="plan-tag" style="background:#fef2f2;color:var(--red)">{{ t.status_inactive }}</span>{% endif %}</div>
       <div class="t-email">{{ tch.email }}</div>
       <div><span class="plan-tag plan-{{ tch.subscription.plan if tch.subscription else 'trial' }}">{{ tch.subscription.plan_label() if tch.subscription else '—' }}</span></div>
       <div>{{ tch.created_at.strftime('%d/%m/%Y') }}</div>
@@ -161,7 +169,7 @@
     <div class="pager">
       {% for p in range(1, pager.pages + 1) %}
         {% if p == pager.page %}<span class="current">{{ p }}</span>
-        {% else %}<a href="{{ url_for('admin_teachers', q=q, plan=plan_filter, page=p) }}">{{ p }}</a>{% endif %}
+        {% else %}<a href="{{ url_for('admin_teachers', q=q, plan=plan_filter, profile=profile_filter, page=p) }}">{{ p }}</a>{% endif %}
       {% endfor %}
     </div>
     {% endif %}

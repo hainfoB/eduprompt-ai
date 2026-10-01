@@ -30,7 +30,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from models import (db, User, Subscription, Document, LicenseCode, Payment, Message,
-                     PaymentRequest, AdminLog, PlanChangeHistory, PLAN_PRICES, PAYMENT_METHODS,
+                     PaymentRequest, AdminLog, PlanChangeHistory, FunnelEvent, PLAN_PRICES, PAYMENT_METHODS,
                      create_trial_subscription, next_receipt_number)
 from werkzeug.utils import secure_filename
 from utils import build_sources_context
@@ -184,6 +184,7 @@ def _migrate_sqlite_schema():
                 "preferred_lang": "VARCHAR(5) DEFAULT 'fr'",
                 "is_active": "BOOLEAN DEFAULT 1",
                 "profile": "VARCHAR(10) DEFAULT 'teacher'",
+                "signup_source": "VARCHAR(40)",
             },
             "payment_request": {
                 "method": "VARCHAR(10)",
@@ -261,6 +262,49 @@ def log_admin_action(action, target="", details=""):
     ))
 
 
+# ── FUNNEL TRACKING (campaign measurement, no personal data) ─────────────────
+_BOT_RE = re.compile(r"bot|crawl|spider|slurp|facebookexternalhit|preview|monitor|curl|python-requests", re.I)
+_SOURCE_HOSTS = (("facebook", "facebook"), ("fb.", "facebook"), ("instagram", "instagram"),
+                 ("google", "google"), ("whatsapp", "whatsapp"), ("wa.me", "whatsapp"),
+                 ("linkedin", "linkedin"), ("lnkd.in", "linkedin"), ("t.co", "twitter"),
+                 ("twitter", "twitter"), ("x.com", "twitter"), ("youtube", "youtube"),
+                 ("tiktok", "tiktok"), ("telegram", "telegram"), ("t.me", "telegram"))
+
+
+def traffic_source():
+    """Where this visitor came from, remembered for the whole browser session."""
+    if session.get("src"):
+        return session["src"]
+    utm = re.sub(r"[^a-z0-9_.-]", "", request.args.get("utm_source", "").lower())[:40]
+    if utm:
+        src = utm
+    elif request.args.get("fbclid"):
+        src = "facebook"
+    elif request.args.get("gclid"):
+        src = "google"
+    else:
+        ref = (request.referrer or "").lower()
+        host = ref.split("/")[2] if ref.count("/") >= 2 else ""
+        src = "direct"
+        if host and request.host.lower() not in host:
+            src = next((name for key, name in _SOURCE_HOSTS if key in host), "other")
+    session["src"] = src
+    return src
+
+
+def track(event, profile=None, user_id=None):
+    """Record one funnel step. Added to the current DB session: the caller commits."""
+    try:
+        if _BOT_RE.search(request.headers.get("User-Agent", "")):
+            return
+        if "vid" not in session:
+            session["vid"] = secrets.token_hex(8)
+        db.session.add(FunnelEvent(event=event, profile=profile, source=traffic_source(),
+                                   visitor=session["vid"], user_id=user_id))
+    except RuntimeError:
+        pass  # no request context (scheduled job): nothing to attribute
+
+
 def apply_payment_approval(teacher, plan, days=365, reason="payment_approved"):
     """Activate or renew a teacher's subscription after a payment has been validated.
     Renewing the same plan extends from the later of (now, current expiry);
@@ -287,6 +331,9 @@ def apply_payment_approval(teacher, plan, days=365, reason="payment_approved"):
     if previous_plan != plan or not is_renewal:
         db.session.add(PlanChangeHistory(user_id=teacher.id, from_plan=previous_plan,
                                           to_plan=plan, reason=reason))
+    # Attributed to the customer's own acquisition source, not the admin's browser.
+    db.session.add(FunnelEvent(event="payment_approved", profile=teacher.profile,
+                               source=teacher.signup_source, user_id=teacher.id))
     return is_renewal
 
 
@@ -377,6 +424,10 @@ SUBJECTS = {
 # ── AUTH ROUTES ───────────────────────────────────────────────────────────────
 @app.route("/")
 def home():
+    if not session.get("lv"):
+        session["lv"] = 1
+        track("landing_view")
+        db.session.commit()
     return render_template("landing.html", levels=LEVELS, subjects=SUBJECTS)
 
 
@@ -424,10 +475,11 @@ def register():
 
         user = User(first_name=first_name, last_name=last_name, email=email,
                     gemini_api_key=api_key or None, preferred_lang=current_lang(),
-                    profile=profile)
+                    profile=profile, signup_source=traffic_source())
         user.set_password(password)
         db.session.add(user)
         db.session.flush()  # get user.id before commit
+        track("signup", profile=profile, user_id=user.id)
         create_trial_subscription(user)  # immediate access while any payment is reviewed
 
         if wanted_plan in ("pro", "ultimate"):
@@ -574,6 +626,7 @@ def upgrade():
                 reference=reference or None, note=note, receipt_path=receipt_name,
                 source="upgrade",
             ))
+            track("payment_declared", profile=current_user.profile, user_id=current_user.id)
             db.session.commit()
             flash(tr("flash_payment_declared"), "success")
             return redirect(url_for("upgrade"))
@@ -946,6 +999,92 @@ def admin_stats():
                            leaderboard=leaderboard, leaderboard_month=lb_start.strftime("%Y-%m"))
 
 
+# ── ADMIN: acquisition funnel (campaign measurement) ────────────────────────
+FUNNEL_STEPS = ["landing_view", "demo", "signup", "first_document", "payment_declared", "payment_approved"]
+
+
+@app.route("/admin/funnel")
+@login_required
+def admin_funnel():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+
+    from sqlalchemy import func
+
+    days = request.args.get("days", 30, type=int)
+    if days not in (1, 7, 30, 90, 0):
+        days = 30
+    profile = request.args.get("profile", "")
+    if profile not in ("teacher", "parent"):
+        profile = ""
+
+    base = FunnelEvent.query
+    if days:
+        since = datetime.utcnow() - timedelta(days=days)
+        base = base.filter(FunnelEvent.created_at >= since)
+
+    def step_count(query, event):
+        q = query.filter(FunnelEvent.event == event)
+        if profile and event != "landing_view":  # visits happen before the profile is known
+            q = q.filter(FunnelEvent.profile == profile)
+        if event == "landing_view":
+            return q.with_entities(func.count(func.distinct(FunnelEvent.visitor))).scalar() or 0
+        return q.count()
+
+    counts = {e: step_count(base, e) for e in FUNNEL_STEPS}
+    visits = counts["landing_view"]
+    steps = []
+    prev = None
+    for e in FUNNEL_STEPS:
+        n = counts[e]
+        steps.append({
+            "event": e, "count": n,
+            "of_visits": round(100 * n / visits, 1) if visits and e != "landing_view" else None,
+            "of_prev": round(100 * n / prev, 1) if prev else None,
+        })
+        prev = n if n else prev
+
+    # By traffic source
+    sources = [r[0] or "direct" for r in base.with_entities(FunnelEvent.source).distinct().all()]
+    by_source = []
+    for src in sorted(set(sources)):
+        sq = base.filter(func.coalesce(FunnelEvent.source, "direct") == src)
+        row = {"source": src}
+        for e in ("landing_view", "demo", "signup", "first_document", "payment_approved"):
+            row[e] = step_count(sq, e)
+        row["conv"] = round(100 * row["signup"] / row["landing_view"], 1) if row["landing_view"] else None
+        by_source.append(row)
+    by_source.sort(key=lambda r: (r["signup"], r["landing_view"]), reverse=True)
+
+    # Teacher vs parent split
+    split = {}
+    for p in ("teacher", "parent"):
+        sq = base.filter(FunnelEvent.profile == p)
+        split[p] = {e: sq.filter(FunnelEvent.event == e).count()
+                    for e in ("demo", "signup", "first_document", "payment_approved")}
+
+    # Day by day (most recent first, at most 30 rows)
+    n_days = min(days or 30, 30)
+    daily = []
+    for i in range(n_days):
+        d0 = (datetime.utcnow() - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        dq = FunnelEvent.query.filter(FunnelEvent.created_at >= d0,
+                                      FunnelEvent.created_at < d0 + timedelta(days=1))
+        row = {"day": d0.strftime("%d/%m")}
+        for e in ("landing_view", "demo", "signup", "first_document"):
+            row[e] = step_count(dq, e)
+        daily.append(row)
+
+    first_event = db.session.query(func.min(FunnelEvent.created_at)).scalar()
+    users_by_profile = dict(db.session.query(func.coalesce(User.profile, "teacher"), func.count(User.id))
+                            .filter(User.role == "user").group_by(func.coalesce(User.profile, "teacher")).all())
+
+    return render_template("admin_funnel.html", steps=steps, by_source=by_source, split=split,
+                           daily=daily, days=days, profile=profile, first_event=first_event,
+                           users_by_profile=users_by_profile)
+
+
 # ── ADMIN: audit log (accountability trail of admin actions) ────────────────
 @app.route("/admin/audit-log")
 @login_required
@@ -1022,9 +1161,14 @@ def admin_teachers():
 
     q = request.args.get("q", "").strip()
     plan_filter = request.args.get("plan", "").strip()
+    profile_filter = request.args.get("profile", "").strip()
     page = request.args.get("page", 1, type=int)
 
     query = User.query.filter_by(role="user")
+    if profile_filter == "parent":
+        query = query.filter(User.profile == "parent")
+    elif profile_filter == "teacher":
+        query = query.filter(db.or_(User.profile == "teacher", User.profile.is_(None)))
     if q:
         like = f"%{q}%"
         query = query.filter(db.or_(User.first_name.ilike(like),
@@ -1037,7 +1181,8 @@ def admin_teachers():
     pager = query.paginate(page=page, per_page=15, error_out=False)
 
     return render_template("admin_teachers.html", teachers=pager.items, pager=pager,
-                            q=q, plan_filter=plan_filter, generated=generated)
+                            q=q, plan_filter=plan_filter, profile_filter=profile_filter,
+                            generated=generated)
 
 
 @app.route("/admin/teachers/export.csv")
@@ -1442,6 +1587,8 @@ def log_usage():
         return jsonify({"error": "quota_exceeded", "contact_email": CONTACT_EMAIL}), 403
 
     sub.register_usage()
+    if Document.query.filter_by(user_id=current_user.id).count() == 0:
+        track("first_document", profile=current_user.profile, user_id=current_user.id)
 
     doc = Document(
         user_id=current_user.id,
@@ -1636,6 +1783,8 @@ def api_demo():
             text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
         except (ValueError, KeyError, IndexError, TypeError):
             continue
+        track("demo", profile="parent" if data.get("profile") == "parent" else "teacher")
+        db.session.commit()
         return jsonify({"text": text})
     return jsonify({"error": "unavailable"}), 503
 

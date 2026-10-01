@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}{{ t.funnel_title }}{% endblock %}
+{% block extra_head %}
+<style>
+.fn-wrap{max-width:1000px;margin:32px auto;padding:0 max(4vw,16px)}
+.fn-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:6px}
+.fn-head h1{font-size:22px;font-weight:800;color:var(--navy);margin:0}
+.fn-sub{font-size:12px;color:var(--muted);margin:0 0 18px}
+.fn-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
+.fn-pill{font-size:12px;font-weight:700;padding:7px 13px;border-radius:9px;text-decoration:none;background:var(--paper);color:var(--navy);border:1.5px solid var(--line)}
+.fn-pill.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.fn-sep{width:1px;background:var(--line);margin:0 4px}
+.fn-section{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:22px;margin-bottom:22px}
+.fn-section h3{font-size:14px;font-weight:800;color:var(--navy);margin:0 0 16px;display:flex;align-items:center;gap:8px}
+.fn-step{display:grid;grid-template-columns:190px 1fr 150px;gap:14px;align-items:center;padding:8px 0}
+.fn-step .name{font-size:13px;font-weight:700;color:var(--navy)}
+.fn-bar{height:30px;background:var(--sky);border-radius:8px;overflow:hidden}
+.fn-bar span{display:flex;align-items:center;height:100%;background:var(--orange);color:#fff;font-size:13px;font-weight:800;padding-inline-start:10px;min-width:34px;box-sizing:border-box;border-radius:8px}
+.fn-rate{font-size:12px;color:var(--muted);line-height:1.35}
+.fn-rate b{color:var(--navy)}
+.fn-table{width:100%;border-collapse:collapse;font-size:13px}
+.fn-table th{text-align:start;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700;padding:8px 6px;border-bottom:1.5px solid var(--line)}
+.fn-table td{padding:9px 6px;border-bottom:1px solid var(--line);color:var(--ink)}
+.fn-table td.num,.fn-table th.num{text-align:end;font-variant-numeric:tabular-nums}
+.fn-table tr:last-child td{border-bottom:none}
+.fn-src{font-weight:700;color:var(--navy);text-transform:capitalize}
+.fn-split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.fn-card{border:1.5px solid var(--line);border-radius:12px;padding:16px}
+.fn-card h4{font-size:13px;font-weight:800;color:var(--navy);margin:0 0 10px;display:flex;justify-content:space-between}
+.fn-card h4 small{font-weight:600;color:var(--muted)}
+.fn-kv{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px dashed var(--line)}
+.fn-kv:last-child{border-bottom:none}
+.fn-tip{background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12;border-radius:12px;padding:14px 16px;font-size:12.5px;line-height:1.6}
+.fn-tip code{background:#fff;padding:2px 6px;border-radius:5px;direction:ltr;display:inline-block;font-size:12px}
+.empty-state{text-align:center;padding:20px;color:var(--muted);font-size:13px}
+@media(max-width:700px){.fn-step{grid-template-columns:1fr}.fn-split{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="fn-wrap">
+  <div class="fn-head">
+    <h1><i class="bi bi-funnel-fill" style="color:var(--orange)"></i> {{ t.funnel_title }}</h1>
+    <a href="{{ url_for('admin_stats') }}" class="fn-pill"><i class="bi bi-arrow-left-short"></i> {{ t.stats_title }}</a>
+  </div>
+  <p class="fn-sub">
+    {% if first_event %}{{ t.funnel_since }} {{ first_event.strftime('%d/%m/%Y') }}{% else %}{{ t.funnel_no_data }}{% endif %}
+  </p>
+
+  <div class="fn-filters">
+    {% for d, label in [(1, t.funnel_p_today), (7, t.funnel_p_7), (30, t.funnel_p_30), (90, t.funnel_p_90), (0, t.funnel_p_all)] %}
+      <a class="fn-pill {% if days == d %}on{% endif %}" href="{{ url_for('admin_funnel', days=d, profile=profile) }}">{{ label }}</a>
+    {% endfor %}
+    <span class="fn-sep"></span>
+    <a class="fn-pill {% if not profile %}on{% endif %}" href="{{ url_for('admin_funnel', days=days) }}">{{ t.funnel_all }}</a>
+    <a class="fn-pill {% if profile == 'teacher' %}on{% endif %}" href="{{ url_for('admin_funnel', days=days, profile='teacher') }}">{{ t.profile_teacher }}</a>
+    <a class="fn-pill {% if profile == 'parent' %}on{% endif %}" href="{{ url_for('admin_funnel', days=days, profile='parent') }}">{{ t.profile_parent }}</a>
+  </div>
+
+  <div class="fn-section">
+    <h3><i class="bi bi-filter"></i> {{ t.funnel_steps_title }}</h3>
+    {% set top = steps[0].count if steps[0].count else (steps|map(attribute='count')|max) %}
+    {% for s in steps %}
+    <div class="fn-step">
+      <div class="name">{{ t['funnel_step_' ~ s.event] }}</div>
+      <div class="fn-bar"><span style="width:{{ ((100 * s.count / top) if top else 0)|round(1) }}%">{{ s.count }}</span></div>
+      <div class="fn-rate">
+        {% if s.of_prev is not none and not loop.first %}<b>{{ s.of_prev }} %</b> {{ t.funnel_of_prev }}<br>{% endif %}
+        {% if s.of_visits is not none %}{{ s.of_visits }} % {{ t.funnel_of_visits }}{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% if profile %}<p class="fn-sub" style="margin:10px 0 0">{{ t.funnel_visits_note }}</p>{% endif %}
+  </div>
+
+  <div class="fn-section">
+    <h3><i class="bi bi-signpost-split-fill"></i> {{ t.funnel_sources_title }}</h3>
+    {% if by_source %}
+    <div style="overflow-x:auto">
+    <table class="fn-table">
+      <thead><tr>
+        <th>{{ t.funnel_col_source }}</th>
+        <th class="num">{{ t.funnel_step_landing_view }}</th>
+        <th class="num">{{ t.funnel_step_demo }}</th>
+        <th class="num">{{ t.funnel_step_signup }}</th>
+        <th class="num">{{ t.funnel_step_first_document }}</th>
+        <th class="num">{{ t.funnel_step_payment_approved }}</th>
+        <th class="num">{{ t.funnel_col_conv }}</th>
+      </tr></thead>
+      <tbody>
+      {% for r in by_source %}
+      <tr>
+        <td class="fn-src">{{ r.source }}</td>
+        <td class="num">{{ r.landing_view }}</td>
+        <td class="num">{{ r.demo }}</td>
+        <td class="num">{{ r.signup }}</td>
+        <td class="num">{{ r.first_document }}</td>
+        <td class="num">{{ r.payment_approved }}</td>
+        <td class="num"><b>{{ r.conv if r.conv is not none else '—' }}{% if r.conv is not none %} %{% endif %}</b></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}<div class="empty-state">{{ t.funnel_no_data }}</div>{% endif %}
+  </div>
+
+  <div class="fn-section">
+    <h3><i class="bi bi-people-fill"></i> {{ t.funnel_split_title }}</h3>
+    <div class="fn-split">
+      {% for p in ['teacher', 'parent'] %}
+      <div class="fn-card">
+        <h4>{{ t['profile_' ~ p] }} <small>{{ users_by_profile.get(p, 0) }} {{ t.funnel_accounts_total }}</small></h4>
+        {% for e in ['demo', 'signup', 'first_document', 'payment_approved'] %}
+        <div class="fn-kv"><span>{{ t['funnel_step_' ~ e] }}</span><b>{{ split[p][e] }}</b></div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="fn-section">
+    <h3><i class="bi bi-calendar3"></i> {{ t.funnel_daily_title }}</h3>
+    <div style="overflow-x:auto">
+    <table class="fn-table">
+      <thead><tr>
+        <th>{{ t.funnel_col_day }}</th>
+        <th class="num">{{ t.funnel_step_landing_view }}</th>
+        <th class="num">{{ t.funnel_step_demo }}</th>
+        <th class="num">{{ t.funnel_step_signup }}</th>
+        <th class="num">{{ t.funnel_step_first_document }}</th>
+      </tr></thead>
+      <tbody>
+      {% for r in daily %}
+      <tr><td>{{ r.day }}</td><td class="num">{{ r.landing_view }}</td><td class="num">{{ r.demo }}</td><td class="num">{{ r.signup }}</td><td class="num">{{ r.first_document }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="fn-tip">
+    <b><i class="bi bi-lightbulb-fill"></i> {{ t.funnel_tip_title }}</b><br>
+    {{ t.funnel_tip_body }}<br>
+    <code>{{ request.host_url }}?utm_source=facebook_pub_octobre</code>
+  </div>
+</div>
+{% endblock %}

@@ -35,6 +35,7 @@ class User(UserMixin, db.Model):
     gemini_api_key = db.Column(db.String(255), nullable=True)
     preferred_lang = db.Column(db.String(5), default="fr")
     profile = db.Column(db.String(10), default="teacher")  # "teacher" | "parent"
+    signup_source = db.Column(db.String(40), nullable=True)  # facebook, google, direct…
 
     @property
     def is_parent(self):
@@ -215,6 +216,19 @@ class PlanChangeHistory(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship("User")
+
+
+class FunnelEvent(db.Model):
+    """One step of the acquisition funnel, used to measure campaigns.
+    event: landing_view | demo | signup | first_document | payment_declared | payment_approved
+    visitor: random per-browser id (no personal data), to count unique visitors."""
+    id         = db.Column(db.Integer, primary_key=True)
+    event      = db.Column(db.String(30), nullable=False, index=True)
+    profile    = db.Column(db.String(10), nullable=True)
+    source     = db.Column(db.String(40), nullable=True, index=True)
+    visitor    = db.Column(db.String(32), nullable=True, index=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 
 class AdminLog(db.Model):
