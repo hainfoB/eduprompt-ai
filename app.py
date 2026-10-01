@@ -6,7 +6,8 @@ import secrets
 import string
 from datetime import datetime, timedelta
 
-from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for, flash, session
+from flask import (Flask, render_template, request, jsonify, send_file, redirect, url_for, flash,
+                   session, after_this_request)
 
 from flask_login import (LoginManager, login_user, logout_user, login_required,
                           current_user)
@@ -427,6 +428,61 @@ def apply_payment_approval(teacher, plan, days=365, reason="payment_approved"):
     return is_renewal
 
 
+# ── DATABASE BACKUPS ─────────────────────────────────────────────────────────
+# A consistent copy of the SQLite database is taken every night (and at startup
+# when the last one is older than a day) into DATA_DIR/backups, keeping the
+# most recent BACKUP_KEEP copies. The admin can download them (plus receipts)
+# to keep an off-site copy.
+BACKUP_DIR = os.path.join(DATA_DIR, "backups")
+BACKUP_KEEP = int(os.environ.get("BACKUP_KEEP", "14"))
+_BACKUP_NAME_RE = re.compile(r"^eduprompt-\d{8}-\d{6}\.db$")
+
+
+def backup_database():
+    """Write a consistent snapshot of the live database; returns its file name."""
+    import sqlite3
+    src_path = os.path.join(DATA_DIR, "eduprompt.db")
+    if not os.path.exists(src_path):
+        return None
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    name = datetime.utcnow().strftime("eduprompt-%Y%m%d-%H%M%S.db")
+    src = sqlite3.connect(src_path)
+    dst = sqlite3.connect(os.path.join(BACKUP_DIR, name))
+    try:
+        src.backup(dst)  # safe while the app is writing
+    finally:
+        dst.close()
+        src.close()
+    for old in list_backups()[BACKUP_KEEP:]:
+        try:
+            os.remove(os.path.join(BACKUP_DIR, old["name"]))
+        except OSError:
+            pass
+    return name
+
+
+def list_backups():
+    """Backups, most recent first: [{name, size, created}]."""
+    if not os.path.isdir(BACKUP_DIR):
+        return []
+    out = []
+    for f in os.listdir(BACKUP_DIR):
+        if _BACKUP_NAME_RE.match(f):
+            p = os.path.join(BACKUP_DIR, f)
+            out.append({"name": f, "size": os.path.getsize(p),
+                        "created": datetime.strptime(f[10:25], "%Y%m%d-%H%M%S")})
+    return sorted(out, key=lambda b: b["name"], reverse=True)
+
+
+def _backup_job():
+    try:
+        name = backup_database()
+        if name:
+            print(f"✅ Database backup written: {name}")
+    except Exception as e:  # never let a failed backup crash the scheduler
+        print(f"⚠️  Database backup failed: {e}")
+
+
 # ── DAILY REMINDER SCHEDULER (5-day heads-up before subscription expiry) ─────
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -436,6 +492,13 @@ try:
         "interval", hours=24, next_run_time=datetime.utcnow(),
         id="expiry_reminders", replace_existing=True,
     )
+    _scheduler.add_job(_backup_job, "cron", hour=2, minute=17,  # 03:17 in Algeria, low traffic
+                       id="db_backup", replace_existing=True)
+    _last = list_backups()
+    if not _last or datetime.utcnow() - _last[0]["created"] > timedelta(days=1):
+        # No recent backup (first deploy, or the app was down at 03:17): take one now.
+        _scheduler.add_job(_backup_job, "date", run_date=datetime.now() + timedelta(seconds=60),
+                           id="db_backup_catchup", replace_existing=True)
     _scheduler.start()
     print("✅ Expiry reminder scheduler started")
 except Exception as e:
@@ -1190,6 +1253,70 @@ def admin_funnel():
     return render_template("admin_funnel.html", steps=steps, by_source=by_source, split=split,
                            daily=daily, days=days, profile=profile, first_event=first_event,
                            users_by_profile=users_by_profile)
+
+
+# ── ADMIN: database backups ─────────────────────────────────────────────────
+@app.route("/admin/backups", methods=["GET", "POST"])
+@login_required
+def admin_backups():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        name = backup_database()
+        log_admin_action("backup_created", target=name or "")
+        db.session.commit()
+        flash(tr("flash_backup_created"), "success")
+        return redirect(url_for("admin_backups"))
+    receipts = len(os.listdir(RECEIPTS_DIR)) if os.path.isdir(RECEIPTS_DIR) else 0
+    return render_template("admin_backups.html", backups=list_backups(), keep=BACKUP_KEEP,
+                           receipts_count=receipts)
+
+
+@app.route("/admin/backups/<name>")
+@login_required
+def admin_backup_download(name):
+    if current_user.role != "admin":
+        return redirect(url_for("dashboard"))
+    if not _BACKUP_NAME_RE.match(name) or not os.path.exists(os.path.join(BACKUP_DIR, name)):
+        flash(tr("flash_backup_missing"), "error")
+        return redirect(url_for("admin_backups"))
+    log_admin_action("backup_downloaded", target=name)
+    db.session.commit()
+    return send_file(os.path.join(BACKUP_DIR, name), as_attachment=True, download_name=name)
+
+
+@app.route("/admin/backups/full.zip")
+@login_required
+def admin_backup_full():
+    """Fresh database snapshot + every payment receipt, in one zip (off-site copy)."""
+    if current_user.role != "admin":
+        return redirect(url_for("dashboard"))
+    import tempfile, zipfile
+    name = backup_database()
+    tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False, dir=BACKUP_DIR)
+    tmp.close()
+    with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as z:
+        if name:
+            z.write(os.path.join(BACKUP_DIR, name), f"eduprompt.db")
+        if os.path.isdir(RECEIPTS_DIR):
+            for f in os.listdir(RECEIPTS_DIR):
+                fp = os.path.join(RECEIPTS_DIR, f)
+                if os.path.isfile(fp):
+                    z.write(fp, f"receipts/{f}")
+    log_admin_action("backup_full_downloaded", target=name or "")
+    db.session.commit()
+
+    @after_this_request
+    def _cleanup(response):
+        try:
+            os.remove(tmp.name)
+        except OSError:
+            pass
+        return response
+
+    return send_file(tmp.name, as_attachment=True,
+                     download_name=datetime.utcnow().strftime("haithemeduai-sauvegarde-%Y%m%d.zip"))
 
 
 # ── ADMIN: audit log (accountability trail of admin actions) ────────────────

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ t.backups_title }}{% endblock %}
+{% block extra_head %}
+<style>
+.bk-wrap{max-width:860px;margin:32px auto;padding:0 max(4vw,16px)}
+.bk-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:6px}
+.bk-head h1{font-size:22px;font-weight:800;color:var(--navy);margin:0}
+.bk-sub{font-size:13px;color:var(--muted);margin:0 0 20px;line-height:1.6}
+.bk-pill{font-size:12px;font-weight:700;padding:8px 14px;border-radius:9px;text-decoration:none;background:var(--paper);color:var(--navy);border:1.5px solid var(--line)}
+.bk-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
+.bk-btn{display:inline-flex;align-items:center;gap:8px;border:none;border-radius:10px;padding:12px 18px;font-size:14px;font-weight:800;cursor:pointer;text-decoration:none;min-height:44px}
+.bk-btn.primary{background:var(--orange);color:#fff}
+.bk-btn.navy{background:var(--navy);color:#fff}
+.bk-btn:hover{filter:brightness(.95);color:#fff}
+.bk-section{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:22px;margin-bottom:22px}
+.bk-section h3{font-size:14px;font-weight:800;color:var(--navy);margin:0 0 14px;display:flex;align-items:center;gap:8px}
+.bk-row{display:grid;grid-template-columns:1fr 110px 90px 120px;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}
+.bk-row:last-child{border-bottom:none}
+.bk-row.header{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700}
+.bk-row a{font-weight:800;color:var(--navy);text-decoration:none}
+.bk-latest{background:#ecfdf5;color:#047857;font-size:10px;font-weight:800;padding:2px 8px;border-radius:6px;margin-inline-start:6px}
+.bk-tip{background:#fff7ed;border:1px solid #fed7aa;color:#7c2d12;border-radius:12px;padding:14px 16px;font-size:13px;line-height:1.6}
+.empty-state{text-align:center;padding:20px;color:var(--muted);font-size:13px}
+@media(max-width:600px){.bk-row{grid-template-columns:1fr 1fr}.bk-row.header{display:none}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="bk-wrap">
+  <div class="bk-head">
+    <h1><i class="bi bi-database-fill-check" style="color:var(--orange)"></i> {{ t.backups_title }}</h1>
+    <a href="{{ url_for('admin_stats') }}" class="bk-pill"><i class="bi bi-arrow-left-short"></i> {{ t.stats_title }}</a>
+  </div>
+  <p class="bk-sub">{{ t.backups_subtitle.format(keep=keep) }}</p>
+
+  <div class="bk-actions">
+    <form method="POST" style="margin:0">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="bk-btn navy"><i class="bi bi-plus-circle-fill"></i> {{ t.backups_create_now }}</button>
+    </form>
+    <a href="{{ url_for('admin_backup_full') }}" class="bk-btn primary"><i class="bi bi-file-earmark-zip-fill"></i> {{ t.backups_download_full.format(n=receipts_count) }}</a>
+  </div>
+
+  <div class="bk-section">
+    <h3><i class="bi bi-clock-history"></i> {{ t.backups_list_title }}</h3>
+    {% if backups %}
+    <div class="bk-row header"><div>{{ t.backups_col_date }}</div><div>{{ t.backups_col_time }}</div><div>{{ t.backups_col_size }}</div><div></div></div>
+    {% for b in backups %}
+    <div class="bk-row">
+      <div>{{ b.created.strftime('%d/%m/%Y') }}{% if loop.first %}<span class="bk-latest">{{ t.backups_latest }}</span>{% endif %}</div>
+      <div>{{ b.created.strftime('%H:%M') }} UTC</div>
+      <div>{{ (b.size / 1024)|round(0)|int }} Ko</div>
+      <div><a href="{{ url_for('admin_backup_download', name=b.name) }}"><i class="bi bi-download"></i> {{ t.backups_download }}</a></div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">{{ t.backups_empty }}</div>
+    {% endif %}
+  </div>
+
+  <div class="bk-tip"><b><i class="bi bi-shield-fill-check"></i> {{ t.backups_tip_title }}</b><br>{{ t.backups_tip_body }}</div>
+</div>
+{% endblock %}
