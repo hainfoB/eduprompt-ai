@@ -473,6 +473,7 @@ async function resolveVisuals(rawText){
 const CURRENT_LANG = {{ lang | tojson }};
 const CONTACT_EMAIL = {{ contact_email | tojson }};
 const AI_ENDPOINT = {{ url_for('ai_generate') | tojson }};
+const REFERRAL_URL = {{ (url_for('dashboard') ~ '#parrainage') | tojson }};
 const PROFILE_URL = {{ url_for('profile') | tojson }};
 const ALL_LEVELS = {{ levels | tojson }};
 const ALL_SUBJECTS = {{ subjects | tojson }};
@@ -489,6 +490,7 @@ const DOC_ICONS = {
 
 const UI = {
   err_need_apikey:  {{ t.err_need_apikey | tojson }},
+  referral_quota_cta: {{ t.referral_quota_cta | tojson }},
   apikey_missing_generator: {{ t.apikey_missing_generator | tojson }},
   go_to_profile: {{ t.go_to_profile | tojson }},
   err_need_level:   {{ t.err_need_level | tojson }},
@@ -708,7 +710,8 @@ function buildQuotaMessage(data){
   } else {
     text = UI.quota_exceeded_trial;
   }
-  return `${text} <a href="${mailtoLink()}" style="color:inherit;font-weight:800;text-decoration:underline">${UI.contact_us_cta}</a>`;
+  return `${text} <a href="${mailtoLink()}" style="color:inherit;font-weight:800;text-decoration:underline">${UI.contact_us_cta}</a>`
+    + `<br><a href="${REFERRAL_URL}" style="color:inherit;font-weight:800;text-decoration:underline">🎁 ${UI.referral_quota_cta}</a>`;
 }
 
 function toast(msg){const w=document.getElementById("toastWrap");const t=document.createElement("div");t.className="toast-item";t.textContent=msg;w.appendChild(t);setTimeout(()=>t.remove(),3500)}

@@ -46,6 +46,12 @@
     </div>
     <form method="POST" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if referrer %}
+      <div style="background:#fff7ed;border:1.5px solid var(--orange);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:#7c2d12;display:flex;gap:10px;align-items:center">
+        <i class="bi bi-gift-fill" style="font-size:20px;color:var(--orange)"></i>
+        <span>{{ t.referral_invited_banner.format(name=referrer.first_name, n=ref_bonus_invitee) }}</span>
+      </div>
+      {% endif %}
       {% set want_parent = (request.form.get('profile') or request.args.get('profile')) == 'parent' %}
       <div class="form-group">
         <label class="form-label">{{ t.register_profile_label }}</label>

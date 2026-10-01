@@ -36,6 +36,11 @@ class User(UserMixin, db.Model):
     preferred_lang = db.Column(db.String(5), default="fr")
     profile = db.Column(db.String(10), default="teacher")  # "teacher" | "parent"
     signup_source = db.Column(db.String(40), nullable=True)  # facebook, google, direct…
+    # Referral program: personal invite code, who invited this user, and whether
+    # the inviter has already been rewarded for this user's first document.
+    referral_code = db.Column(db.String(12), unique=True, nullable=True, index=True)
+    referred_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    referral_rewarded = db.Column(db.Boolean, default=False)
 
     @property
     def is_parent(self):
@@ -69,6 +74,10 @@ class Subscription(db.Model):
     docs_used  = db.Column(db.Integer, default=0)               # trial: total docs used
     docs_limit = db.Column(db.Integer, default=TRIAL_DOCS)      # trial: total docs cap
 
+    # Extra documents earned (referral program). Used only once the normal
+    # quota is exhausted, and still usable after the plan has expired.
+    bonus_docs = db.Column(db.Integer, default=0)
+
     # Daily quota tracking (used for pro / premium plans)
     docs_used_today  = db.Column(db.Integer, default=0)
     last_reset_date  = db.Column(db.Date, nullable=True)
@@ -94,28 +103,38 @@ class Subscription(db.Model):
             self.docs_used_today = 0
             self.last_reset_date = today
 
-    def has_quota(self):
+    def _plan_has_quota(self):
         if self.is_expired():
             return False
         if self.is_daily_plan():
             self._roll_daily_counter_if_needed()
             return self.docs_used_today < self.daily_limit()
         # trial (or any other non-daily plan): total cap
-        return self.docs_used < self.docs_limit
+        return (self.docs_used or 0) < (self.docs_limit or 0)
 
-    def remaining(self):
+    def has_quota(self):
+        return self._plan_has_quota() or (self.bonus_docs or 0) > 0
+
+    def plan_remaining(self):
+        if self.is_expired():
+            return 0
         if self.is_daily_plan():
             self._roll_daily_counter_if_needed()
             return max(0, self.daily_limit() - self.docs_used_today)
-        return max(0, self.docs_limit - self.docs_used)
+        return max(0, (self.docs_limit or 0) - (self.docs_used or 0))
+
+    def remaining(self):
+        return self.plan_remaining() + (self.bonus_docs or 0)
 
     def register_usage(self):
-        """Call after a successful generation to decrement the right counter."""
-        if self.is_daily_plan():
-            self._roll_daily_counter_if_needed()
-            self.docs_used_today += 1
-        else:
-            self.docs_used += 1
+        """Call after a successful generation: plan quota first, then bonus documents."""
+        if self._plan_has_quota():
+            if self.is_daily_plan():
+                self.docs_used_today += 1
+            else:
+                self.docs_used = (self.docs_used or 0) + 1
+        elif (self.bonus_docs or 0) > 0:
+            self.bonus_docs -= 1
 
     def days_until_expiry(self):
         if not self.expires_at:

@@ -49,8 +49,18 @@ def tr(key, **kwargs):
     text = get_translations(current_lang()).get(key, key)
     return text.format(**kwargs) if kwargs else text
 
+
+def tr_lang(lang, key, **kwargs):
+    """Translate a key for a given language (e.g. another user's), not the session's."""
+    text = get_translations(lang if lang in TRANSLATIONS else "fr").get(key, key)
+    return text.format(**kwargs) if kwargs else text
+
 # ── APP SETUP ──────────────────────────────────────────────────────────────────
 app = Flask(__name__)
+# Railway terminates HTTPS at its proxy: trust its X-Forwarded-* headers so
+# external links (referral links, emails) are generated as https://.
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-in-production")
 
 # DATA_DIR points to a persistent volume in production (e.g. Railway mounts one at /data).
@@ -98,6 +108,11 @@ def ensure_lang():
     if "lang" not in session:
         best = request.accept_languages.best_match(SUPPORTED_LANGS)
         session["lang"] = best or "fr"
+    # Referral link (?ref=CODE): remember who invited this visitor.
+    ref = request.args.get("ref", "").strip().upper()
+    if ref and re.fullmatch(r"[A-Z0-9]{4,12}", ref) and session.get("ref") != ref:
+        session["ref"] = ref
+        session.setdefault("src", "referral")
     login_manager.login_message = tr("login_required_message")
 
 
@@ -178,6 +193,7 @@ def _migrate_sqlite_schema():
                 "last_reset_date": "DATE",
                 "expiry_reminder_sent": "BOOLEAN DEFAULT 0",
                 "last_reminder_stage": "INTEGER",
+                "bonus_docs": "INTEGER DEFAULT 0",
             },
             "user": {
                 "gemini_api_key": "VARCHAR(255)",
@@ -185,6 +201,9 @@ def _migrate_sqlite_schema():
                 "is_active": "BOOLEAN DEFAULT 1",
                 "profile": "VARCHAR(10) DEFAULT 'teacher'",
                 "signup_source": "VARCHAR(40)",
+                "referral_code": "VARCHAR(12)",
+                "referred_by_id": "INTEGER",
+                "referral_rewarded": "BOOLEAN DEFAULT 0",
             },
             "payment_request": {
                 "method": "VARCHAR(10)",
@@ -202,6 +221,10 @@ def _migrate_sqlite_schema():
                 if col not in existing_cols:
                     cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}")
                     print(f"✅ Migrated: added {table}.{col}")
+
+        cur.execute("PRAGMA table_info(user)")
+        if any(r[1] == "referral_code" for r in cur.fetchall()):
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_user_referral_code_u ON user (referral_code)")
 
         # One-time data migration: the "premium" plan was renamed to "ultimate".
         for table in ("subscription", "payment_request", "license_code"):
@@ -303,6 +326,56 @@ def track(event, profile=None, user_id=None):
                                    visitor=session["vid"], user_id=user_id))
     except RuntimeError:
         pass  # no request context (scheduled job): nothing to attribute
+
+
+# ── REFERRAL PROGRAM ("invite a colleague") ─────────────────────────────────
+REFERRAL_BONUS_INVITEE = 3   # extra documents for the invited person, at signup
+REFERRAL_BONUS_REFERRER = 3  # extra documents for the inviter, at the invitee's 1st document
+REFERRAL_MAX_REWARDS = 20    # cap per inviter, to limit abuse with fake accounts
+_REF_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I confusion
+
+
+def get_referral_code(user):
+    """The user's personal invite code, created on first use."""
+    if not user.referral_code:
+        while True:
+            code = "".join(secrets.choice(_REF_ALPHABET) for _ in range(6))
+            if not User.query.filter_by(referral_code=code).first():
+                break
+        user.referral_code = code
+        db.session.commit()
+    return user.referral_code
+
+
+def referral_link(user):
+    return url_for("home", ref=get_referral_code(user), _external=True)
+
+
+def pending_referrer():
+    """The account whose invite link brought this visitor, if any."""
+    code = session.get("ref")
+    if not code:
+        return None
+    return User.query.filter_by(referral_code=code, is_active=True).first()
+
+
+def reward_referrer_if_due(user):
+    """Called on the user's first document: credit whoever invited them (once)."""
+    if not user.referred_by_id or user.referral_rewarded:
+        return
+    referrer = User.query.get(user.referred_by_id)
+    user.referral_rewarded = True
+    if not referrer or not referrer.subscription:
+        return
+    rewarded = User.query.filter_by(referred_by_id=referrer.id, referral_rewarded=True).count()
+    if rewarded > REFERRAL_MAX_REWARDS:  # this user already counted above
+        return
+    referrer.subscription.bonus_docs = (referrer.subscription.bonus_docs or 0) + REFERRAL_BONUS_REFERRER
+    lang = referrer.preferred_lang or "fr"
+    db.session.add(Message(user_id=referrer.id, sender="admin", body=tr_lang(
+        lang, "referral_reward_message", name=user.first_name, n=REFERRAL_BONUS_REFERRER)))
+    db.session.add(FunnelEvent(event="referral_reward", profile=referrer.profile,
+                               source=referrer.signup_source, user_id=referrer.id))
 
 
 def apply_payment_approval(teacher, plan, days=365, reason="payment_approved"):
@@ -481,6 +554,11 @@ def register():
         db.session.flush()  # get user.id before commit
         track("signup", profile=profile, user_id=user.id)
         create_trial_subscription(user)  # immediate access while any payment is reviewed
+        referrer = pending_referrer()
+        if referrer and referrer.email != email:
+            user.referred_by_id = referrer.id
+            user.subscription.bonus_docs = (user.subscription.bonus_docs or 0) + REFERRAL_BONUS_INVITEE
+            session.pop("ref", None)
 
         if wanted_plan in ("pro", "ultimate"):
             receipt_name = save_receipt_file(receipt_file, user.id)
@@ -496,11 +574,14 @@ def register():
         login_user(user)
         if wanted_plan in ("pro", "ultimate"):
             flash(tr("flash_welcome_trial_pending_payment"), "success")
+        elif user.referred_by_id:
+            flash(tr("flash_welcome_referral", n=REFERRAL_BONUS_INVITEE), "success")
         else:
             flash(tr("flash_welcome_trial"), "success")
         return redirect(url_for("generator"))
 
-    return render_template("register.html")
+    return render_template("register.html", referrer=pending_referrer(),
+                           ref_bonus_invitee=REFERRAL_BONUS_INVITEE)
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -542,8 +623,13 @@ def dashboard():
         .order_by(Message.created_at.desc()).limit(3).all()
     unread_admin_msgs = Message.query.filter_by(user_id=current_user.id, sender="admin",
                                                  read_by_teacher=False).count()
+    invited = User.query.filter_by(referred_by_id=current_user.id).count()
+    invited_active = User.query.filter_by(referred_by_id=current_user.id, referral_rewarded=True).count()
     return render_template("dashboard.html", sub=sub, docs=recent_docs,
-                            recent_messages=recent_messages, unread_admin_msgs=unread_admin_msgs)
+                            recent_messages=recent_messages, unread_admin_msgs=unread_admin_msgs,
+                            ref_link=referral_link(current_user), ref_invited=invited,
+                            ref_active=invited_active, ref_bonus=REFERRAL_BONUS_REFERRER,
+                            ref_bonus_invitee=REFERRAL_BONUS_INVITEE)
 
 
 # ── PROFILE (self-service) ───────────────────────────────────────────────────
@@ -1589,6 +1675,7 @@ def log_usage():
     sub.register_usage()
     if Document.query.filter_by(user_id=current_user.id).count() == 0:
         track("first_document", profile=current_user.profile, user_id=current_user.id)
+        reward_referrer_if_due(current_user)
 
     doc = Document(
         user_id=current_user.id,
