@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{{ t.errors_title }}{% endblock %}
+{% block extra_head %}
+<style>
+.er-wrap{max-width:1000px;margin:32px auto;padding:0 max(4vw,16px)}
+.er-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px}
+.er-head h1{font-size:22px;font-weight:800;color:var(--navy);margin:0}
+.er-pill{font-size:12px;font-weight:700;padding:7px 13px;border-radius:9px;text-decoration:none;background:var(--paper);color:var(--navy);border:1.5px solid var(--line)}
+.er-pill.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.er-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.er-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px}
+.er-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:18px}
+.er-card .label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.er-card .value{font-size:26px;font-weight:800;color:var(--navy)}
+.er-card .value.bad{color:#b91c1c}
+.er-section{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:22px;margin-bottom:22px}
+.er-section h3{font-size:14px;font-weight:800;color:var(--navy);margin:0 0 14px;display:flex;align-items:center;gap:8px}
+.er-cause{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.er-cause:last-child{border-bottom:none}
+.er-cause code{white-space:pre-wrap;word-break:break-word;font-size:12px;color:var(--ink);direction:ltr;text-align:left}
+.er-cause b{color:#b91c1c;flex-shrink:0}
+.er-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.er-table th{text-align:start;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700;padding:8px 6px;border-bottom:1.5px solid var(--line)}
+.er-table td{padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.er-table td.msg{direction:ltr;text-align:left;word-break:break-word;max-width:420px;color:var(--muted)}
+.er-stage{font-size:10px;font-weight:800;padding:2px 8px;border-radius:6px;background:var(--sky);color:var(--navy);white-space:nowrap}
+.er-stage.upstream{background:#fef2f2;color:#b91c1c}
+.empty-state{text-align:center;padding:20px;color:var(--muted);font-size:13px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="er-wrap">
+  <div class="er-head">
+    <h1><i class="bi bi-exclamation-octagon-fill" style="color:#b91c1c"></i> {{ t.errors_title }}</h1>
+    <a href="{{ url_for('admin_stats') }}" class="er-pill"><i class="bi bi-arrow-left-short"></i> {{ t.stats_title }}</a>
+  </div>
+
+  <div class="er-filters">
+    {% for d, label in [(1, t.funnel_p_today), (7, t.funnel_p_7), (30, t.funnel_p_30), (0, t.funnel_p_all)] %}
+      <a class="er-pill {% if days == d %}on{% endif %}" href="{{ url_for('admin_errors', days=d) }}">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="er-grid">
+    <div class="er-card"><div class="label">{{ t.errors_total }}</div><div class="value {% if total %}bad{% endif %}">{{ total }}</div></div>
+    <div class="er-card"><div class="label">{{ t.errors_rate }}</div><div class="value">{{ rate if rate is not none else '—' }}{% if rate is not none %} %{% endif %}</div></div>
+    <div class="er-card"><div class="label">{{ t.errors_successes }}</div><div class="value">{{ successes }}</div></div>
+    <div class="er-card"><div class="label">{{ t.errors_by_stage }}</div>
+      <div style="font-size:12px;line-height:1.8;margin-top:4px">
+        {% for st in ['generate', 'download', 'demo', 'upstream'] %}{{ t['errors_stage_' ~ st] }} : <b>{{ by_stage.get(st, 0) }}</b><br>{% endfor %}
+      </div>
+    </div>
+  </div>
+
+  {% if by_stage.get('upstream') %}
+  <div class="er-section" style="border:2px solid #fca5a5">
+    <h3 style="color:#b91c1c"><i class="bi bi-key-fill"></i> {{ t.errors_upstream_alert }}</h3>
+    <p style="font-size:13px;margin:0;color:var(--muted)">{{ t.errors_upstream_hint }}</p>
+  </div>
+  {% endif %}
+
+  <div class="er-section">
+    <h3><i class="bi bi-list-ol"></i> {{ t.errors_causes_title }}</h3>
+    {% for msg, n in top_causes %}
+      <div class="er-cause"><code>{{ msg }}</code><b>× {{ n }}</b></div>
+    {% else %}
+      <div class="empty-state">{{ t.errors_none }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="er-section">
+    <h3><i class="bi bi-clock-history"></i> {{ t.errors_recent_title }}</h3>
+    {% if recent %}
+    <div style="overflow-x:auto">
+    <table class="er-table">
+      <thead><tr><th>{{ t.funnel_col_day }}</th><th>{{ t.errors_col_user }}</th><th>{{ t.errors_col_stage }}</th><th>{{ t.table_subject }}</th><th>{{ t.errors_col_message }}</th></tr></thead>
+      <tbody>
+      {% for e in recent %}
+      <tr>
+        <td style="white-space:nowrap">{{ e.created_at.strftime('%d/%m %H:%M') }}</td>
+        <td>{% if e.user %}<a href="{{ url_for('admin_teacher_detail', user_id=e.user.id) }}" style="color:var(--navy);font-weight:700;text-decoration:none">{{ e.user.full_name }}</a>{% else %}<span style="color:var(--muted)">{{ t.errors_visitor }}</span>{% endif %}</td>
+        <td><span class="er-stage {{ e.stage }}">{{ t['errors_stage_' ~ e.stage] }}</span></td>
+        <td>{{ e.subject or '' }}</td>
+        <td class="msg">{{ e.message or '' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}<div class="empty-state">{{ t.errors_none }}</div>{% endif %}
+  </div>
+</div>
+{% endblock %}

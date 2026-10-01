@@ -996,6 +996,14 @@ async function callGemini(prompt){
   throw new Error(lastMsg);
 }
 
+// Report a failure to the server so the admin can count and diagnose them.
+function reportError(stage, message, subject){
+  try{
+    fetch({{ url_for('log_error') | tojson }}, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({stage, message: String(message||"").slice(0,500), doc_type: docType, subject: subject||""})});
+  }catch(e){}
+}
+
 async function generate(){
   showError(null);
   const level=document.getElementById("levelSel").value;
@@ -1051,6 +1059,7 @@ async function generate(){
     document.getElementById("loaderWrap").classList.remove("visible");
     panel.classList.remove("visible");
     showError(UI.err_api_prefix+" ("+e.message+")");
+    reportError("generate", e.message, subject);
   }finally{
     btn.disabled=false;
   }
@@ -1108,6 +1117,7 @@ async function downloadDoc(){
     URL.revokeObjectURL(url);
   }catch(e){
     showError("Error: "+e.message);
+    reportError("download", e.message, document.getElementById("subjectSel").value);
   }finally{
     btn.disabled=false;
   }

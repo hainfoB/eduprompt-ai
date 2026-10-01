@@ -31,7 +31,8 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
 from models import (db, User, Subscription, Document, LicenseCode, Payment, Message,
-                     PaymentRequest, AdminLog, PlanChangeHistory, FunnelEvent, PLAN_PRICES, PAYMENT_METHODS,
+                     PaymentRequest, AdminLog, PlanChangeHistory, FunnelEvent, GenerationError,
+                     PLAN_PRICES, PAYMENT_METHODS,
                      create_trial_subscription, next_receipt_number)
 from werkzeug.utils import secure_filename
 from utils import build_sources_context
@@ -1141,6 +1142,8 @@ def admin_stats():
     )
 
     pending_payments = PaymentRequest.query.filter_by(status="pending").count()
+    errors_7d = GenerationError.query.filter(
+        GenerationError.created_at >= datetime.utcnow() - timedelta(days=7)).count()
 
     # Monthly leaderboard — top active teachers for a selectable month (default: current)
     month_param = request.args.get("month", "").strip()
@@ -1166,7 +1169,8 @@ def admin_stats():
                            total_revenue=total_revenue, month_revenue=month_revenue,
                            recent_payments=recent_payments, expiring=expiring,
                            top_teachers=top_rows, pending_payments=pending_payments,
-                           leaderboard=leaderboard, leaderboard_month=lb_start.strftime("%Y-%m"))
+                           leaderboard=leaderboard, leaderboard_month=lb_start.strftime("%Y-%m"),
+                           errors_7d=errors_7d)
 
 
 # ── ADMIN: acquisition funnel (campaign measurement) ────────────────────────
@@ -1253,6 +1257,44 @@ def admin_funnel():
     return render_template("admin_funnel.html", steps=steps, by_source=by_source, split=split,
                            daily=daily, days=days, profile=profile, first_event=first_event,
                            users_by_profile=users_by_profile)
+
+
+# ── ADMIN: failed generations ──────────────────────────────────────────────
+@app.route("/admin/errors")
+@login_required
+def admin_errors():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+    from sqlalchemy import func
+
+    days = request.args.get("days", 7, type=int)
+    if days not in (1, 7, 30, 0):
+        days = 7
+    eq = GenerationError.query
+    dq = Document.query
+    if days:
+        since = datetime.utcnow() - timedelta(days=days)
+        eq = eq.filter(GenerationError.created_at >= since)
+        dq = dq.filter(Document.created_at >= since)
+
+    total = eq.count()
+    by_stage = dict(eq.with_entities(GenerationError.stage, func.count(GenerationError.id))
+                    .group_by(GenerationError.stage).all())
+    user_failures = by_stage.get("generate", 0) + by_stage.get("download", 0)
+    successes = dq.count()
+    rate = round(100 * user_failures / (user_failures + successes), 1) if (user_failures + successes) else None
+
+    # Most frequent causes: group messages after removing variable numbers/ids
+    causes = {}
+    for (msg,) in eq.with_entities(GenerationError.message).all():
+        key = re.sub(r"\d+", "#", (msg or "?").strip())[:140]
+        causes[key] = causes.get(key, 0) + 1
+    top_causes = sorted(causes.items(), key=lambda kv: kv[1], reverse=True)[:8]
+
+    recent = eq.order_by(GenerationError.created_at.desc()).limit(50).all()
+    return render_template("admin_errors.html", days=days, total=total, by_stage=by_stage,
+                           successes=successes, rate=rate, top_causes=top_causes, recent=recent)
 
 
 # ── ADMIN: database backups ─────────────────────────────────────────────────
@@ -1808,6 +1850,22 @@ def check_quota():
     })
 
 
+# ── API: LOG ERROR (a generation failed in front of the user) ───────────────
+@app.route("/api/log-error", methods=["POST"])
+@login_required
+@csrf.exempt
+@limiter.limit("60/hour")
+def log_error():
+    data = request.get_json(silent=True) or {}
+    stage = str(data.get("stage", "generate"))[:20]
+    db.session.add(GenerationError(
+        user_id=current_user.id, stage=stage if stage in ("generate", "download") else "generate",
+        message=str(data.get("message", ""))[:500], doc_type=str(data.get("doc_type", ""))[:40],
+        subject=str(data.get("subject", ""))[:80]))
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
 # ── API: LOG USAGE (after successful AI generation) ──────────────────────────
 @app.route("/api/log-usage", methods=["POST"])
 @login_required
@@ -1912,6 +1970,9 @@ def ai_generate():
     # Never let the platform key's auth errors look like the user's problem.
     if resp.status_code in (400, 401, 403) and "API key" in resp.text:
         app.logger.error("Platform GEMINI_API_KEY rejected by Google: %s", resp.text[:300])
+        db.session.add(GenerationError(user_id=current_user.id, stage="upstream",
+                                       message="Platform Gemini key rejected: " + resp.text[:400]))
+        db.session.commit()
         return jsonify({"error": {"message": "AI service temporarily unavailable"}}), 503
     return app.response_class(resp.content, status=resp.status_code, mimetype="application/json")
 
@@ -2021,6 +2082,9 @@ def api_demo():
         track("demo", profile="parent" if data.get("profile") == "parent" else "teacher")
         db.session.commit()
         return jsonify({"text": text})
+    db.session.add(GenerationError(stage="demo", message="All demo models failed",
+                                   subject=subject[:80]))
+    db.session.commit()
     return jsonify({"error": "unavailable"}), 503
 
 

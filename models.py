@@ -274,6 +274,20 @@ class FunnelEvent(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 
+class GenerationError(db.Model):
+    """A document generation that failed in front of the user (or a failed demo),
+    so the admin can see how often it happens and why."""
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    stage      = db.Column(db.String(20), default="generate")  # generate | demo | download | upstream
+    message    = db.Column(db.String(500), nullable=True)
+    doc_type   = db.Column(db.String(40), nullable=True)
+    subject    = db.Column(db.String(80), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    user = db.relationship("User")
+
+
 class AdminLog(db.Model):
     """Lightweight audit trail of admin actions, for accountability."""
     id         = db.Column(db.Integer, primary_key=True)

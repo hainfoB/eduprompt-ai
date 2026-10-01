@@ -69,6 +69,11 @@
       <div class="label">{{ t.stats_revenue_month }}</div>
       <div class="value">{{ month_revenue }} DA</div>
     </div>
+    <a class="st-card" href="{{ url_for('admin_errors') }}" style="text-decoration:none;{% if errors_7d %}border:2px solid #fca5a5{% endif %}">
+      <div class="label">{{ t.errors_card_7d }}</div>
+      <div class="value" style="{% if errors_7d %}color:#b91c1c{% endif %}">{{ errors_7d }}</div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-top:4px">{{ t.errors_see_details }} →</div>
+    </a>
   </div>
 
   <div class="st-section">
