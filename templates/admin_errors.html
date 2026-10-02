@@ -47,7 +47,7 @@
     <div class="er-card"><div class="label">{{ t.errors_successes }}</div><div class="value">{{ successes }}</div></div>
     <div class="er-card"><div class="label">{{ t.errors_by_stage }}</div>
       <div style="font-size:12px;line-height:1.8;margin-top:4px">
-        {% for st in ['generate', 'download', 'demo', 'upstream'] %}{{ t['errors_stage_' ~ st] }} : <b>{{ by_stage.get(st, 0) }}</b><br>{% endfor %}
+        {% for st in ['generate', 'download', 'sources', 'demo', 'upstream'] %}{{ t['errors_stage_' ~ st] }} : <b>{{ by_stage.get(st, 0) }}</b><br>{% endfor %}
       </div>
     </div>
   </div>

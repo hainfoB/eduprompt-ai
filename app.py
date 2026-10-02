@@ -1908,7 +1908,7 @@ def log_error():
     data = request.get_json(silent=True) or {}
     stage = str(data.get("stage", "generate"))[:20]
     db.session.add(GenerationError(
-        user_id=current_user.id, stage=stage if stage in ("generate", "download") else "generate",
+        user_id=current_user.id, stage=stage if stage in ("generate", "download", "sources") else "generate",
         message=str(data.get("message", ""))[:500], doc_type=str(data.get("doc_type", ""))[:40],
         subject=str(data.get("subject", ""))[:80]))
     db.session.commit()
@@ -2214,8 +2214,10 @@ def extract_sources():
     urls_raw = request.form.get("urls", "")
     urls = [u.strip() for u in urls_raw.split("\n") if u.strip()]
 
-    context, warnings = build_sources_context(files, urls)
-    return jsonify({"context": context, "warnings": warnings})
+    context, warnings, attachments = build_sources_context(files, urls)
+    return jsonify({"context": context, "warnings": warnings,
+                    "attachments": [{"mimeType": a["mime"], "data": a["data"], "name": a["name"]}
+                                    for a in attachments]})
 
 
 # ── DOCUMENT GENERATION HELPERS ───────────────────────────────────────────────

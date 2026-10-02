@@ -238,7 +238,7 @@
             <i class="bi bi-cloud-arrow-up-fill"></i>
             <p><strong>{{ t.dropzone_text }}</strong><br>{{ t.dropzone_formats }}</p>
           </div>
-          <input type="file" id="fileInput" multiple accept=".pdf,.docx,.txt,.md" style="display:none"/>
+          <input type="file" id="fileInput" multiple accept=".pdf,.docx,.doc,.txt,.md,.jpg,.jpeg,.png,.webp,.heic,image/*,application/pdf" style="display:none"/>
           <div class="file-list" id="fileList"></div>
         </div>
 
@@ -546,6 +546,7 @@ const UI = {
 let lastDocId=null;
 let docType=ALL_DOC_TYPES[CURRENT_LANG][0].id, fmt="docx", lastContent="", sourcesContext="", lastVisuals=[];
 let uploadedFiles=[];
+let sourceAttachments=[];  // photos / scanned PDFs sent to the model as-is
 
 buildDocGrid();
 buildLevelSubjectSelects();
@@ -689,7 +690,8 @@ function renderFileList(){
   const list=document.getElementById("fileList");
   list.innerHTML="";
   uploadedFiles.forEach((f,idx)=>{
-    const icon = f.name.endsWith(".pdf") ? "bi-file-earmark-pdf-fill" :
+    const icon = /\.(jpe?g|png|webp|heic)$/i.test(f.name) || (f.type||"").startsWith("image/") ? "bi-file-earmark-image-fill" :
+                 f.name.endsWith(".pdf") ? "bi-file-earmark-pdf-fill" :
                  f.name.endsWith(".docx") ? "bi-file-earmark-word-fill" : "bi-file-earmark-text-fill";
     const chip=document.createElement("div");
     chip.className="file-chip";
@@ -699,6 +701,7 @@ function renderFileList(){
 }
 
 async function extractSources(){
+  sourceAttachments = [];
   const urls = Array.from(document.querySelectorAll(".url-field")).map(i=>i.value.trim()).filter(Boolean);
   if(uploadedFiles.length===0 && urls.length===0) return "";
 
@@ -707,22 +710,47 @@ async function extractSources(){
   statusEl.innerHTML=`<i class="bi bi-arrow-repeat"></i> ${UI.sources_extracting}`;
 
   const formData=new FormData();
-  uploadedFiles.forEach(f=>formData.append("files", f));
+  for(const f of uploadedFiles){
+    const small = await shrinkImage(f);
+    formData.append("files", small, small.name || f.name);
+  }
   formData.append("urls", urls.join("\n"));
 
   try{
     const res=await fetch("/api/extract-sources", {method:"POST", body:formData});
+    if(!res.ok) throw new Error("HTTP " + res.status);
     const data=await res.json();
-    if(data.warnings && data.warnings.length){
-      statusEl.innerHTML=`⚠️ ${data.warnings.join(" · ")}`;
-    } else {
-      statusEl.innerHTML=`✅ ${urls.length+uploadedFiles.length} ${UI.sources_integrated_suffix}`;
+    sourceAttachments = (data.attachments||[]).map(a=>({inlineData:{mimeType:a.mimeType, data:a.data}}));
+    const warnings = data.warnings || [];
+    const ok = urls.length + uploadedFiles.length - warnings.length;
+    let html = ok > 0 ? `✅ ${ok} ${UI.sources_integrated_suffix}` : "";
+    if(warnings.length){
+      const esc = w => String(w).replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+      html += (html ? "<br>" : "") + warnings.map(w=>`⚠️ ${esc(w)}`).join("<br>");
+      reportError("sources", warnings.join(" | "));
     }
+    statusEl.innerHTML = html;
     return data.context || "";
   }catch(e){
     statusEl.innerHTML=`⚠️ ${UI.sources_extract_error}`;
     return "";
   }
+}
+
+// Phone photos are often 4–8 MB: resize to 1600 px JPEG before upload so they
+// stay fast on mobile data and within the size limits.
+async function shrinkImage(file){
+  if(!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size < 900*1024) return file;
+  try{
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(bmp.width*scale); c.height = Math.round(bmp.height*scale);
+    c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+    const blob = await new Promise(r=>c.toBlob(r, "image/jpeg", 0.85));
+    if(!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", {type:"image/jpeg"});
+  }catch(e){ return file; }
 }
 
 function setFmt(btn){document.querySelectorAll(".fmt-btn").forEach(b=>b.classList.remove("active"));btn.classList.add("active");fmt=btn.dataset.fmt}
@@ -1014,8 +1042,14 @@ async function callOneModel(model, contents, retries=3, onPartial=null){
 
     if(res.status===404 || msg.includes("no longer available") || msg.includes("not found"))
       throw {type:"skip", msg};
-    if(res.status===429 || res.status===503 || msg.includes("high demand") || msg.includes("overloaded") || msg.includes("quota")){
-      const wait=(attempt+1)*4000;
+    // 429 = this model's quota is used up for now: every model has its own quota,
+    // so move to the next model at once instead of waiting ~25 s for nothing.
+    if(res.status===429 || (msg.includes("quota") && msg!=="quota_exceeded")){
+      throw {type:"skip", msg};
+    }
+    if(res.status===503 || msg.includes("high demand") || msg.includes("overloaded")){
+      if(attempt >= 1) throw {type:"skip", msg};  // still overloaded: try another model
+      const wait=3000;
       updateLoaderMsg(`⏳ ${UI.loader_overload} ${wait/1000}s…`);
       await sleep(wait);
       continue;
@@ -1031,7 +1065,8 @@ async function callGemini(prompt, onLive=null){
   for(const model of GEMINI_MODELS){
     updateLoaderMsg(`${UI.loader_trying_model} ${model}…`);
     try{
-      let contents = [{role:"user", parts:[{text: prompt}]}];
+      const firstTurn = {role:"user", parts:[...sourceAttachments, {text: prompt}]};
+      let contents = [firstTurn];
       let fullText = "";
       let round = 0;
 
@@ -1046,7 +1081,7 @@ async function callGemini(prompt, onLive=null){
         round++;
         updateLoaderMsg(`✍️ ${UI.loader_writing} (${round + 1})`);
         contents = [
-          {role:"user", parts:[{text: prompt}]},
+          firstTurn,
           {role:"model", parts:[{text: fullText}]},
           {role:"user", parts:[{text: "Continue exactly where you left off, seamlessly, without repeating anything already written and without restarting. Keep the same language and structure."}]},
         ];
