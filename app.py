@@ -2283,7 +2283,8 @@ def try_parse_md_table(lines, i):
             s = s[1:]
         if s.endswith("|"):
             s = s[:-1]
-        return [c.strip() for c in s.split("|")]
+        # Gemini often puts <br> inside cells to break lines: keep the line break, drop the tag.
+        return [re.sub(r"<br\s*/?>", "\n", c, flags=re.I).replace("**", "").strip() for c in s.split("|")]
 
     rows = [split_row(lines[i])]
     j = i + 2

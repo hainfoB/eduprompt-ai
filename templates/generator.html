@@ -1016,19 +1016,21 @@ function buildPrompt(level, palier, subject, lesson, dt, ctx, etablissement, pro
 
 const GEMINI_MODELS = ["gemini-3.8-flash","gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash","gemini-3.5-flash-lite","gemini-2.5-flash"];
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
-const MAX_OUTPUT_TOKENS = 8192;
-const MAX_CONTINUATIONS = 3; // safety cap so a runaway document can't loop forever
+const MAX_OUTPUT_TOKENS = 16384; // thinking models count their reasoning in this budget
+const MAX_CONTINUATIONS = 5; // safety cap so a runaway document can't loop forever
 
 // Reads Gemini's server-sent events as they arrive; onPartial(text) receives
 // the text written so far, so the document appears progressively.
 async function readGeminiStream(res, onPartial){
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let buffer = "", text = "", finishReason = "STOP";
+  // finishReason stays null if the stream ends without Google saying why: that
+  // means the connection was cut mid-document, and the caller continues it.
+  let buffer = "", text = "", finishReason = null;
   while(true){
     const {done, value} = await reader.read();
-    if(done) break;
-    buffer += decoder.decode(value, {stream:true});
+    if(done){ buffer += "\n"; }  // flush a last event not followed by a newline
+    else buffer += decoder.decode(value, {stream:true});
     let nl;
     while((nl = buffer.indexOf("\n")) >= 0){
       const line = buffer.slice(0, nl).trim();
@@ -1041,6 +1043,7 @@ async function readGeminiStream(res, onPartial){
       if(cand?.finishReason) finishReason = cand.finishReason;
       if(onPartial && parts.length) onPartial(text);
     }
+    if(done) break;
   }
   return {text, finishReason};
 }
@@ -1099,7 +1102,10 @@ async function callGemini(prompt, onLive=null){
       fullText += out.text;
       // Keep writing with the model that answered (same style), others as backup.
       models = [out.model, ...GEMINI_MODELS.filter(m => m !== out.model)];
-      if(out.finishReason !== "MAX_TOKENS" || round >= MAX_CONTINUATIONS) break;
+      // Only a clean "STOP" means the document is finished. MAX_TOKENS, a cut
+      // connection (null) or any other reason: ask the model to continue.
+      if(out.finishReason === "STOP" || round >= MAX_CONTINUATIONS) break;
+      if(["SAFETY","RECITATION","BLOCKLIST","PROHIBITED_CONTENT","SPII"].includes(out.finishReason)) break;
       contents = [
         firstTurn,
         {role:"model", parts:[{text: fullText}]},
