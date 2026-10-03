@@ -2322,6 +2322,20 @@ def _visuals_by_id(visuals):
 VISUAL_ID_RE = re.compile(r'\[\[VISUAL_ID:(\d+)\]\]')
 
 
+_HR_RE = re.compile(r"^(?:-{3,}|\*{3,}|_{3,})$")
+_BULLET_RE = re.compile(r"^(\s*)[-*•+]\s+(.*)$")
+
+
+def _list_item(raw_line):
+    """'- x', '* x', '• x' (with indentation for sub-levels) -> (level, text), else None."""
+    m = _BULLET_RE.match(raw_line.replace("\t", "    "))
+    if not m or not m.group(2).strip():
+        return None
+    indent = len(m.group(1))
+    level = 0 if indent < 2 else (1 if indent < 6 else 2)  # 2 or 4 spaces = sub-level
+    return level, m.group(2).strip()
+
+
 def make_docx(content, meta, colors_cfg, lang="fr", visuals=None):
     """
     meta: dict with teacher_first, teacher_last, level, palier, subject, lesson
@@ -2405,7 +2419,7 @@ def make_docx(content, meta, colors_cfg, lang="fr", visuals=None):
     while i < len(lines):
         line = lines[i].strip()
 
-        if not line:
+        if not line or _HR_RE.match(line):  # Markdown "---" separators: just space
             doc.add_paragraph("")
             i += 1
             continue
@@ -2458,10 +2472,18 @@ def make_docx(content, meta, colors_cfg, lang="fr", visuals=None):
             h = doc.add_heading("", level=1)
             r = h.add_run(line[2:])
             r.font.color.rgb = RGBColor(*hex_to_rgb(c2))
-        elif line.startswith("- ") or line.startswith("• "):
-            p = doc.add_paragraph(style="List Bullet")
-            r = p.add_run(line[2:])
-            r.font.color.rgb = RGBColor(*hex_to_rgb(ctext, "1a1a1a"))
+        elif _list_item(lines[i]):
+            level, item = _list_item(lines[i])
+            style = ["List Bullet", "List Bullet 2", "List Bullet 3"][level]
+            try:
+                p = doc.add_paragraph(style=style)
+            except KeyError:
+                p = doc.add_paragraph(style="List Bullet")
+            for pi, part in enumerate(item.split("**")):
+                r = p.add_run(part)
+                r.font.color.rgb = RGBColor(*hex_to_rgb(ctext, "1a1a1a"))
+                if pi % 2 == 1:
+                    r.bold = True
         else:
             p = doc.add_paragraph()
             parts = line.split("**")
@@ -2559,7 +2581,7 @@ def make_pdf(content, meta, colors_cfg, lang="fr", visuals=None):
     while i < len(lines):
         line = lines[i].strip()
 
-        if not line:
+        if not line or _HR_RE.match(line):
             story.append(Spacer(1, 0.2*cm))
             i += 1
             continue
@@ -2603,8 +2625,13 @@ def make_pdf(content, meta, colors_cfg, lang="fr", visuals=None):
         if line.startswith("### ") or line.startswith("## ") or line.startswith("# "):
             style = h1_s if line.startswith("# ") else h2_s
             story.append(Paragraph(line.lstrip("#").strip(), style))
-        elif line.startswith("- ") or line.startswith("• "):
-            story.append(Paragraph("• " + line[2:], blt_s))
+        elif _list_item(lines[i]):
+            level, item = _list_item(lines[i])
+            safe = item.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+            safe = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', safe)
+            mark = ["•", "◦", "▪"][level]
+            pad = "&nbsp;" * (6 * level)
+            story.append(Paragraph(f"{pad}{mark} {safe}", blt_s))
         else:
             safe = line.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
             safe = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', safe)

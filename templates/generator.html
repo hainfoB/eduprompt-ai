@@ -1248,7 +1248,8 @@ function renderContent(text){
     .replace(/^## (.+)$/gm,"<h2>$1</h2>")
     .replace(/^# (.+)$/gm,"<h1>$1</h1>")
     .replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")
-    .replace(/^[-•] (.+)$/gm,"<li>$1</li>")
+    .replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm,"")
+    .replace(/^\s*[-•*+] (.+)$/gm,"<li>$1</li>")
     .replace(/(<li>[\s\S]*?<\/li>)/g,"<ul>$1</ul>")
     .replace(/\n\n/g,"<br><br>").replace(/\n/g,"<br>");
 
