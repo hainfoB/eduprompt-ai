@@ -2009,14 +2009,30 @@ def ai_stream():
     """Same as /api/ai/generate, but relays Gemini's text as it is written
     (server-sent events), so the user sees the document appear progressively."""
     data = request.get_json(silent=True) or {}
-    resp, err = _gemini_call(data, stream=True)
-    if err is not None:
-        return err
-    if resp.status_code != 200:  # Google's JSON error: same handling as the classic route
+    # The client sends its list of models; the server walks it itself, so an
+    # overloaded or exhausted model costs a fraction of a second instead of a
+    # round trip and a visible wait for the teacher.
+    models = data.get("models")
+    if not isinstance(models, list) or not models:
+        models = [data.get("model", "")]
+    models = [str(m) for m in models[:8]]
+    resp = err = None
+    for model in models:
+        resp, err = _gemini_call(dict(data, model=model), stream=True)
+        if err is not None:
+            status = err[1] if isinstance(err, tuple) else 500
+            if status == 503 and model != models[-1]:
+                continue  # network hiccup towards Google: try the next model
+            return err
+        if resp.status_code == 200:
+            break
         body = resp.content
         resp.close()
-        _log_upstream_error(data, resp.status_code, body)
+        _log_upstream_error({"model": model}, resp.status_code, body)
+        if resp.status_code in (404, 429, 500, 503, 504) and model != models[-1]:
+            continue  # unavailable, overloaded or out of quota: next model at once
         return app.response_class(body, status=resp.status_code, mimetype="application/json")
+    used_model = model
 
     def relay():
         try:
@@ -2027,7 +2043,8 @@ def ai_stream():
             resp.close()
 
     return app.response_class(relay(), mimetype="text/event-stream",
-                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no",
+                                       "X-Gemini-Model": used_model})
 
 
 def _log_upstream_error(data, status, body):

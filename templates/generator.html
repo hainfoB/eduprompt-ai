@@ -61,6 +61,16 @@
 .file-chip i.type-icon{color:var(--orange)}
 .file-chip .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .file-chip .remove-file{cursor:pointer;color:var(--red)}
+.live-bar{display:none;align-items:center;gap:10px;padding:12px 18px;background:#fff7ed;border-bottom:1px solid #fed7aa;color:#9a3412;font-size:13px;font-weight:700;position:sticky;top:0;z-index:2}
+.live-bar.visible{display:flex}
+.live-bar .dot{width:9px;height:9px;border-radius:50%;background:var(--orange);flex-shrink:0;animation:livePulse 1s ease-in-out infinite}
+@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}
+.draft h1{margin-bottom:6px}
+.draft-meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+.draft-meta span{background:var(--sky);color:var(--navy);font-size:12px;font-weight:700;padding:3px 10px;border-radius:8px}
+.shim{height:12px;border-radius:6px;margin:12px 0;background:linear-gradient(90deg,#eef3f9 25%,#dfe8f3 50%,#eef3f9 75%);background-size:200% 100%;animation:shim 1.3s linear infinite}
+@keyframes shim{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.caret{display:inline-block;width:2px;height:1.1em;background:var(--orange);vertical-align:-3px;margin-inline-start:2px;animation:livePulse .8s steps(2) infinite}
 .sources-status{font-size:11px;color:var(--muted);margin-top:8px;display:none}
 .sources-status.visible{display:block}
 
@@ -314,6 +324,7 @@
       <div class="loader-ring"></div>
       <div class="loader-text" id="loaderText">{{ t.loader_default }}</div>
     </div>
+    <div class="live-bar" id="liveBar" role="status" aria-live="polite"><span class="dot"></span><span id="draftStatus"></span></div>
     <div class="result-content" id="resultContent"></div>
     <div class="rate-bar" id="rateBar">
       <div class="rate-ask" id="rateAsk">
@@ -532,6 +543,7 @@ const UI = {
   loader_writing: {{ t.loader_writing | tojson }},
   loader_overload: {{ t.loader_overload | tojson }},
   loader_trying_model: {{ t.loader_trying_model | tojson }},
+  draft_steps: {{ t.draft_steps | tojson }},
   quota_loading: {{ t.quota_loading | tojson }},
   quota_label_prefix: {{ t.quota_label_prefix | tojson }},
   quota_remaining_suffix: {{ t.quota_remaining_suffix | tojson }},
@@ -771,7 +783,29 @@ function buildQuotaMessage(data){
 }
 
 function toast(msg){const w=document.getElementById("toastWrap");const t=document.createElement("div");t.className="toast-item";t.textContent=msg;w.appendChild(t);setTimeout(()=>t.remove(),3500)}
-function updateLoaderMsg(msg){const el=document.getElementById("loaderText");if(el) el.textContent=msg}
+function updateLoaderMsg(msg){
+  const el=document.getElementById("loaderText"); if(el) el.textContent=msg;
+  const st=document.getElementById("draftStatus"); if(st) st.textContent=msg;
+}
+// Before the first words arrive, show the document taking shape (title, details,
+// progress steps) instead of a bare spinner, so the teacher sees work happening.
+let _draftTimer=null, _draftStarted=false;
+function showDraft(lesson, subject, level){
+  _draftStarted=false;
+  const esc = v => String(v||"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const lines = [92,78,85,60,88,70,95,52].map(w=>`<div class="shim" style="width:${w}%"></div>`).join("");
+  document.getElementById("resultContent").innerHTML =
+    `<div class="draft"><h1>${esc(lesson)}</h1><div class="draft-meta">${[subject, level].filter(Boolean).map(v=>`<span>${esc(v)}</span>`).join("")}</div>${lines}</div>`;
+  document.getElementById("liveBar").classList.add("visible");
+  const steps = UI.draft_steps.split("|");
+  let i=0; updateLoaderMsg(steps[0]);
+  clearInterval(_draftTimer);
+  _draftTimer=setInterval(()=>{ if(_draftStarted) return; i=Math.min(i+1, steps.length-1); updateLoaderMsg(steps[i]); }, 2800);
+}
+function endDraft(){
+  clearInterval(_draftTimer); _draftTimer=null;
+  document.getElementById("liveBar").classList.remove("visible");
+}
 
 // ── STRONG LANGUAGE LOCK (Gemini tends to default to French for Algerian
 // curriculum content regardless of instruction language — this counters it) ──
@@ -1011,90 +1045,72 @@ async function readGeminiStream(res, onPartial){
   return {text, finishReason};
 }
 
-async function callOneModel(model, contents, retries=3, onPartial=null){
-  for(let attempt=0; attempt<retries; attempt++){
+// One streamed request. `models` is tried in order by the server itself, so an
+// overloaded or exhausted model is skipped in a fraction of a second. Only when
+// every model is busy do we wait a little and try the whole list again.
+async function callModels(models, contents, onPartial=null, rounds=4){
+  let lastMsg = "";
+  for(let attempt=0; attempt<rounds; attempt++){
     let res;
     try{
       res=await fetch(AI_STREAM_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model, contents, generationConfig:{maxOutputTokens:MAX_OUTPUT_TOKENS,temperature:0.85}})});
+        body:JSON.stringify({model:models[0], models, contents,
+          generationConfig:{maxOutputTokens:MAX_OUTPUT_TOKENS,temperature:0.85}})});
     }catch(e){ throw {type:"network", msg:e.message}; }
 
     if(res.ok){
+      const used = res.headers.get("X-Gemini-Model") || models[0];
       if((res.headers.get("Content-Type")||"").includes("event-stream") && res.body){
         try{
-          return await readGeminiStream(res, onPartial);
+          const out = await readGeminiStream(res, onPartial);
+          return {...out, model: used};
         }catch(e){
-          // Connection dropped mid-document: try again from the start.
+          lastMsg = e.message || "stream interrupted";
           updateLoaderMsg(`⏳ ${UI.loader_overload} 2s…`);
           await sleep(2000);
-          continue;
+          continue;  // connection dropped mid-document: start again
         }
       }
       const data=await res.json();
       const candidate = data.candidates?.[0];
-      return {
-        text: candidate?.content?.parts?.[0]?.text || "",
-        finishReason: candidate?.finishReason || "STOP",
-      };
+      return {text: candidate?.content?.parts?.[0]?.text || "",
+              finishReason: candidate?.finishReason || "STOP", model: used};
     }
     const errData=await res.json().catch(()=>({error:{message:"HTTP "+res.status}}));
-    const msg=errData.error?.message || "HTTP "+res.status;
-
-    if(res.status===404 || msg.includes("no longer available") || msg.includes("not found"))
-      throw {type:"skip", msg};
-    // 429 = this model's quota is used up for now: every model has its own quota,
-    // so move to the next model at once instead of waiting ~25 s for nothing.
-    if(res.status===429 || (msg.includes("quota") && msg!=="quota_exceeded")){
-      throw {type:"skip", msg};
-    }
-    if(res.status===503 || msg.includes("high demand") || msg.includes("overloaded")){
-      if(attempt >= 1) throw {type:"skip", msg};  // still overloaded: try another model
-      const wait=3000;
-      updateLoaderMsg(`⏳ ${UI.loader_overload} ${wait/1000}s…`);
-      await sleep(wait);
-      continue;
-    }
-    if(res.status===400 || res.status===401 || res.status===403) throw {type:"auth", msg};
-    throw {type:"skip", msg};
+    lastMsg=errData.error?.message || "HTTP "+res.status;
+    if(res.status===400 || res.status===401 || res.status===403) throw {type:"auth", msg:lastMsg};
+    // Every model busy right now (Google overload): short pause, then the whole list again.
+    const wait = 2000 + attempt*2000;
+    updateLoaderMsg(`⏳ ${UI.loader_overload} ${wait/1000}s…`);
+    await sleep(wait);
   }
-  throw {type:"skip", msg:"Max retries reached on "+model};
+  throw {type:"busy", msg:lastMsg};
 }
 
 async function callGemini(prompt, onLive=null){
-  let lastMsg="";
-  for(const model of GEMINI_MODELS){
-    updateLoaderMsg(`${UI.loader_trying_model} ${model}…`);
-    try{
-      const firstTurn = {role:"user", parts:[...sourceAttachments, {text: prompt}]};
-      let contents = [firstTurn];
-      let fullText = "";
-      let round = 0;
-
-      while(true){
-        const before = fullText;
-        const {text, finishReason} = await callOneModel(model, contents, 3,
-          onLive ? (partial => onLive(before + partial)) : null);
-        fullText += text;
-
-        if(finishReason !== "MAX_TOKENS" || round >= MAX_CONTINUATIONS) break;
-
-        round++;
-        updateLoaderMsg(`✍️ ${UI.loader_writing} (${round + 1})`);
-        contents = [
-          firstTurn,
-          {role:"model", parts:[{text: fullText}]},
-          {role:"user", parts:[{text: "Continue exactly where you left off, seamlessly, without repeating anything already written and without restarting. Keep the same language and structure."}]},
-        ];
-      }
-      return fullText;
+  const firstTurn = {role:"user", parts:[...sourceAttachments, {text: prompt}]};
+  let contents = [firstTurn];
+  let fullText = "";
+  let models = GEMINI_MODELS.slice();
+  try{
+    for(let round=0; ; round++){
+      const before = fullText;
+      const out = await callModels(models, contents, onLive ? (partial => onLive(before + partial)) : null);
+      fullText += out.text;
+      // Keep writing with the model that answered (same style), others as backup.
+      models = [out.model, ...GEMINI_MODELS.filter(m => m !== out.model)];
+      if(out.finishReason !== "MAX_TOKENS" || round >= MAX_CONTINUATIONS) break;
+      contents = [
+        firstTurn,
+        {role:"model", parts:[{text: fullText}]},
+        {role:"user", parts:[{text: "Continue exactly where you left off, seamlessly, without repeating anything already written and without restarting. Keep the same language and structure."}]},
+      ];
     }
-    catch(e){
-      if(e.type==="auth") throw new Error(e.msg);
-      if(e.type==="network") throw new Error(e.msg);
-      lastMsg=e.msg;
-    }
+    return fullText;
+  }catch(e){
+    if(fullText.length > 400) return fullText;  // keep what was written rather than lose it
+    throw new Error(e.msg || e.message || "error");
   }
-  throw new Error(lastMsg);
 }
 
 // Shows the document while it is being written (at most ~4 refreshes/second).
@@ -1108,8 +1124,9 @@ function liveRender(text){
     const preview = _liveText
       .replace(/\[\[MERMAID\]\][\s\S]*?(\[\[\/MERMAID\]\]|$)/g, "\n\n📊 …\n\n")
       .replace(/\[\[IMAGE:[^\]]*(\]\]|$)/g, "🖼️ …");
-    updateLoaderMsg(UI.loader_writing);
+    if(!_draftStarted){ _draftStarted=true; updateLoaderMsg(UI.loader_writing); }
     renderContent(preview);
+    document.getElementById("resultContent").insertAdjacentHTML("beforeend", '<span class="caret"></span>');
   }, 250);
 }
 
@@ -1170,8 +1187,7 @@ async function generate(){
   const panel=document.getElementById("resultPanel");
   panel.classList.add("visible");
   setTimeout(()=>panel.scrollIntoView({behavior:"smooth",block:"start"}),80);
-  document.getElementById("loaderWrap").classList.add("visible");
-  document.getElementById("resultContent").innerHTML="";
+  showDraft(lesson, subject, level);
   document.getElementById("rateBar").classList.remove("visible");
   document.getElementById("downloadBtn").disabled=true;
 
@@ -1192,7 +1208,7 @@ async function generate(){
     lastContent=text;
     lastVisuals=visuals;
 
-    document.getElementById("loaderWrap").classList.remove("visible");
+    endDraft();
     renderContent(text);
     document.getElementById("downloadBtn").disabled=false;
 
@@ -1207,6 +1223,7 @@ async function generate(){
     loadQuota();
     toast(UI.toast_generated);
   }catch(e){
+    endDraft();
     document.getElementById("loaderWrap").classList.remove("visible");
     panel.classList.remove("visible");
     showError(UI.err_api_prefix+" ("+e.message+")");
