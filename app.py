@@ -1,4 +1,5 @@
 import os
+import json
 import re
 import io
 import base64
@@ -2014,6 +2015,7 @@ def ai_stream():
     if resp.status_code != 200:  # Google's JSON error: same handling as the classic route
         body = resp.content
         resp.close()
+        _log_upstream_error(data, resp.status_code, body)
         return app.response_class(body, status=resp.status_code, mimetype="application/json")
 
     def relay():
@@ -2026,6 +2028,16 @@ def ai_stream():
 
     return app.response_class(relay(), mimetype="text/event-stream",
                               headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+def _log_upstream_error(data, status, body):
+    """One log line per Gemini refusal (model, status, Google's message), so the
+    real cause of 429/503 waves is visible in the Railway logs."""
+    try:
+        msg = (json.loads(body).get("error") or {}).get("message", "")
+    except Exception:
+        msg = body[:200].decode("utf-8", "ignore") if isinstance(body, bytes) else str(body)[:200]
+    print(f"⚠️ Gemini {status} on {str(data.get('model',''))[:40]}: {msg[:220]}")
 
 
 def _gemini_call(data, stream=False):
