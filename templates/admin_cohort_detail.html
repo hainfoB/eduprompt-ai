@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ cohort.name }}{% endblock %}
+{% block extra_head %}
+<style>
+.co-wrap{max-width:1000px;margin:32px auto;padding:0 max(4vw,16px)}
+.co-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px}
+.co-head h1{font-size:22px;font-weight:800;color:var(--navy);margin:0}
+.co-pill{font-size:12px;font-weight:700;padding:8px 14px;border-radius:9px;text-decoration:none;background:var(--paper);color:var(--navy);border:1.5px solid var(--line)}
+.co-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px}
+.co-stat{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:18px}
+.co-stat .l{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.co-stat .v{font-size:26px;font-weight:800;color:var(--navy);margin-top:4px}
+.co-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:22px;margin-bottom:22px}
+.co-card h3{font-size:15px;font-weight:800;color:var(--navy);margin:0 0 14px}
+.co-btn{display:inline-flex;align-items:center;gap:8px;border-radius:10px;padding:12px 18px;font-size:14px;font-weight:800;background:var(--orange);color:#fff;text-decoration:none;min-height:44px}
+.co-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.co-tbl th{text-align:start;font-size:10px;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1.5px solid var(--line)}
+.co-tbl td{padding:9px 6px;border-bottom:1px solid var(--line)}
+.st{font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px}
+.st.created{background:#ecfdf5;color:#047857}.st.existing{background:var(--sky);color:var(--navy)}
+.st.invalid,.st.duplicate{background:#fef2f2;color:#b91c1c}.st.already_paid{background:#fff7ed;color:#c2410c}
+</style>
+{% endblock %}
+{% block content %}
+<div class="co-wrap">
+  <div class="co-head">
+    <h1><i class="bi bi-people-fill" style="color:var(--orange)"></i> {{ cohort.name }}</h1>
+    <a href="{{ url_for('admin_cohorts') }}" class="co-pill"><i class="bi bi-arrow-left-short"></i> {{ t.cohorts_title }}</a>
+  </div>
+  <div class="co-grid">
+    <div class="co-stat"><div class="l">{{ t.cohort_col_pass }}</div><div class="v" style="font-size:17px">{{ t['pass_name_' ~ cohort.pass_type] }}</div></div>
+    <div class="co-stat"><div class="l">{{ t.cohort_col_members }}</div><div class="v">{{ stats.total }}</div></div>
+    <div class="co-stat"><div class="l">{{ t.cohort_col_logged }}</div><div class="v">{{ stats.logged }}</div></div>
+    <div class="co-stat"><div class="l">{{ t.cohort_col_active }}</div><div class="v">{{ stats.active }}</div></div>
+    <div class="co-stat"><div class="l">{{ t.cohort_col_paid }}</div><div class="v" style="color:var(--orange)">{{ stats.paid }} <small style="font-size:14px">({{ stats.rate }} %)</small></div></div>
+  </div>
+
+  <div class="co-card">
+    <h3><i class="bi bi-key-fill"></i> {{ t.cohort_credentials_title }}</h3>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 14px">{{ t.cohort_credentials_hint }}</p>
+    <a class="co-btn" href="{{ url_for('admin_cohort_credentials', cohort_id=cohort.id) }}"><i class="bi bi-file-earmark-excel-fill"></i> {{ t.cohort_credentials_btn }}</a>
+  </div>
+
+  {% if report %}
+  <div class="co-card">
+    <h3><i class="bi bi-clipboard-check"></i> {{ t.cohort_report_title }}</h3>
+    <div style="overflow-x:auto"><table class="co-tbl">
+      <thead><tr><th>{{ t.cohort_col_last }}</th><th>{{ t.cohort_col_first }}</th><th>{{ t.cohort_col_email }}</th><th></th></tr></thead>
+      <tbody>{% for r in report %}<tr><td>{{ r.last_name }}</td><td>{{ r.first_name }}</td><td dir="ltr">{{ r.email }}</td><td><span class="st {{ r.status }}">{{ t['cohort_status_' ~ r.status] }}</span></td></tr>{% endfor %}</tbody>
+    </table></div>
+  </div>
+  {% endif %}
+
+  <div class="co-card">
+    <h3><i class="bi bi-person-lines-fill"></i> {{ t.cohort_members_title }}</h3>
+    <div style="overflow-x:auto"><table class="co-tbl">
+      <thead><tr><th>{{ t.cohort_col_last }}</th><th>{{ t.cohort_col_first }}</th><th>{{ t.cohort_col_email }}</th><th>{{ t.cohort_col_plan }}</th><th>{{ t.cohort_col_docs }}</th><th>{{ t.cohort_col_status }}</th></tr></thead>
+      <tbody>{% for u in members %}{% set sub = u.subscription %}
+        <tr><td><a href="{{ url_for('admin_teacher_detail', user_id=u.id) }}" style="color:var(--navy);font-weight:700;text-decoration:none">{{ u.last_name }}</a></td>
+          <td>{{ u.first_name }}</td><td dir="ltr">{{ u.email }}</td>
+          <td>{{ sub.plan_label() if sub else '' }}</td><td>{{ u.documents|length }}</td>
+          <td>{% if u.must_change_password %}<span class="st already_paid">{{ t.cohort_status_not_logged }}</span>{% else %}<span class="st created">{{ t.cohort_status_logged }}</span>{% endif %}
+            {% if u.credentials_pending %}<span class="st existing">{{ t.cohort_status_mail_queued }}</span>{% endif %}</td></tr>
+      {% endfor %}</tbody></table></div>
+  </div>
+</div>
+{% endblock %}

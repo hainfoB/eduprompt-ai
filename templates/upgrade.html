@@ -63,6 +63,12 @@
     <p>{{ t.upgrade_page_subtitle }}</p>
   </div>
 
+  {% if discount_pct %}
+  <div style="background:linear-gradient(135deg,#f97316,#ea580c);color:#fff;border-radius:16px;padding:20px 22px;margin-bottom:22px;box-shadow:0 10px 30px rgba(249,115,22,.3)">
+    <div style="font-size:20px;font-weight:900"><i class="bi bi-gift-fill"></i> {{ t.discount_banner_title.format(pct=discount_pct) }}</div>
+    <div style="font-size:14px;margin-top:6px;opacity:.95">{{ t.discount_banner_body.format(date=discount_until.strftime('%d/%m/%Y'), pro=discounted['pro'], ultimate=discounted['ultimate']) }}</div>
+  </div>
+  {% endif %}
   <div class="contact-hero">
     <h3>📧 {{ t.landing_contact_title }}</h3>
     <p>{{ t.price_subscribe_note }}</p>
@@ -121,13 +127,18 @@
         <div class="col-sm-6">
           <label class="form-label">{{ t.label_plan }}</label>
           <select name="plan" class="dc-control">
+            {% if discount_pct %}
+            <option value="pro">{{ t.plan_pro_name }} — {{ discounted['pro'] }} DA (-{{ discount_pct }} %)</option>
+            <option value="ultimate">{{ t.plan_ultimate_name }} — {{ discounted['ultimate'] }} DA (-{{ discount_pct }} %)</option>
+            {% else %}
             <option value="pro">{{ t.plan_pro_name }} — {{ t.price_pro_price }}</option>
             <option value="ultimate">{{ t.plan_ultimate_name }} — {{ t.price_ultimate_price }}</option>
+            {% endif %}
           </select>
         </div>
         <div class="col-sm-6">
           <label class="form-label">{{ t.label_amount_claimed }}</label>
-          <input type="number" name="amount" class="dc-control" placeholder="1500"/>
+          <input type="number" name="amount" class="dc-control" placeholder="{{ discounted['pro'] if discount_pct else 1500 }}"/>
         </div>
       </div>
       <label class="form-label" style="margin-top:10px">{{ t.label_payment_method }}</label>

@@ -137,3 +137,106 @@ def nudge_email(stage, lang, name, link, optout):
             f'{c["cta"]} : {link}', "", c["ps"]]))
     text = "\n\n────────────\n\n".join(text_parts) + f"\n\n—\n{' / '.join(FOOTER[l] for l in order)} : {optout}"
     return subject, html, text
+
+
+# ── Generic branded trilingual email (used by the training-pass emails) ──────
+def _simple_block(lang, title, paras, rows, cta, link, first):
+    rtl = lang == "ar"
+    d, align = ("rtl", "right") if rtl else ("ltr", "left")
+    font = "'Segoe UI',Tahoma,Arial,sans-serif"
+    ps = "".join(f'<p style="margin:0 0 12px;font-size:15px;line-height:1.65;color:{INK}">{p}</p>' for p in paras)
+    tbl = ""
+    if rows:
+        tbl = (f'<table role="presentation" dir="{d}" width="100%" cellpadding="0" cellspacing="0" '
+               f'style="background:{SKY};border-radius:12px;margin:4px 0 18px">'
+               + "".join(f'<tr><td style="padding:10px 18px;font-size:13px;color:{MUTED};width:40%">{escape(k)}</td>'
+                         f'<td style="padding:10px 18px;font-size:15px;font-weight:800;color:{NAVY};direction:ltr;text-align:{align}">{escape(v)}</td></tr>'
+                         for k, v in rows) + "</table>")
+    sep = "" if first else f'<tr><td style="border-top:1px solid {LINE};padding-top:26px"></td></tr>'
+    return f'''{sep}<tr><td dir="{d}" style="text-align:{align};font-family:{font};padding:0 0 26px">
+  <div style="font-size:11px;font-weight:700;letter-spacing:.6px;color:{MUTED};text-transform:uppercase;margin-bottom:8px">{LANG_LABEL[lang]}</div>
+  <h1 style="margin:0 0 12px;font-size:{"22px" if first else "18px"};line-height:1.35;color:{NAVY}">{escape(title)}</h1>
+  {ps}{tbl}
+  <a href="{escape(link)}" style="display:inline-block;background:{ORANGE};color:#ffffff;text-decoration:none;font-weight:800;font-size:16px;padding:14px 28px;border-radius:10px">{escape(cta)} {"←" if rtl else "→"}</a>
+</td></tr>'''
+
+
+def _wrap(subject, blocks, footer=""):
+    return f'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{escape(subject)}</title></head>
+<body style="margin:0;padding:0;background:#f6f8fc">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f8fc"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden">
+  <tr><td style="background:{NAVY};padding:22px 28px;font-family:'Segoe UI',Arial,sans-serif">
+    <span style="font-size:22px;font-weight:800;color:#ffffff">Haithem<span style="color:{ORANGE}">Edu</span>AI</span></td></tr>
+  <tr><td style="height:4px;background:{ORANGE};line-height:4px;font-size:0">&nbsp;</td></tr>
+  <tr><td style="padding:28px 28px 4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">{blocks}</table></td></tr>
+  <tr><td style="background:{SKY};padding:18px 28px;font-family:'Segoe UI',Arial,sans-serif;font-size:12px;line-height:1.7;color:{MUTED};text-align:center">HaithemEduAI · Bordj Bou Arréridj, Algérie{footer}</td></tr>
+</table></td></tr></table></body></html>'''
+
+
+CRED = {
+    "fr": {"subject": "Vos accès HaithemEduAI (offerts par votre formation)",
+           "title": "Bienvenue {name} !",
+           "p1": "Suite à votre formation, un accès gratuit à HaithemEduAI vous est offert : <b>{plan}</b>, {quota}, pendant <b>{days} jours</b>.",
+           "p2": "Connectez-vous avec les identifiants ci-dessous. Vous choisirez votre propre mot de passe à la première connexion.",
+           "email": "E-mail", "password": "Mot de passe provisoire", "cta": "Me connecter",
+           "q_month": "{n} documents par mois", "q_total": "{n} documents"},
+    "ar": {"subject": "حسابك على HaithemEduAI (هدية من التكوين)",
+           "title": "مرحباً {name}!",
+           "p1": "بعد مشاركتك في التكوين، تحصّلت على وصول مجاني إلى HaithemEduAI: <b>{plan}</b>، {quota}، لمدة <b>{days} يوماً</b>.",
+           "p2": "ادخل بالمعلومات أدناه، وستختار كلمة السر الخاصة بك عند أول دخول.",
+           "email": "البريد الإلكتروني", "password": "كلمة السر المؤقتة", "cta": "الدخول إلى حسابي",
+           "q_month": "{n} وثائق كل شهر", "q_total": "{n} وثيقة"},
+    "en": {"subject": "Your HaithemEduAI access (a gift from your training)",
+           "title": "Welcome {name}!",
+           "p1": "Following your training, you get free access to HaithemEduAI: <b>{plan}</b>, {quota}, for <b>{days} days</b>.",
+           "p2": "Sign in with the details below. You will choose your own password at first login.",
+           "email": "Email", "password": "Temporary password", "cta": "Sign in",
+           "q_month": "{n} documents per month", "q_total": "{n} documents"},
+}
+
+
+def credentials_email(lang, name, email, password, link, plan_label, days, docs, monthly):
+    order = _order(lang)
+    subject = CRED[order[0]]["subject"]
+    blocks = ""
+    for i, l in enumerate(order):
+        c = CRED[l]
+        quota = (c["q_month"] if monthly else c["q_total"]).format(n=docs)
+        blocks += _simple_block(l, c["title"].format(name=name),
+                                [c["p1"].format(plan=escape(plan_label), quota=quota, days=days), c["p2"]],
+                                [(c["email"], email), (c["password"], password)], c["cta"], link, i == 0)
+    text = "\n\n".join(f'{CRED[l]["title"].format(name=name)}\n{CRED[l]["email"]}: {email}\n{CRED[l]["password"]}: {password}\n{link}'
+                       for l in order)
+    return subject, _wrap(subject, blocks), text
+
+
+REM = {
+    "fr": {"subject": "Votre pass formation se termine le {date} : -{pct} % pour continuer",
+           "title": "{name}, votre pass se termine bientôt",
+           "p1": "Votre accès offert à HaithemEduAI prend fin le <b>{date}</b>.",
+           "p2": "Pour continuer à préparer vos cours en quelques minutes, profitez de <b>-{pct} % sur l’abonnement annuel</b>, valable jusqu’au <b>{until}</b>. Vos documents restent disponibles dans « Mes documents ».",
+           "cta": "Profiter de -{pct} %"},
+    "ar": {"subject": "ينتهي باس التكوين يوم {date}: تخفيض {pct}% للمواصلة",
+           "title": "{name}، اقترب موعد انتهاء الباس",
+           "p1": "ينتهي وصولك المجاني إلى HaithemEduAI يوم <b>{date}</b>.",
+           "p2": "لتواصل تحضير دروسك في دقائق، استفد من <b>تخفيض {pct}% على الاشتراك السنوي</b>، صالح إلى غاية <b>{until}</b>. وثائقك تبقى محفوظة في «وثائقي».",
+           "cta": "أستفيد من تخفيض {pct}%"},
+    "en": {"subject": "Your training pass ends on {date}: {pct}% off to keep going",
+           "title": "{name}, your pass ends soon",
+           "p1": "Your free HaithemEduAI access ends on <b>{date}</b>.",
+           "p2": "To keep preparing your lessons in minutes, get <b>{pct}% off the annual plan</b>, valid until <b>{until}</b>. Your documents stay in “My documents”.",
+           "cta": "Get {pct}% off"},
+}
+
+
+def pass_reminder_email(lang, name, date, pct, until, link, optout):
+    order = _order(lang)
+    subject = REM[order[0]]["subject"].format(date=date, pct=pct)
+    blocks = "".join(_simple_block(l, REM[l]["title"].format(name=name),
+                                   [REM[l]["p1"].format(date=date), REM[l]["p2"].format(pct=pct, until=until)],
+                                   [], REM[l]["cta"].format(pct=pct), link, i == 0) for i, l in enumerate(order))
+    footer = "<br>" + " · ".join(f'<a href="{escape(optout)}" style="color:{MUTED}">{FOOTER[l]}</a>' for l in order)
+    text = "\n\n".join(REM[l]["p1"].format(date=date).replace("<b>", "").replace("</b>", "") + "\n" +
+                       REM[l]["p2"].format(pct=pct, until=until).replace("<b>", "").replace("</b>", "") + f"\n{link}" for l in order)
+    return subject, _wrap(subject, blocks, footer), text

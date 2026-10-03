@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ t.cohorts_title }}{% endblock %}
+{% block extra_head %}
+<style>
+.co-wrap{max-width:1000px;margin:32px auto;padding:0 max(4vw,16px)}
+.co-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:6px}
+.co-head h1{font-size:22px;font-weight:800;color:var(--navy);margin:0}
+.co-sub{font-size:13px;color:var(--muted);margin:0 0 20px;line-height:1.6}
+.co-pill{font-size:12px;font-weight:700;padding:8px 14px;border-radius:9px;text-decoration:none;background:var(--paper);color:var(--navy);border:1.5px solid var(--line)}
+.co-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:22px;margin-bottom:22px}
+.co-card h3{font-size:15px;font-weight:800;color:var(--navy);margin:0 0 14px;display:flex;align-items:center;gap:8px}
+.co-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.co-label{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:6px;display:block}
+.co-input{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;background:#fff;font-family:inherit}
+.pass-opt{display:block;border:2px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;height:100%}
+.pass-opt input{margin-inline-end:6px}
+.pass-opt:has(input:checked){border-color:var(--orange);background:#fff7ed}
+.pass-opt b{color:var(--navy)}
+.pass-opt small{display:block;color:var(--muted);font-size:12px;margin-top:4px;line-height:1.5}
+.co-btn{border:none;border-radius:10px;padding:12px 20px;font-size:14px;font-weight:800;background:var(--orange);color:#fff;cursor:pointer;min-height:44px}
+.co-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.co-tbl th{text-align:start;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);padding:8px 6px;border-bottom:1.5px solid var(--line)}
+.co-tbl td{padding:10px 6px;border-bottom:1px solid var(--line)}
+.co-tbl a{color:var(--navy);font-weight:800;text-decoration:none}
+.badge-pass{font-size:11px;font-weight:800;padding:3px 9px;border-radius:7px;background:var(--sky);color:var(--navy)}
+.co-note{font-size:12px;color:var(--muted);margin-top:10px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="co-wrap">
+  <div class="co-head">
+    <h1><i class="bi bi-people-fill" style="color:var(--orange)"></i> {{ t.cohorts_title }}</h1>
+    <a href="{{ url_for('admin_stats') }}" class="co-pill"><i class="bi bi-arrow-left-short"></i> {{ t.stats_title }}</a>
+  </div>
+  <p class="co-sub">{{ t.cohorts_subtitle }}</p>
+
+  <div class="co-card">
+    <h3><i class="bi bi-file-earmark-spreadsheet-fill" style="color:var(--orange)"></i> {{ t.cohort_import_title }}</h3>
+    <form method="POST" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="co-grid" style="margin-bottom:14px">
+        <div><label class="co-label" for="cname">{{ t.cohort_name_label }}</label>
+          <input id="cname" class="co-input" name="name" required maxlength="120" placeholder="{{ t.cohort_name_ph }}"></div>
+        <div><label class="co-label" for="cfile">{{ t.cohort_file_label }}</label>
+          <input id="cfile" class="co-input" type="file" name="file" accept=".xlsx,.csv" required>
+          <div class="co-note"><a href="{{ url_for('admin_cohort_template') }}" style="color:var(--orange);font-weight:700">{{ t.cohort_template_link }}</a></div></div>
+      </div>
+      <div class="co-grid" style="margin-bottom:14px">
+        {% for key, cfg in passes.items() %}
+        <label class="pass-opt"><input type="radio" name="pass_type" value="{{ key }}" {% if loop.first %}checked{% endif %}>
+          <b>{{ t['pass_name_' ~ key] }}</b>
+          <small>{{ t['pass_desc_' ~ key].format(days=cfg.days, docs=cfg.docs, pct=cfg.discount, ddays=cfg.discount_days) }}</small></label>
+        {% endfor %}
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:14px">
+        <input type="checkbox" name="send_email" value="1" checked> {{ t.cohort_send_email.format(n=per_day) }}</label>
+      <button class="co-btn" type="submit"><i class="bi bi-upload"></i> {{ t.cohort_import_btn }}</button>
+      {% if queued %}<div class="co-note"><i class="bi bi-hourglass-split"></i> {{ t.cohort_queue.format(n=queued, per_day=per_day) }}</div>{% endif %}
+    </form>
+  </div>
+
+  <div class="co-card">
+    <h3><i class="bi bi-collection-fill" style="color:var(--orange)"></i> {{ t.cohort_list_title }}</h3>
+    {% if cohorts %}
+    <div style="overflow-x:auto"><table class="co-tbl">
+      <thead><tr><th>{{ t.cohort_col_name }}</th><th>{{ t.cohort_col_pass }}</th><th>{{ t.cohort_col_members }}</th><th>{{ t.cohort_col_logged }}</th><th>{{ t.cohort_col_active }}</th><th>{{ t.cohort_col_paid }}</th></tr></thead>
+      <tbody>{% for c in cohorts %}{% set s = stats[c.id] %}
+        <tr><td><a href="{{ url_for('admin_cohort_detail', cohort_id=c.id) }}">{{ c.name }}</a><div style="font-size:11px;color:var(--muted)">{{ c.created_at.strftime('%d/%m/%Y') }}</div></td>
+          <td><span class="badge-pass">{{ t['pass_name_' ~ c.pass_type] }}</span></td>
+          <td>{{ s.total }}</td><td>{{ s.logged }}</td><td>{{ s.active }}</td><td><b>{{ s.paid }}</b> ({{ s.rate }} %)</td></tr>
+      {% endfor %}</tbody></table></div>
+    {% else %}<div style="text-align:center;color:var(--muted);font-size:13px;padding:14px">{{ t.cohort_none }}</div>{% endif %}
+  </div>
+</div>
+{% endblock %}

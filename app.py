@@ -5,7 +5,7 @@ import io
 import base64
 import secrets
 import string
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 from flask import (Flask, render_template, request, jsonify, send_file, redirect, url_for, flash,
                    session, after_this_request, abort)
@@ -33,7 +33,7 @@ from flask_limiter.util import get_remote_address
 
 from models import (db, User, Subscription, Document, LicenseCode, Payment, Message,
                      PaymentRequest, AdminLog, PlanChangeHistory, FunnelEvent, GenerationError,
-                     PLAN_PRICES, PAYMENT_METHODS,
+                     PLAN_PRICES, PAYMENT_METHODS, PASS_TYPES, Cohort,
                      create_trial_subscription, next_receipt_number)
 from werkzeug.utils import secure_filename
 from utils import build_sources_context
@@ -112,6 +112,17 @@ login_manager.login_view = "login"
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+
+@app.before_request
+def force_password_change():
+    """Accounts created from a training import must choose their own password first."""
+    if (current_user.is_authenticated and getattr(current_user, "must_change_password", False)
+            and request.endpoint not in ("profile", "logout", "static", "set_lang", None)):
+        if request.path.startswith("/api/"):
+            return jsonify({"error": {"message": "password_change_required"}}), 403
+        flash(tr("flash_must_change_password"), "warning")
+        return redirect(url_for("profile"))
 
 
 @app.before_request
@@ -220,6 +231,14 @@ def _migrate_sqlite_schema():
                 "referral_docs_earned": "INTEGER DEFAULT 0",
                 "nudge_stage": "INTEGER DEFAULT 0",
                 "email_optout": "BOOLEAN DEFAULT 0",
+                "cohort_id": "INTEGER",
+                "must_change_password": "BOOLEAN DEFAULT 0",
+                "temp_password": "VARCHAR(40)",
+                "credentials_pending": "BOOLEAN DEFAULT 0",
+                "credentials_sent_at": "DATETIME",
+                "discount_pct": "INTEGER",
+                "discount_until": "DATETIME",
+                "pass_reminder_sent": "BOOLEAN DEFAULT 0",
             },
             "document": {
                 "content": "TEXT",
@@ -424,6 +443,207 @@ def reward_referrer_if_due(user):
                                source=referrer.signup_source, user_id=referrer.id))
 
 
+# ── TRAINING PASSES (groups imported from an Excel file) ─────────────────────
+CREDENTIALS_EMAILS_PER_DAY = int(os.environ.get("CREDENTIALS_EMAILS_PER_DAY", "150"))
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_HEADER_ALIASES = {
+    "last_name":  ("nom", "last name", "lastname", "name", "اللقب", "nom de famille", "surname"),
+    "first_name": ("prénom", "prenom", "first name", "firstname", "الاسم", "given name"),
+    "email":      ("email", "e-mail", "mail", "adresse email", "adresse e-mail", "البريد", "البريد الإلكتروني", "courriel"),
+}
+
+
+def discounted_price(plan, pct):
+    """Annual price after the training discount, rounded to 50 DA."""
+    base = PLAN_PRICES.get(plan, 0)
+    if not pct:
+        return base
+    return int(round(base * (100 - pct) / 100 / 50.0) * 50)
+
+
+def grant_pass(user, pass_type):
+    """Give `user` a training pass: fresh quota, pass duration, and the
+    end-of-pass discount on the annual plans."""
+    cfg = PASS_TYPES[pass_type]
+    now = datetime.utcnow()
+    sub = user.subscription
+    if not sub:
+        sub = Subscription(user_id=user.id)
+        db.session.add(sub)
+        db.session.flush()
+    previous = sub.plan
+    sub.plan = pass_type
+    sub.status = "active"
+    sub.started_at = now
+    sub.expires_at = now + timedelta(days=cfg["days"])
+    sub.docs_limit = cfg["docs"]
+    sub.docs_used = 0
+    sub.docs_used_today = 0
+    sub.last_reset_date = date.today()
+    sub.expiry_reminder_sent = False
+    sub.last_reminder_stage = None
+    user.discount_pct = cfg["discount"]
+    user.discount_until = sub.expires_at + timedelta(days=cfg["discount_days"])
+    user.pass_reminder_sent = False
+    db.session.add(PlanChangeHistory(user_id=user.id, from_plan=previous,
+                                      to_plan=pass_type, reason="training_pass"))
+
+
+def read_participants(file_storage):
+    """Rows {first_name, last_name, email} from an .xlsx or .csv file whose first
+    row holds the column titles (French, English or Arabic). Returns (rows, error)."""
+    name = (file_storage.filename or "").lower()
+    data = file_storage.read()
+    table = []
+    try:
+        if name.endswith(".xlsx"):
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+            for r in wb.active.iter_rows(values_only=True):
+                table.append(["" if v is None else str(v).strip() for v in r])
+        elif name.endswith(".csv"):
+            import csv
+            text = data.decode("utf-8-sig", errors="ignore")
+            dialect = csv.Sniffer().sniff(text[:2000], delimiters=",;\t") if text.strip() else csv.excel
+            table = [[c.strip() for c in r] for r in csv.reader(io.StringIO(text), dialect)]
+        else:
+            return [], "format"
+    except Exception:
+        return [], "unreadable"
+    table = [r for r in table if any(r)]
+    if len(table) < 2:
+        return [], "empty"
+    header = [h.lower().strip() for h in table[0]]
+    cols = {}
+    for key, aliases in _HEADER_ALIASES.items():
+        for i, h in enumerate(header):
+            if h in aliases and i not in cols.values():
+                cols[key] = i
+                break
+    if "email" not in cols:
+        return [], "no_email_column"
+    rows = []
+    for r in table[1:]:
+        get = lambda k: (r[cols[k]] if k in cols and cols[k] < len(r) else "").strip()
+        rows.append({"first_name": get("first_name"), "last_name": get("last_name"),
+                     "email": get("email").lower()})
+    return rows, None
+
+
+def import_participants(rows, pass_type, cohort, send_email):
+    """Create the accounts (or give the pass to existing ones). Returns a report list."""
+    report = []
+    seen = set()
+    for row in rows:
+        email = row["email"]
+        if not _EMAIL_RE.match(email) or email in seen:
+            report.append({**row, "status": "invalid" if email not in seen else "duplicate"})
+            continue
+        seen.add(email)
+        user = User.query.filter_by(email=email).first()
+        if user:
+            sub = user.subscription
+            if user.role == "admin" or (sub and sub.plan in PLAN_PRICES and not sub.is_expired()):
+                report.append({**row, "status": "already_paid"})  # never downgrade a paying user
+                continue
+            grant_pass(user, pass_type)
+            user.cohort_id = cohort.id
+            report.append({**row, "status": "existing"})
+            continue
+        password = generate_password(10)
+        user = User(first_name=row["first_name"] or email.split("@")[0], last_name=row["last_name"] or "-",
+                    email=email, signup_source="formation", must_change_password=True,
+                    temp_password=password, credentials_pending=bool(send_email), cohort_id=cohort.id)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.flush()
+        get_referral_code(user)
+        grant_pass(user, pass_type)
+        report.append({**row, "status": "created", "password": password})
+    return report
+
+
+def send_credentials_batch():
+    """Send queued login emails, at most CREDENTIALS_EMAILS_PER_DAY per day
+    (Brevo's free plan allows 300 a day, shared with the other emails)."""
+    from notifications import send_email, smtp_configured
+    from email_templates import credentials_email
+    if not smtp_configured():
+        return 0
+    with app.app_context():
+        day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        sent_today = User.query.filter(User.credentials_sent_at >= day_start).count()
+        budget = max(0, CREDENTIALS_EMAILS_PER_DAY - sent_today)
+        if not budget:
+            return 0
+        queue = User.query.filter(User.credentials_pending.is_(True)).order_by(User.id).limit(budget).all()
+        sent = 0
+        for u in queue:
+            sub = u.subscription
+            cfg = PASS_TYPES.get(sub.plan if sub else "", {})
+            if not u.temp_password or not u.must_change_password:
+                u.credentials_pending = False  # already logged in and changed it
+                continue
+            subject, html, text = credentials_email(
+                u.preferred_lang or "fr", u.first_name, u.email, u.temp_password,
+                f"{APP_URL}/login", (sub.plan_label() if sub else ""), cfg.get("days", 0),
+                cfg.get("docs", 0), cfg.get("monthly", False))
+            if send_email(u.email, subject, text, html):
+                u.credentials_pending = False
+                u.credentials_sent_at = datetime.utcnow()
+                sent += 1
+        db.session.commit()
+    if sent:
+        print(f"✅ Login emails sent: {sent}")
+    return sent
+
+
+def check_passes():
+    """J-7 reminder with the discount, and the switch to 'expired' at the end."""
+    from notifications import send_email
+    from email_templates import pass_reminder_email
+    with app.app_context():
+        now = datetime.utcnow()
+        subs = Subscription.query.filter(Subscription.plan.in_(list(PASS_TYPES))).all()
+        for sub in subs:
+            user = db.session.get(User, sub.user_id)
+            if not user or not sub.expires_at:
+                continue
+            lang = user.preferred_lang or "fr"
+            if sub.expires_at <= now:
+                # Pass over: no quota left until they subscribe (discount still valid).
+                db.session.add(PlanChangeHistory(user_id=user.id, from_plan=sub.plan,
+                                                  to_plan="trial", reason="pass_ended"))
+                sub.plan = "trial"
+                sub.docs_limit = sub.docs_used or 0
+                db.session.add(Message(user_id=user.id, sender="admin", read_by_admin=True,
+                                       read_by_teacher=False,
+                                       body=tr_lang(lang, "msg_pass_ended", pct=user.discount_pct or 0,
+                                                    date=user.discount_until.strftime("%d/%m/%Y") if user.discount_until else "")))
+            elif not user.pass_reminder_sent and sub.expires_at - now <= timedelta(days=7):
+                subject, html, text = pass_reminder_email(
+                    lang, user.first_name, sub.expires_at.strftime("%d/%m/%Y"),
+                    user.discount_pct or 0,
+                    user.discount_until.strftime("%d/%m/%Y") if user.discount_until else "",
+                    f"{APP_URL}/upgrade", optout_link(user))
+                if not user.email_optout:
+                    send_email(user.email, subject, text, html)
+                db.session.add(Message(user_id=user.id, sender="admin", read_by_admin=True,
+                                       read_by_teacher=False,
+                                       body=tr_lang(lang, "msg_pass_reminder", date=sub.expires_at.strftime("%d/%m/%Y"),
+                                                    pct=user.discount_pct or 0)))
+                user.pass_reminder_sent = True
+        db.session.commit()
+
+
+def _pass_jobs():
+    try:
+        send_credentials_batch()
+        check_passes()
+    except Exception as e:  # never crash the scheduler
+        print(f"⚠️  Training pass jobs failed: {e}")
+
+
 def apply_payment_approval(teacher, plan, days=365, reason="payment_approved"):
     """Activate or renew a teacher's subscription after a payment has been validated.
     Renewing the same plan extends from the later of (now, current expiry);
@@ -549,6 +769,8 @@ try:
         _scheduler.add_job(_backup_job, "date", run_date=datetime.now() + timedelta(seconds=60),
                            id="db_backup_catchup", replace_existing=True)
     _scheduler.add_job(_nudge_job, "interval", hours=1, id="activation_nudges",
+                       replace_existing=True)
+    _scheduler.add_job(_pass_jobs, "interval", minutes=30, id="training_passes",
                        replace_existing=True)
     _scheduler.start()
     print("✅ Expiry reminder scheduler started")
@@ -801,8 +1023,12 @@ def profile():
                 flash(tr("flash_password_min_length"), "error")
             else:
                 current_user.set_password(new_pw)
+                current_user.must_change_password = False
+                current_user.temp_password = None   # no longer kept anywhere
+                current_user.credentials_pending = False
                 db.session.commit()
                 flash(tr("flash_password_changed"), "success")
+                return redirect(url_for("dashboard"))
 
         elif action == "update_apikey":
             api_key = request.form.get("api_key", "").strip()
@@ -841,9 +1067,13 @@ def upgrade():
                 return redirect(url_for("upgrade"))
 
             receipt_name = save_receipt_file(receipt_file, current_user.id)
+            pct = current_user.active_discount()
+            price = discounted_price(plan, pct)
+            if pct:
+                note = (f"[Réduction formation -{pct} % : {price} DA au lieu de {PLAN_PRICES[plan]} DA] " + note).strip()
             db.session.add(PaymentRequest(
                 user_id=current_user.id, plan=plan, method=method,
-                amount_claimed=int(amount) if amount.isdigit() else PLAN_PRICES.get(plan),
+                amount_claimed=int(amount) if amount.isdigit() else price,
                 reference=reference or None, note=note, receipt_path=receipt_name,
                 source="upgrade",
             ))
@@ -873,7 +1103,11 @@ def upgrade():
 
     my_requests = PaymentRequest.query.filter_by(user_id=current_user.id) \
         .order_by(PaymentRequest.created_at.desc()).all()
-    return render_template("upgrade.html", my_requests=my_requests)
+    pct = current_user.active_discount()
+    return render_template("upgrade.html", my_requests=my_requests, discount_pct=pct,
+                           discount_until=current_user.discount_until,
+                           prices={p: PLAN_PRICES[p] for p in PLAN_PRICES},
+                           discounted={p: discounted_price(p, pct) for p in PLAN_PRICES})
 
 
 # ── ADMIN: generate license codes ────────────────────────────────────────────
@@ -2811,6 +3045,116 @@ def admin_emails():
     optouts = base.filter(User.email_optout.is_(True)).count()
     return render_template("admin_emails.html", configured=smtp_configured(), missing=missing,
                            stats=stats, pending=pending, optouts=optouts)
+
+
+# ── ADMIN: training groups (import an Excel file of participants) ────────────
+def _xlsx_response(rows, filename, widths=None):
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for r in rows:
+        ws.append(r)
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="102A53")
+        c.alignment = Alignment(horizontal="center")
+    for i, w in enumerate(widths or [], start=1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name=filename,
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+@app.route("/admin/cohorts", methods=["GET", "POST"])
+@login_required
+def admin_cohorts():
+    if current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()[:120]
+        pass_type = request.form.get("pass_type", "")
+        send_mail = bool(request.form.get("send_email"))
+        f = request.files.get("file")
+        if not name or pass_type not in PASS_TYPES or not f or not f.filename:
+            flash(tr("flash_cohort_fields"), "error")
+            return redirect(url_for("admin_cohorts"))
+        rows, err = read_participants(f)
+        if err:
+            flash(tr("flash_cohort_file_" + err), "error")
+            return redirect(url_for("admin_cohorts"))
+        cohort = Cohort(name=name, pass_type=pass_type)
+        db.session.add(cohort)
+        db.session.flush()
+        report = import_participants(rows, pass_type, cohort, send_mail)
+        created = sum(1 for r in report if r["status"] == "created")
+        existing = sum(1 for r in report if r["status"] == "existing")
+        log_admin_action("cohort_imported", target=name,
+                         details=f"{pass_type}: {created} created, {existing} existing, {len(report)} rows")
+        db.session.commit()
+        session["cohort_report"] = [{k: v for k, v in r.items() if k != "password"} for r in report]
+        flash(tr("flash_cohort_imported", created=created, existing=existing), "success")
+        return redirect(url_for("admin_cohort_detail", cohort_id=cohort.id))
+
+    cohorts = Cohort.query.order_by(Cohort.created_at.desc()).all()
+    stats = {c.id: _cohort_stats(c) for c in cohorts}
+    queued = User.query.filter(User.credentials_pending.is_(True)).count()
+    return render_template("admin_cohorts.html", cohorts=cohorts, stats=stats, passes=PASS_TYPES,
+                           queued=queued, per_day=CREDENTIALS_EMAILS_PER_DAY)
+
+
+def _cohort_stats(cohort):
+    members = cohort.members
+    total = members.count()
+    logged = members.filter(User.must_change_password.is_(False)).count()
+    active = members.filter(User.documents.any()).count()
+    paid = members.join(Subscription, Subscription.user_id == User.id) \
+        .filter(Subscription.plan.in_(list(PLAN_PRICES))).count()
+    return {"total": total, "logged": logged, "active": active, "paid": paid,
+            "rate": round(paid * 100 / total) if total else 0}
+
+
+@app.route("/admin/cohorts/<int:cohort_id>")
+@login_required
+def admin_cohort_detail(cohort_id):
+    if current_user.role != "admin":
+        return redirect(url_for("dashboard"))
+    cohort = Cohort.query.get_or_404(cohort_id)
+    members = cohort.members.order_by(User.last_name, User.first_name).all()
+    report = session.pop("cohort_report", None)
+    return render_template("admin_cohort_detail.html", cohort=cohort, members=members,
+                           stats=_cohort_stats(cohort), report=report, passes=PASS_TYPES)
+
+
+@app.route("/admin/cohorts/<int:cohort_id>/credentials.xlsx")
+@login_required
+def admin_cohort_credentials(cohort_id):
+    if current_user.role != "admin":
+        return redirect(url_for("dashboard"))
+    cohort = Cohort.query.get_or_404(cohort_id)
+    rows = [[tr("cohort_col_last"), tr("cohort_col_first"), tr("cohort_col_email"),
+             tr("cohort_col_password"), tr("cohort_col_link")]]
+    for u in cohort.members.order_by(User.last_name, User.first_name):
+        pw = u.temp_password if (u.must_change_password and u.temp_password) else tr("cohort_pw_changed")
+        rows.append([u.last_name, u.first_name, u.email, pw, f"{APP_URL}/login"])
+    log_admin_action("cohort_credentials_downloaded", target=cohort.name)
+    db.session.commit()
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", cohort.name)[:40] or "groupe"
+    return _xlsx_response(rows, f"identifiants_{safe}.xlsx", [18, 18, 32, 22, 46])
+
+
+@app.route("/admin/cohorts/template.xlsx")
+@login_required
+def admin_cohort_template():
+    if current_user.role != "admin":
+        return redirect(url_for("dashboard"))
+    return _xlsx_response([["Nom", "Prénom", "Email"],
+                           ["Benali", "Amina", "amina.benali@exemple.dz"],
+                           ["Saidi", "Karim", "karim.saidi@exemple.dz"]],
+                          "modele_import_formation.xlsx", [20, 20, 34])
 
 
 if __name__ == "__main__":

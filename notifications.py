@@ -101,6 +101,7 @@ def check_and_send_expiry_reminders(app, db, User, Subscription, contact_email):
         subs = Subscription.query.filter(
             Subscription.status == "active",
             Subscription.plan != "trial",
+            Subscription.plan.notin_(("pass_decouverte", "pass_plus")),  # handled by check_passes
             Subscription.expires_at.isnot(None),
             Subscription.expires_at >= now,
         ).all()
@@ -141,6 +142,7 @@ def check_and_send_expiry_reminders(app, db, User, Subscription, contact_email):
         expired_subs = Subscription.query.filter(
             Subscription.status == "active",
             Subscription.plan != "trial",
+            Subscription.plan.notin_(("pass_decouverte", "pass_plus")),  # handled by check_passes
             Subscription.expires_at.isnot(None),
             Subscription.expires_at < now,
         ).all()

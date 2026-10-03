@@ -23,6 +23,14 @@ PLAN_PRICES = {
 
 PAYMENT_METHODS = ("cash", "ccp")
 
+# Training passes, granted by the admin to the participants of a training
+# session (imported from an Excel file). "monthly" passes reset their document
+# counter every 30 days; at the end, a discount on the annual plan is offered.
+PASS_TYPES = {
+    "pass_decouverte": {"days": 30, "docs": 15, "monthly": False, "discount": 30, "discount_days": 15},
+    "pass_plus":       {"days": 90, "docs": 10, "monthly": True,  "discount": 20, "discount_days": 30},
+}
+
 
 class User(UserMixin, db.Model):
     id            = db.Column(db.Integer, primary_key=True)
@@ -42,6 +50,24 @@ class User(UserMixin, db.Model):
     referred_by_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     referral_rewarded = db.Column(db.Boolean, default=False)
     referral_docs_earned = db.Column(db.Integer, default=0)  # lifetime, as inviter (capped)
+    # Training passes: the group the account was imported with, a forced password
+    # change at first login, the temporary password kept only until the user
+    # changes it (so the admin can print it and the email queue can send it),
+    # and the end-of-pass discount on the annual plan.
+    cohort_id = db.Column(db.Integer, db.ForeignKey("cohort.id"), nullable=True, index=True)
+    must_change_password = db.Column(db.Boolean, default=False)
+    temp_password = db.Column(db.String(40), nullable=True)
+    credentials_pending = db.Column(db.Boolean, default=False)
+    credentials_sent_at = db.Column(db.DateTime, nullable=True)
+    discount_pct = db.Column(db.Integer, nullable=True)
+    discount_until = db.Column(db.DateTime, nullable=True)
+    pass_reminder_sent = db.Column(db.Boolean, default=False)
+
+    def active_discount(self):
+        """Percentage off the annual plans still valid for this user, else 0."""
+        if self.discount_pct and self.discount_until and datetime.utcnow() < self.discount_until:
+            return self.discount_pct
+        return 0
     # Activation follow-up for sign-ups who never generated a document:
     # 0 = nothing sent, 1 = 24 h email sent, 2 = 72 h email sent.
     nudge_stage = db.Column(db.Integer, default=0)
@@ -111,7 +137,23 @@ class Subscription(db.Model):
             self.docs_used_today = 0
             self.last_reset_date = today
 
+    def _roll_monthly_if_needed(self):
+        """Monthly passes: the document counter starts again every 30 days."""
+        cfg = PASS_TYPES.get(self.plan)
+        if not cfg or not cfg["monthly"]:
+            return
+        today = date.today()
+        if self.last_reset_date is None:
+            self.last_reset_date = today
+        elif (today - self.last_reset_date).days >= 30:
+            self.docs_used = 0
+            self.last_reset_date = today
+
+    def is_pass(self):
+        return self.plan in PASS_TYPES
+
     def _plan_has_quota(self):
+        self._roll_monthly_if_needed()
         if self.is_expired():
             return False
         if self.is_daily_plan():
@@ -144,6 +186,7 @@ class Subscription(db.Model):
         return self._plan_has_quota() or self.valid_bonus() > 0
 
     def plan_remaining(self):
+        self._roll_monthly_if_needed()
         if self.is_expired():
             return 0
         if self.is_daily_plan():
@@ -178,9 +221,12 @@ class Subscription(db.Model):
         except Exception:
             lang = "fr"
         labels = {
-            "fr": {"trial": "Essai gratuit", "pro": "Pro", "ultimate": "Ultimate"},
-            "en": {"trial": "Free trial", "pro": "Pro", "ultimate": "Ultimate"},
-            "ar": {"trial": "تجربة مجانية", "pro": "برو", "ultimate": "ألتيميت"},
+            "fr": {"trial": "Essai gratuit", "pro": "Pro", "ultimate": "Ultimate",
+                   "pass_decouverte": "Pass Découverte", "pass_plus": "Pass Formation+"},
+            "en": {"trial": "Free trial", "pro": "Pro", "ultimate": "Ultimate",
+                   "pass_decouverte": "Discovery Pass", "pass_plus": "Training Pass+"},
+            "ar": {"trial": "تجربة مجانية", "pro": "برو", "ultimate": "ألتيميت",
+                   "pass_decouverte": "باس الاكتشاف", "pass_plus": "باس التكوين+"},
         }
         return labels.get(lang, labels["fr"]).get(self.plan, self.plan)
 
@@ -263,6 +309,16 @@ class PlanChangeHistory(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship("User")
+
+
+class Cohort(db.Model):
+    """A group of participants imported together after a training session."""
+    id         = db.Column(db.Integer, primary_key=True)
+    name       = db.Column(db.String(120), nullable=False)
+    pass_type  = db.Column(db.String(20), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    members    = db.relationship("User", backref="cohort", lazy="dynamic",
+                                 foreign_keys="User.cohort_id")
 
 
 class FunnelEvent(db.Model):
