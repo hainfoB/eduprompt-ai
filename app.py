@@ -250,6 +250,7 @@ def _migrate_sqlite_schema():
                 "rated_at": "DATETIME",
             },
             "training_session": {
+                "min_attendance": "INTEGER DEFAULT 80",
                 "mode": "VARCHAR(10) DEFAULT 'onsite'",
                 "online_url": "VARCHAR(300)",
                 "start_time": "VARCHAR(5)",
@@ -3327,7 +3328,8 @@ def _apply_session_form(s, form):
     s.location = form.get("location", "").strip()[:200] or None
     s.starts_on = _parse_date(form.get("starts_on"))
     s.ends_on = _parse_date(form.get("ends_on"))
-    for field, hi in (("price_total", 10_000_000), ("installments", 36), ("hours_total", 5000), ("seats", 5000)):
+    for field, hi in (("price_total", 10_000_000), ("installments", 36), ("hours_total", 5000), ("seats", 5000),
+                      ("min_attendance", 100)):
         try:
             v = int(form.get(field) or 0)
         except ValueError:
@@ -3336,6 +3338,8 @@ def _apply_session_form(s, form):
     if s.is_free:
         s.price_total, s.installments = 0, 1
     s.installments = max(1, s.installments or 1)
+    if not form.get("min_attendance", "").strip():
+        s.min_attendance = 80
     gp = form.get("gift_pass", "")
     s.gift_pass = gp if gp in PASS_TYPES else None
     mode = form.get("mode", "onsite")
@@ -3352,6 +3356,33 @@ def _apply_session_form(s, form):
     for field, limit in (("title", 160), ("description", 4000), ("location", 200), ("trainer", 120),
                          ("audience", 200), ("programme", 6000), ("prerequisites", 2000)):
         setattr(s, field + "_ar", form.get(field + "_ar", "").strip()[:limit] or None)
+
+
+def attendance_stats(s):
+    """Attendance per confirmed participant over the meetings already held (date reached or marked).
+    Present and late count as attended; excused absences are left out of the denominator."""
+    today = (datetime.utcnow() + timedelta(hours=1)).date()
+    meetings = s.meetings.all()
+    marked_ids = {a.meeting_id for a in Attendance.query.filter(
+        Attendance.meeting_id.in_([m.id for m in meetings] or [0]), Attendance.status.isnot(None))}
+    held = [m for m in meetings if m.day <= today or m.id in marked_ids]
+    held_ids = {m.id for m in held}
+    by_enr = {}
+    for a in Attendance.query.filter(Attendance.meeting_id.in_(held_ids or {0})):
+        by_enr.setdefault(a.enrollment_id, {})[a.meeting_id] = a
+    threshold = s.min_attendance if s.min_attendance is not None else 80
+    rows = []
+    for e in s.enrollments.filter_by(status="confirmed").order_by(Enrollment.last_name, Enrollment.first_name):
+        marks = by_enr.get(e.id, {})
+        attended = sum(1 for a in marks.values() if a.status in ("present", "late"))
+        excused = sum(1 for a in marks.values() if a.status == "excused")
+        denom = len(held) - excused
+        rate = round(attended * 100 / denom) if denom > 0 else 0
+        rows.append({"enr": e, "attended": attended, "excused": excused, "absent": max(0, len(held) - attended - excused),
+                     "rate": rate, "eligible": bool(held) and rate >= threshold, "marks": marks})
+    avg = round(sum(r["rate"] for r in rows) / len(rows)) if rows else 0
+    return {"held": held, "rows": rows, "avg": avg, "threshold": threshold,
+            "eligible": sum(1 for r in rows if r["eligible"]), "all_meetings": meetings}
 
 
 @app.route("/admin/sessions", methods=["GET", "POST"])
@@ -3390,11 +3421,10 @@ def admin_session_detail(session_id):
     meetings = s.meetings.all()
     enrollments = s.enrollments.all()
     # attendance rate per enrollment (over meetings already held or marked)
-    marked = {}
-    for a in Attendance.query.filter(Attendance.meeting_id.in_([m.id for m in meetings] or [0])):
-        marked.setdefault(a.enrollment_id, []).append(a.status)
+    stats = attendance_stats(s)
+    by_enr = {r["enr"].id: r for r in stats["rows"]}
     return render_template("admin_session_detail.html", s=s, meetings=meetings, enrollments=enrollments,
-                           passes=PASS_TYPES, public_url=_session_public_url(s), marked=marked,
+                           passes=PASS_TYPES, public_url=_session_public_url(s), stats=stats, by_enr=by_enr,
                            statuses=SESSION_STATUSES)
 
 
@@ -3517,6 +3547,27 @@ def admin_session_export(session_id):
                      e.subject or "", tr("enr_status_" + e.status)])
     safe = re.sub(r"[^A-Za-z0-9_-]+", "_", s.slug)[:40] or "formation"
     return _xlsx_response(rows, f"inscrits_{safe}.xlsx", [18, 18, 32, 16, 18, 28, 20, 14])
+
+
+@app.route("/admin/sessions/<int:session_id>/attendance.xlsx")
+@login_required
+def admin_session_attendance_export(session_id):
+    denied = _admin_only()
+    if denied:
+        return denied
+    s = TrainingSession.query.get_or_404(session_id)
+    st = attendance_stats(s)
+    sym = {"present": tr("att_present"), "late": tr("att_late"), "excused": tr("att_excused"), "absent": tr("att_absent")}
+    head = [tr("cohort_col_last"), tr("cohort_col_first"), tr("cohort_col_email")] + \
+           [m.day.strftime("%d/%m") for m in st["held"]] + [tr("sess_rate") + " %", tr("sess_eligible")]
+    rows = [head]
+    for r in st["rows"]:
+        e = r["enr"]
+        cells = [sym.get(r["marks"][m.id].status, "") if m.id in r["marks"] and r["marks"][m.id].status else ""
+                 for m in st["held"]]
+        rows.append([e.last_name, e.first_name, e.email] + cells + [r["rate"], tr("sess_yes") if r["eligible"] else tr("sess_no")])
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", s.slug)[:40] or "formation"
+    return _xlsx_response(rows, f"presences_{safe}.xlsx", [18, 18, 30] + [11] * len(st["held"]) + [10, 12])
 
 
 @app.route("/formation/<slug>", methods=["GET", "POST"])

@@ -12,6 +12,9 @@
   <div class="co-head"><h1><i class="bi bi-check2-square" style="color:var(--orange)"></i> {{ s.title }} · {{ m.day.strftime('%d/%m/%Y') }}</h1>
     <a href="{{ url_for('admin_session_detail', session_id=s.id) }}" class="co-pill"><i class="bi bi-arrow-left-short"></i> {{ s.title }}</a></div>
   <p class="co-sub">{{ t.sess_attendance_hint }}</p>
+  {% set counts = {'present':0,'late':0,'excused':0,'absent':0} %}{% for e in enrollments %}{% set a = att.get(e.id) %}{% if a and a.status %}{% if counts.update({a.status: counts[a.status] + 1}) %}{% endif %}{% endif %}{% endfor %}
+  <div class="co-row" style="margin-bottom:14px"><span class="st st-present">{{ t.att_present }} {{ counts.present }}</span><span class="st st-late">{{ t.att_late }} {{ counts.late }}</span><span class="st st-excused">{{ t.att_excused }} {{ counts.excused }}</span><span class="st st-absent">{{ t.att_absent }} {{ counts.absent }}</span>
+    <button type="button" class="co-btn sm ghost" onclick="document.querySelectorAll('input[value=present]').forEach(i=>i.checked=true)">{{ t.sess_all_present }}</button></div>
   <form method="POST" class="co-card"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% for e in enrollments %}{% set a = att.get(e.id) %}{% set cur = a.status if a and a.status else '' %}
     <div class="att-row"><div><b>{{ e.full_name }}</b>

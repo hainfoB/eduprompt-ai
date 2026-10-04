@@ -458,6 +458,7 @@ class TrainingSession(db.Model):
     location      = db.Column(db.String(200), nullable=True)
     hours_total   = db.Column(db.Integer, default=0)
     seats         = db.Column(db.Integer, default=0)      # 0 = unlimited
+    min_attendance = db.Column(db.Integer, default=80)    # % of held meetings needed for the certificate
     auto_confirm  = db.Column(db.Boolean, default=True)
     gift_pass     = db.Column(db.String(20), nullable=True)   # PASS_TYPES key, given after 1st attended meeting
     status        = db.Column(db.String(10), default="draft")

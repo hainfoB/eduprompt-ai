@@ -50,15 +50,26 @@
   </div>
 
   <div class="co-card">
+    <h3><i class="bi bi-bar-chart-fill" style="color:var(--orange)"></i> {{ t.sess_stats_title }}
+      <a class="co-pill" style="margin-inline-start:auto" href="{{ url_for('admin_session_attendance_export', session_id=s.id) }}"><i class="bi bi-file-earmark-excel"></i> {{ t.sess_export_att }}</a></h3>
+    <div class="co-grid">
+      <div class="fp-fact" style="background:var(--sky);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--muted)">{{ t.sess_stat_held }}<b style="display:block;font-size:20px;color:var(--navy)">{{ stats.held|length }} / {{ stats.all_meetings|length }}</b></div>
+      <div style="background:var(--sky);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--muted)">{{ t.sess_stat_avg }}<b style="display:block;font-size:20px;color:var(--navy)">{{ stats.avg }} %</b></div>
+      <div style="background:var(--sky);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--muted)">{{ t.sess_stat_eligible.format(pct=stats.threshold) }}<b style="display:block;font-size:20px;color:var(--navy)">{{ stats.eligible }} / {{ stats.rows|length }}</b></div>
+    </div>
+    <div class="co-note">{{ t.sess_stat_rule }}</div>
+  </div>
+
+  <div class="co-card">
     <h3><i class="bi bi-people-fill" style="color:var(--orange)"></i> {{ t.sess_enrollments }} ({{ enrollments|length }})
       <a class="co-pill" style="margin-inline-start:auto" href="{{ url_for('admin_session_export', session_id=s.id) }}"><i class="bi bi-file-earmark-excel"></i> Excel</a></h3>
     {% if enrollments %}<div style="overflow-x:auto"><table class="co-tbl">
       <thead><tr><th>{{ t.sess_name }}</th><th>{{ t.cohort_col_email }}</th><th>{{ t.enr_phone }}</th><th>{{ t.enr_status }}</th><th>{{ t.sess_presence }}</th><th></th></tr></thead><tbody>
-      {% for e in enrollments %}{% set sts = marked.get(e.id, []) %}
-      <tr><td><b>{{ e.full_name }}</b><div style="font-size:11px;color:var(--muted)">{{ e.school or '' }}{% if e.wilaya %} · {{ e.wilaya }}{% endif %}</div></td>
+      {% for e in enrollments %}      <tr><td><b>{{ e.full_name }}</b><div style="font-size:11px;color:var(--muted)">{{ e.school or '' }}{% if e.wilaya %} · {{ e.wilaya }}{% endif %}</div></td>
         <td style="direction:ltr;text-align:start">{{ e.email }}</td><td style="direction:ltr;text-align:start">{{ e.phone or '' }}</td>
         <td><span class="st st-{{ e.status }}">{{ t['enr_status_' ~ e.status] }}</span>{% if e.gift_granted %} <span class="badge-pass" title="{{ t.sess_gift_given }}">🎁</span>{% endif %}</td>
-        <td>{{ sts|select('in', ['present','late'])|list|length }}/{{ meetings|length }}</td>
+        <td>{% set r = by_enr.get(e.id) %}{% if r %}<b>{{ r.rate }} %</b> <span style="color:var(--muted);font-size:11px">({{ r.attended }}/{{ stats.held|length }})</span>
+          {% if stats.held %}<span class="st {{ 'st-present' if r.eligible else 'st-absent' }}">{{ t.sess_eligible if r.eligible else t.sess_not_eligible }}</span>{% endif %}{% else %}–{% endif %}</td>
         <td style="white-space:nowrap">
           {% for a, cls, ic in (('enr_confirm','green','check2'),('enr_cancel','red','x-lg')) %}{% if not (a=='enr_confirm' and e.status=='confirmed') and not (a=='enr_cancel' and e.status=='cancelled') %}
           <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
