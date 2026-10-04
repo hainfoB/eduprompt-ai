@@ -249,6 +249,16 @@ def _migrate_sqlite_schema():
                 "rating_comment": "VARCHAR(500)",
                 "rated_at": "DATETIME",
             },
+            "training_session": {
+                "mode": "VARCHAR(10) DEFAULT 'onsite'",
+                "online_url": "VARCHAR(300)",
+                "start_time": "VARCHAR(5)",
+                "end_time": "VARCHAR(5)",
+                "trainer": "VARCHAR(120)",
+                "audience": "VARCHAR(200)",
+                "programme": "TEXT",
+                "prerequisites": "TEXT",
+            },
             "payment_request": {
                 "method": "VARCHAR(10)",
                 "receipt_path": "VARCHAR(255)",
@@ -3206,8 +3216,9 @@ def _send_enrollment_email(enr, kind):
     from email_templates import enrollment_email
     try:
         s = enr.session
+        link = s.online_url if (kind in ("confirmed", "promoted") and s.mode != "onsite") else ""
         subject, html, text = enrollment_email(enr.lang or "fr", enr.first_name, kind, s.title,
-                                               _session_when(s), s.location or "", _session_public_url(s))
+                                               _session_when(s), s.location or "", _session_public_url(s), link)
         send_email(enr.email, subject, text, html)
     except Exception as e:
         print(f"⚠️  Enrollment email failed: {e}")
@@ -3285,7 +3296,8 @@ def send_session_reminders():
             for enr in s.enrollments.filter_by(status="confirmed"):
                 base = f"{APP_URL}/formation/rsvp/{enr.token}/{m.id}"
                 subject, html, text = session_reminder_email(enr.lang or "fr", enr.first_name, s.title, when,
-                                                             s.location or "", base + "?a=yes", base + "?a=no")
+                                                             s.location or "", base + "?a=yes", base + "?a=no",
+                                                             s.online_url if s.mode != "onsite" else "")
                 if send_email(enr.email, subject, text, html):
                     sent += 1
             m.reminder_sent = True
@@ -3317,6 +3329,17 @@ def _apply_session_form(s, form):
     s.installments = max(1, s.installments or 1)
     gp = form.get("gift_pass", "")
     s.gift_pass = gp if gp in PASS_TYPES else None
+    mode = form.get("mode", "onsite")
+    s.mode = mode if mode in ("onsite", "online", "hybrid") else "onsite"
+    url = form.get("online_url", "").strip()[:300]
+    s.online_url = url if url.lower().startswith(("http://", "https://")) and s.mode != "onsite" else None
+    for field in ("start_time", "end_time"):
+        v = form.get(field, "").strip()
+        setattr(s, field, v if re.match(r"^([01]\d|2[0-3]):[0-5]\d$", v) else None)
+    s.trainer = form.get("trainer", "").strip()[:120] or None
+    s.audience = form.get("audience", "").strip()[:200] or None
+    s.programme = form.get("programme", "").strip()[:6000] or None
+    s.prerequisites = form.get("prerequisites", "").strip()[:2000] or None
 
 
 @app.route("/admin/sessions", methods=["GET", "POST"])
@@ -3387,7 +3410,7 @@ def admin_session_action(session_id):
     elif action == "add_meeting":
         d = _parse_date(f.get("day"))
         if d:
-            db.session.add(SessionMeeting(session_id=s.id, day=d, time_label=f.get("time_label", "").strip()[:30] or None,
+            db.session.add(SessionMeeting(session_id=s.id, day=d, time_label=f.get("time_label", "").strip()[:30] or s.default_time_label() or None,
                                           topic=f.get("topic", "").strip()[:200] or None))
             db.session.commit()
         else:
@@ -3402,7 +3425,7 @@ def admin_session_action(session_id):
         if d and n:
             for i in range(n):
                 db.session.add(SessionMeeting(session_id=s.id, day=d + timedelta(days=every * i),
-                                              time_label=f.get("time_label", "").strip()[:30] or None))
+                                              time_label=f.get("time_label", "").strip()[:30] or s.default_time_label() or None))
             db.session.commit()
             flash(tr("flash_meetings_generated", n=n), "success")
         else:

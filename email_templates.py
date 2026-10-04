@@ -244,7 +244,7 @@ def pass_reminder_email(lang, name, date, pct, until, link, optout):
 
 # ── Training-session emails (registration confirmation, J-1 reminder) ────────
 ENR = {
-    "fr": {"label_session": "Formation", "label_when": "Date", "label_place": "Lieu", "cta": "Voir la formation",
+    "fr": {"label_session": "Formation", "label_when": "Date", "label_place": "Lieu", "label_link": "Lien de connexion", "cta": "Voir la formation",
            "confirmed": ("Inscription confirmée : {title}", "{name}, votre place est réservée",
                          "Votre inscription à la formation <b>{title}</b> est confirmée. Nous vous enverrons un rappel la veille de la première séance."),
            "pending":   ("Inscription reçue : {title}", "{name}, nous avons bien reçu votre inscription",
@@ -253,7 +253,7 @@ ENR = {
                          "La formation <b>{title}</b> est complète pour le moment. Vous êtes sur liste d’attente : si une place se libère, vous serez prévenu(e) automatiquement par e-mail."),
            "promoted":  ("Une place s’est libérée : {title}", "{name}, bonne nouvelle : une place s’est libérée !",
                          "Une place vient de se libérer pour <b>{title}</b>. Votre inscription est maintenant confirmée.")},
-    "ar": {"label_session": "التكوين", "label_when": "التاريخ", "label_place": "المكان", "cta": "تفاصيل التكوين",
+    "ar": {"label_session": "التكوين", "label_when": "التاريخ", "label_place": "المكان", "label_link": "رابط الحضور", "cta": "تفاصيل التكوين",
            "confirmed": ("تم تأكيد تسجيلك: {title}", "{name}، مقعدك محجوز",
                          "تم تأكيد تسجيلك في التكوين <b>{title}</b>. سنرسل لك تذكيراً عشية الحصة الأولى."),
            "pending":   ("استلمنا تسجيلك: {title}", "{name}، استلمنا طلب تسجيلك",
@@ -262,7 +262,7 @@ ENR = {
                          "التكوين <b>{title}</b> مكتمل حالياً. أنت في قائمة الانتظار، وإذا شغر مقعد سنُعلمك تلقائياً عبر البريد."),
            "promoted":  ("شغر مقعد لك: {title}", "{name}، خبر سار: شغر مقعد!",
                          "شغر مقعد في <b>{title}</b> وتم الآن تأكيد تسجيلك.")},
-    "en": {"label_session": "Training", "label_when": "Date", "label_place": "Place", "cta": "View the training",
+    "en": {"label_session": "Training", "label_when": "Date", "label_place": "Place", "label_link": "Join link", "cta": "View the training",
            "confirmed": ("Registration confirmed: {title}", "{name}, your seat is reserved",
                          "Your registration to <b>{title}</b> is confirmed. We will send you a reminder the day before the first session."),
            "pending":   ("Registration received: {title}", "{name}, we received your registration",
@@ -274,7 +274,7 @@ ENR = {
 }
 
 
-def enrollment_email(lang, name, status, title, when, place, link):
+def enrollment_email(lang, name, status, title, when, place, link, online_url=""):
     order = _order(lang)
     subject = ENR[order[0]][status][0].format(title=title)
     blocks, text_parts = "", []
@@ -286,8 +286,11 @@ def enrollment_email(lang, name, status, title, when, place, link):
             rows.append((c["label_when"], when))
         if place:
             rows.append((c["label_place"], place))
+        if online_url:
+            rows.append((c["label_link"], online_url))
         blocks += _simple_block(l, h.format(name=name), [p.format(title=escape(title))], rows, c["cta"], link, i == 0)
-        text_parts.append(h.format(name=name) + "\n" + p.format(title=title).replace("<b>", "").replace("</b>", "") + f"\n{link}")
+        text_parts.append(h.format(name=name) + "\n" + p.format(title=title).replace("<b>", "").replace("</b>", "") +
+                          "".join(f"\n{k}: {v}" for k, v in rows[1:]) + f"\n{link}")
     return subject, _wrap(subject, blocks), "\n\n".join(text_parts)
 
 
@@ -311,7 +314,7 @@ SRM = {
 _AT = {"fr": " à ", "ar": " · ", "en": " at "}
 
 
-def session_reminder_email(lang, name, title, when, place, yes_link, no_link):
+def session_reminder_email(lang, name, title, when, place, yes_link, no_link, online_url=""):
     order = _order(lang)
     subject = SRM[order[0]]["subject"].format(title=title)
     blocks, text_parts = "", []
@@ -320,8 +323,10 @@ def session_reminder_email(lang, name, title, when, place, yes_link, no_link):
         pl = f" ({escape(place)})" if place else ""
         blocks += _simple_block(l, c["title"].format(name=name),
                                 [c["p1"].format(title=escape(title), when=escape(when), place=pl),
-                                 c["p2"].format(no=escape(no_link))], [], c["cta"], yes_link, i == 0)
+                                 c["p2"].format(no=escape(no_link))],
+                                [(ENR[l]["label_link"], online_url)] if online_url else [], c["cta"], yes_link, i == 0)
         text_parts.append(c["title"].format(name=name) + "\n" +
                           c["p1"].format(title=title, when=when, place=f" ({place})" if place else "").replace("<b>", "").replace("</b>", "") +
+                          (f"\n{ENR[l]['label_link']}: {online_url}" if online_url else "") +
                           f"\n{c['cta']}: {yes_link}\n→ {no_link}")
     return subject, _wrap(subject, blocks), "\n\n".join(text_parts)

@@ -462,6 +462,14 @@ class TrainingSession(db.Model):
     gift_pass     = db.Column(db.String(20), nullable=True)   # PASS_TYPES key, given after 1st attended meeting
     status        = db.Column(db.String(10), default="draft")
     cohort_id     = db.Column(db.Integer, db.ForeignKey("cohort.id"), nullable=True)
+    mode          = db.Column(db.String(10), default="onsite")   # onsite | online | hybrid
+    online_url    = db.Column(db.String(300), nullable=True)     # sent to confirmed people only
+    start_time    = db.Column(db.String(5), nullable=True)       # "HH:MM", default for every meeting
+    end_time      = db.Column(db.String(5), nullable=True)
+    trainer       = db.Column(db.String(120), nullable=True)
+    audience      = db.Column(db.String(200), nullable=True)
+    programme     = db.Column(db.Text, nullable=True)            # one line per point
+    prerequisites = db.Column(db.Text, nullable=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     meetings      = db.relationship("SessionMeeting", backref="session", lazy="dynamic",
                                     order_by="SessionMeeting.day", cascade="all, delete-orphan")
@@ -474,6 +482,17 @@ class TrainingSession(db.Model):
 
     def seats_left(self):
         return None if not self.seats else max(0, self.seats - self.taken())
+
+    def default_time_label(self):
+        if self.start_time and self.end_time:
+            return f"{self.start_time} - {self.end_time}"
+        return self.start_time or ""
+
+    def programme_items(self):
+        return [l.strip(" -•\t") for l in (self.programme or "").splitlines() if l.strip(" -•\t")]
+
+    def prerequisite_items(self):
+        return [l.strip(" -•\t") for l in (self.prerequisites or "").splitlines() if l.strip(" -•\t")]
 
 
 class SessionMeeting(db.Model):

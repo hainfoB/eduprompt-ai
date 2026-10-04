@@ -36,7 +36,7 @@
       <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" class="co-row">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add_meeting">
         <div><label class="co-label">{{ t.sess_meeting_date }}</label><input class="co-input sm" type="date" name="day" required></div>
-        <div><label class="co-label">{{ t.sess_meeting_time }}</label><input class="co-input sm" name="time_label" placeholder="14:00 - 16:00" style="width:130px"></div>
+        <div><label class="co-label">{{ t.sess_meeting_time }}</label><input class="co-input sm" name="time_label" placeholder="{{ s.default_time_label() or '14:00 - 16:00' }}" style="width:130px"></div>
         <div><label class="co-label">{{ t.sess_meeting_topic }}</label><input class="co-input sm" name="topic" maxlength="200"></div>
         <button class="co-btn sm" type="submit">{{ t.sess_add }}</button></form>
       <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" class="co-row">
@@ -44,7 +44,7 @@
         <div><label class="co-label">{{ t.sess_gen_first }}</label><input class="co-input sm" type="date" name="day" required></div>
         <div><label class="co-label">{{ t.sess_gen_count }}</label><input class="co-input sm" type="number" name="count" min="1" max="60" value="8" style="width:80px"></div>
         <div><label class="co-label">{{ t.sess_gen_every }}</label><input class="co-input sm" type="number" name="every_days" min="1" max="31" value="7" style="width:80px"></div>
-        <div><label class="co-label">{{ t.sess_meeting_time }}</label><input class="co-input sm" name="time_label" placeholder="14:00 - 16:00" style="width:130px"></div>
+        <div><label class="co-label">{{ t.sess_meeting_time }}</label><input class="co-input sm" name="time_label" placeholder="{{ s.default_time_label() or '14:00 - 16:00' }}" style="width:130px"></div>
         <button class="co-btn sm ghost" type="submit">{{ t.sess_gen_btn }}</button></form>
     </div>
   </div>
