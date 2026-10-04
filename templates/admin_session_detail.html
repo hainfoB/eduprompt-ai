@@ -31,20 +31,27 @@
           <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" style="display:inline" onsubmit="return confirm('{{ t.sess_confirm_del }}')">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="del_meeting"><input type="hidden" name="meeting_id" value="{{ m.id }}">
             <button class="co-btn sm red" type="submit"><i class="bi bi-trash"></i></button></form></td></tr>{% endfor %}</tbody></table>
+    {% set planned = s.scheduled_minutes() / 60 %}
+    <div class="co-note" style="font-weight:700;margin-top:10px">{{ t.sess_planned.format(n=meetings|length, h=('%g' % (planned|round(1))), total=s.hours_total) }}
+      {% if s.hours_total and (planned - s.hours_total)|abs > 0.01 %}<span style="color:#b45309"> · ⚠ {{ t.sess_planned_diff.format(d=('%+g' % ((planned - s.hours_total)|round(1)))) }}</span>
+      {% elif s.hours_total and meetings %}<span style="color:#15803d"> · ✓ {{ t.sess_planned_ok }}</span>{% endif %}</div>
     {% else %}<div class="co-note">{{ t.sess_no_meetings }}</div>{% endif %}
     <div class="co-grid" style="margin-top:16px">
       <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" class="co-row">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add_meeting">
         <div><label class="co-label">{{ t.sess_meeting_date }}</label><input class="co-input sm" type="date" name="day" required></div>
-        <div><label class="co-label">{{ t.sess_meeting_time }}</label><input class="co-input sm" name="time_label" placeholder="{{ s.default_time_label() or '14:00 - 16:00' }}" style="width:130px"></div>
+        <div><label class="co-label">{{ t.sess_gen_start }}</label><input class="co-input sm" type="time" name="t_from" value="{{ s.start_time or '' }}"></div>
+        <div><label class="co-label">{{ t.sess_gen_end }}</label><input class="co-input sm" type="time" name="t_to" value="{{ s.end_time or '' }}"></div>
         <div><label class="co-label">{{ t.sess_meeting_topic }}</label><input class="co-input sm" name="topic" maxlength="200"></div>
         <button class="co-btn sm" type="submit">{{ t.sess_add }}</button></form>
       <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" class="co-row">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="gen_meetings">
         <div><label class="co-label">{{ t.sess_gen_first }}</label><input class="co-input sm" type="date" name="day" required></div>
-        <div><label class="co-label">{{ t.sess_gen_count }}</label><input class="co-input sm" type="number" name="count" min="1" max="60" value="8" style="width:80px"></div>
+        <div><label class="co-label">{{ t.sess_gen_count }}</label><input class="co-input sm" type="number" name="count" id="g_count" min="1" max="60" value="8" style="width:80px"></div>
         <div><label class="co-label">{{ t.sess_gen_every }}</label><input class="co-input sm" type="number" name="every_days" min="1" max="31" value="7" style="width:80px"></div>
-        <div><label class="co-label">{{ t.sess_meeting_time }}</label><input class="co-input sm" name="time_label" placeholder="{{ s.default_time_label() or '14:00 - 16:00' }}" style="width:130px"></div>
+        <div><label class="co-label">{{ t.sess_gen_start }}</label><input class="co-input sm" type="time" name="t_from" id="g_from" value="{{ s.start_time or '' }}"></div>
+        <div><label class="co-label">{{ t.sess_gen_end }}</label><input class="co-input sm" type="time" name="t_to" id="g_to" value="{{ s.end_time or '' }}"></div>
+        <div id="g_info" class="co-note" style="flex-basis:100%;margin:0;font-weight:700;color:var(--navy)"></div>
         <button class="co-btn sm ghost" type="submit">{{ t.sess_gen_btn }}</button></form>
     </div>
   </div>
@@ -95,4 +102,25 @@
       <button class="co-btn" type="submit">{{ t.sess_save }}</button></form>
   </div>
 </div>
+<script>
+(function(){
+  var total = {{ s.hours_total or 0 }}, cnt = document.getElementById('g_count'), from = document.getElementById('g_from'),
+      to = document.getElementById('g_to'), info = document.getElementById('g_info');
+  if(!cnt || !from) return;
+  var msg = {{ t.sess_duration_auto|tojson }};
+  function pad(n){return (n<10?'0':'')+n}
+  function calc(setEnd){
+    var n = parseInt(cnt.value,10); if(!total || !n || n<1){ info.textContent=''; return; }
+    var mins = Math.round(total*60/n/5)*5;
+    info.textContent = msg.replace('{h}', (Math.floor(mins/60)+' h'+(mins%60?(' '+pad(mins%60)):''))).replace('{total}', total).replace('{n}', n);
+    if(setEnd && from.value){
+      var p = from.value.split(':'), e = parseInt(p[0],10)*60+parseInt(p[1],10)+mins;
+      if(e < 24*60) to.value = pad(Math.floor(e/60))+':'+pad(e%60);
+    }
+  }
+  cnt.addEventListener('input', function(){calc(true)});
+  from.addEventListener('input', function(){calc(true)});
+  calc(!to.value);
+})();
+</script>
 {% endblock %}

@@ -3186,6 +3186,15 @@ def _admin_only():
     return None
 
 
+def _time_label(form, session):
+    """"HH:MM - HH:MM" from the two time inputs, else the free text, else the session default."""
+    pat = r"^([01]\d|2[0-3]):[0-5]\d$"
+    t1, t2 = form.get("t_from", "").strip(), form.get("t_to", "").strip()
+    if re.match(pat, t1):
+        return f"{t1} - {t2}" if re.match(pat, t2) and t2 > t1 else t1
+    return form.get("time_label", "").strip()[:30] or session.default_time_label() or None
+
+
 def _parse_date(value):
     try:
         return datetime.strptime((value or "").strip(), "%Y-%m-%d").date()
@@ -3331,7 +3340,7 @@ def _apply_session_form(s, form):
     for field, hi in (("price_total", 10_000_000), ("installments", 36), ("hours_total", 5000), ("seats", 5000),
                       ("min_attendance", 100)):
         try:
-            v = int(form.get(field) or 0)
+            v = int(float((form.get(field) or "0").replace(",", ".")))
         except ValueError:
             v = 0
         setattr(s, field, min(max(v, 0), hi))
@@ -3378,8 +3387,10 @@ def attendance_stats(s):
         excused = sum(1 for a in marks.values() if a.status == "excused")
         denom = len(held) - excused
         rate = round(attended * 100 / denom) if denom > 0 else 0
+        minutes = sum(m.duration_minutes(s) for m in held if m.id in marks and marks[m.id].status in ("present", "late"))
         rows.append({"enr": e, "attended": attended, "excused": excused, "absent": max(0, len(held) - attended - excused),
-                     "rate": rate, "eligible": bool(held) and rate >= threshold, "marks": marks})
+                     "rate": rate, "eligible": bool(held) and rate >= threshold, "marks": marks,
+                     "hours": round(minutes / 60, 1)})
     avg = round(sum(r["rate"] for r in rows) / len(rows)) if rows else 0
     return {"held": held, "rows": rows, "avg": avg, "threshold": threshold,
             "eligible": sum(1 for r in rows if r["eligible"]), "all_meetings": meetings}
@@ -3452,7 +3463,7 @@ def admin_session_action(session_id):
     elif action == "add_meeting":
         d = _parse_date(f.get("day"))
         if d:
-            db.session.add(SessionMeeting(session_id=s.id, day=d, time_label=f.get("time_label", "").strip()[:30] or s.default_time_label() or None,
+            db.session.add(SessionMeeting(session_id=s.id, day=d, time_label=_time_label(f, s),
                                           topic=f.get("topic", "").strip()[:200] or None))
             db.session.commit()
         else:
@@ -3467,7 +3478,7 @@ def admin_session_action(session_id):
         if d and n:
             for i in range(n):
                 db.session.add(SessionMeeting(session_id=s.id, day=d + timedelta(days=every * i),
-                                              time_label=f.get("time_label", "").strip()[:30] or s.default_time_label() or None))
+                                              time_label=_time_label(f, s)))
             db.session.commit()
             flash(tr("flash_meetings_generated", n=n), "success")
         else:
@@ -3559,15 +3570,15 @@ def admin_session_attendance_export(session_id):
     st = attendance_stats(s)
     sym = {"present": tr("att_present"), "late": tr("att_late"), "excused": tr("att_excused"), "absent": tr("att_absent")}
     head = [tr("cohort_col_last"), tr("cohort_col_first"), tr("cohort_col_email")] + \
-           [m.day.strftime("%d/%m") for m in st["held"]] + [tr("sess_rate") + " %", tr("sess_eligible")]
+           [m.day.strftime("%d/%m") for m in st["held"]] + [tr("sess_rate") + " %", tr("sess_hours_attended"), tr("sess_eligible")]
     rows = [head]
     for r in st["rows"]:
         e = r["enr"]
         cells = [sym.get(r["marks"][m.id].status, "") if m.id in r["marks"] and r["marks"][m.id].status else ""
                  for m in st["held"]]
-        rows.append([e.last_name, e.first_name, e.email] + cells + [r["rate"], tr("sess_yes") if r["eligible"] else tr("sess_no")])
+        rows.append([e.last_name, e.first_name, e.email] + cells + [r["rate"], r["hours"], tr("sess_yes") if r["eligible"] else tr("sess_no")])
     safe = re.sub(r"[^A-Za-z0-9_-]+", "_", s.slug)[:40] or "formation"
-    return _xlsx_response(rows, f"presences_{safe}.xlsx", [18, 18, 30] + [11] * len(st["held"]) + [10, 12])
+    return _xlsx_response(rows, f"presences_{safe}.xlsx", [18, 18, 30] + [11] * len(st["held"]) + [10, 14, 12])
 
 
 @app.route("/formation/<slug>", methods=["GET", "POST"])

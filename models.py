@@ -497,6 +497,10 @@ class TrainingSession(db.Model):
             return f"{self.start_time} - {self.end_time}"
         return self.start_time or ""
 
+    def scheduled_minutes(self):
+        """Total length of the planned meetings (a meeting without a readable time uses the default one)."""
+        return sum(mt.duration_minutes(self) for mt in self.meetings)
+
     def loc(self, field, lang):
         """Text of `field` in `lang` (Arabic if provided, else French), falling back to the other one."""
         base, ar = getattr(self, field) or "", getattr(self, field + "_ar") or ""
@@ -521,6 +525,18 @@ class SessionMeeting(db.Model):
     time_label = db.Column(db.String(30), nullable=True)   # e.g. "14:00 - 16:00"
     topic      = db.Column(db.String(200), nullable=True)
     reminder_sent = db.Column(db.Boolean, default=False)
+
+    def duration_minutes(self, session=None):
+        """Minutes between the two times of "HH:MM - HH:MM" (0 if unreadable)."""
+        import re as _re
+        for label in (self.time_label, session.default_time_label() if session else ""):
+            mm = _re.match(r"^\s*(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*$", label or "")
+            if mm:
+                a, b = int(mm[1]) * 60 + int(mm[2]), int(mm[3]) * 60 + int(mm[4])
+                if b > a:
+                    return b - a
+        return 0
+
     attendances = db.relationship("Attendance", backref="meeting", lazy="dynamic",
                                   cascade="all, delete-orphan")
 

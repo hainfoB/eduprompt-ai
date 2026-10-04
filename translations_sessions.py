@@ -123,5 +123,10 @@ _FR += ['Seuil de présence pour l’attestation (%)', 'Part des séances déjà
 _EN += ['Attendance threshold for the certificate (%)', 'Share of the meetings already held that must be attended to get the certificate (80 by default).', 'Attendance rate', 'Eligible for the certificate', 'Not eligible', 'Attendance tracking', 'Meetings held', 'Average attendance rate', 'Eligible (threshold {pct} %)', 'Calculation: meetings already past or marked; “present” and “late” count as attended; “excused” absences are left out.', 'Export attendance (Excel)', 'Yes', 'No', 'All present']
 _AR += ['نسبة الحضور المطلوبة للشهادة (%)', 'نسبة الحصص المنجزة التي يجب حضورها للحصول على الشهادة (80 افتراضياً).', 'نسبة الحضور', 'مؤهَّل للشهادة', 'غير مؤهَّل', 'متابعة الحضور', 'الحصص المنجزة', 'متوسط نسبة الحضور', 'المؤهَّلون (العتبة {pct}%)', 'الحساب: الحصص التي مضى تاريخها أو سُجّل حضورها؛ «حاضر» و«متأخر» يُحسبان حضوراً؛ الغياب «المعذور» لا يدخل في الحساب.', 'تصدير الحضور (Excel)', 'نعم', 'لا', 'الكل حاضر']
 
+_K += ['sess_gen_start', 'sess_gen_end', 'sess_duration_auto', 'sess_planned', 'sess_planned_ok', 'sess_planned_diff', 'sess_hours_attended']
+_FR += ['Début', 'Fin', 'Durée par séance : {h} ({total} h ÷ {n} séances)', '{n} séance(s) · {h} h planifiées sur {total} h annoncées', 'cohérent avec le volume annoncé', 'écart de {d} h avec le volume annoncé', 'Heures suivies']
+_EN += ['Start', 'End', 'Duration per meeting: {h} ({total} h ÷ {n} meetings)', '{n} meeting(s) · {h} h planned out of {total} h announced', 'matches the announced hours', '{d} h difference with the announced hours', 'Hours attended']
+_AR += ['البداية', 'النهاية', 'مدة الحصة: {h} ({total} ساعة ÷ {n} حصة)', '{n} حصة · {h} ساعة مبرمجة من أصل {total} ساعة معلنة', 'مطابق للحجم الساعي المعلن', 'فارق {d} ساعة عن الحجم الساعي المعلن', 'الساعات المتابَعة']
+
 assert len(_K) == len(_FR) == len(_EN) == len(_AR), (len(_K), len(_FR), len(_EN), len(_AR))
 SESSION_TR = {"fr": dict(zip(_K, _FR)), "en": dict(zip(_K, _EN)), "ar": dict(zip(_K, _AR))}
