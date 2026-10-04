@@ -128,5 +128,10 @@ _FR += ['Début', 'Fin', 'Durée par séance : {h} ({total} h ÷ {n} séances)',
 _EN += ['Start', 'End', 'Duration per meeting: {h} ({total} h ÷ {n} meetings)', '{n} meeting(s) · {h} h planned out of {total} h announced', 'matches the announced hours', '{d} h difference with the announced hours', 'Hours attended']
 _AR += ['البداية', 'النهاية', 'مدة الحصة: {h} ({total} ساعة ÷ {n} حصة)', '{n} حصة · {h} ساعة مبرمجة من أصل {total} ساعة معلنة', 'مطابق للحجم الساعي المعلن', 'فارق {d} ساعة عن الحجم الساعي المعلن', 'الساعات المتابَعة']
 
+_K += ["csrf_expired"]
+_FR += ["Votre session de formulaire a expiré. Rien n’a été enregistré : rechargez la page puis réessayez."]
+_EN += ["Your form session expired. Nothing was saved: reload the page and try again."]
+_AR += ["انتهت صلاحية الاستمارة. لم يُحفظ شيء: أعد تحميل الصفحة ثم حاول من جديد."]
+
 assert len(_K) == len(_FR) == len(_EN) == len(_AR), (len(_K), len(_FR), len(_EN), len(_AR))
 SESSION_TR = {"fr": dict(zip(_K, _FR)), "en": dict(zip(_K, _EN)), "ar": dict(zip(_K, _AR))}

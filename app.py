@@ -104,7 +104,23 @@ CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "haithemcomputing@gmail.com")
 APP_URL = os.environ.get("APP_URL", "https://eduprompt-web-production.up.railway.app").rstrip("/")
 
 db.init_app(app)
+app.config["WTF_CSRF_TIME_LIMIT"] = None   # a form left open for hours (e.g. a long session form) must still submit
 csrf = CSRFProtect(app)
+from flask_wtf.csrf import CSRFError
+
+
+@app.errorhandler(CSRFError)
+def _csrf_error(e):
+    """Expired or missing form token: say so in the user's language and go back to the page."""
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "csrf"}), 400
+    flash(tr("csrf_expired"), "error")
+    ref = request.referrer or ""
+    if ref.startswith(request.host_url):
+        return redirect(ref)
+    return redirect(url_for("dashboard") if current_user.is_authenticated else url_for("login"))
+
+
 limiter = Limiter(get_remote_address, app=app, default_limits=[], storage_uri="memory://")
 
 login_manager = LoginManager(app)
