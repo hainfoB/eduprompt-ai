@@ -240,3 +240,88 @@ def pass_reminder_email(lang, name, date, pct, until, link, optout):
     text = "\n\n".join(REM[l]["p1"].format(date=date).replace("<b>", "").replace("</b>", "") + "\n" +
                        REM[l]["p2"].format(pct=pct, until=until).replace("<b>", "").replace("</b>", "") + f"\n{link}" for l in order)
     return subject, _wrap(subject, blocks, footer), text
+
+
+# ── Training-session emails (registration confirmation, J-1 reminder) ────────
+ENR = {
+    "fr": {"label_session": "Formation", "label_when": "Date", "label_place": "Lieu", "cta": "Voir la formation",
+           "confirmed": ("Inscription confirmée : {title}", "{name}, votre place est réservée",
+                         "Votre inscription à la formation <b>{title}</b> est confirmée. Nous vous enverrons un rappel la veille de la première séance."),
+           "pending":   ("Inscription reçue : {title}", "{name}, nous avons bien reçu votre inscription",
+                         "Votre inscription à <b>{title}</b> est en cours de validation. Vous recevrez un e-mail dès qu’elle sera confirmée."),
+           "waitlist":  ("Liste d’attente : {title}", "{name}, vous êtes sur liste d’attente",
+                         "La formation <b>{title}</b> est complète pour le moment. Vous êtes sur liste d’attente : si une place se libère, vous serez prévenu(e) automatiquement par e-mail."),
+           "promoted":  ("Une place s’est libérée : {title}", "{name}, bonne nouvelle : une place s’est libérée !",
+                         "Une place vient de se libérer pour <b>{title}</b>. Votre inscription est maintenant confirmée.")},
+    "ar": {"label_session": "التكوين", "label_when": "التاريخ", "label_place": "المكان", "cta": "تفاصيل التكوين",
+           "confirmed": ("تم تأكيد تسجيلك: {title}", "{name}، مقعدك محجوز",
+                         "تم تأكيد تسجيلك في التكوين <b>{title}</b>. سنرسل لك تذكيراً عشية الحصة الأولى."),
+           "pending":   ("استلمنا تسجيلك: {title}", "{name}، استلمنا طلب تسجيلك",
+                         "تسجيلك في <b>{title}</b> قيد المراجعة. ستصلك رسالة بمجرد تأكيده."),
+           "waitlist":  ("قائمة الانتظار: {title}", "{name}، أنت في قائمة الانتظار",
+                         "التكوين <b>{title}</b> مكتمل حالياً. أنت في قائمة الانتظار، وإذا شغر مقعد سنُعلمك تلقائياً عبر البريد."),
+           "promoted":  ("شغر مقعد لك: {title}", "{name}، خبر سار: شغر مقعد!",
+                         "شغر مقعد في <b>{title}</b> وتم الآن تأكيد تسجيلك.")},
+    "en": {"label_session": "Training", "label_when": "Date", "label_place": "Place", "cta": "View the training",
+           "confirmed": ("Registration confirmed: {title}", "{name}, your seat is reserved",
+                         "Your registration to <b>{title}</b> is confirmed. We will send you a reminder the day before the first session."),
+           "pending":   ("Registration received: {title}", "{name}, we received your registration",
+                         "Your registration to <b>{title}</b> is being reviewed. You will get an email as soon as it is confirmed."),
+           "waitlist":  ("Waiting list: {title}", "{name}, you are on the waiting list",
+                         "<b>{title}</b> is full for now. You are on the waiting list: if a seat frees up, you will be notified automatically by email."),
+           "promoted":  ("A seat opened up: {title}", "{name}, good news: a seat opened up!",
+                         "A seat just opened up for <b>{title}</b>. Your registration is now confirmed.")},
+}
+
+
+def enrollment_email(lang, name, status, title, when, place, link):
+    order = _order(lang)
+    subject = ENR[order[0]][status][0].format(title=title)
+    blocks, text_parts = "", []
+    for i, l in enumerate(order):
+        c = ENR[l]
+        _, h, p = c[status]
+        rows = [(c["label_session"], title)]
+        if when:
+            rows.append((c["label_when"], when))
+        if place:
+            rows.append((c["label_place"], place))
+        blocks += _simple_block(l, h.format(name=name), [p.format(title=escape(title))], rows, c["cta"], link, i == 0)
+        text_parts.append(h.format(name=name) + "\n" + p.format(title=title).replace("<b>", "").replace("</b>", "") + f"\n{link}")
+    return subject, _wrap(subject, blocks), "\n\n".join(text_parts)
+
+
+SRM = {
+    "fr": {"subject": "Demain : {title}. Confirmez votre venue",
+           "title": "{name}, on vous attend demain",
+           "p1": "Rappel : la séance de <b>{title}</b> a lieu demain, <b>{when}</b>{place}.",
+           "p2": "Pour nous aider à organiser la salle, confirmez-nous votre venue en un clic. Si vous ne pouvez pas venir, <a href=\"{no}\" style=\"color:#f97316;font-weight:700\">prévenez-nous ici</a> : votre place sera libérée pour une personne en liste d’attente.",
+           "cta": "Je confirme ma venue"},
+    "ar": {"subject": "غداً: {title}. أكّد حضورك",
+           "title": "{name}، ننتظرك غداً",
+           "p1": "تذكير: حصة <b>{title}</b> غداً، <b>{when}</b>{place}.",
+           "p2": "لمساعدتنا في تنظيم القاعة، أكّد حضورك بنقرة واحدة. وإذا تعذّر عليك الحضور، <a href=\"{no}\" style=\"color:#f97316;font-weight:700\">أعلمنا من هنا</a> وسيُحرَّر مقعدك لصالح شخص في قائمة الانتظار.",
+           "cta": "أؤكد حضوري"},
+    "en": {"subject": "Tomorrow: {title}. Please confirm you are coming",
+           "title": "{name}, we expect you tomorrow",
+           "p1": "Reminder: the <b>{title}</b> session takes place tomorrow, <b>{when}</b>{place}.",
+           "p2": "To help us organise the room, confirm you are coming in one click. If you cannot make it, <a href=\"{no}\" style=\"color:#f97316;font-weight:700\">let us know here</a>: your seat will be released to someone on the waiting list.",
+           "cta": "I confirm I’m coming"},
+}
+_AT = {"fr": " à ", "ar": " · ", "en": " at "}
+
+
+def session_reminder_email(lang, name, title, when, place, yes_link, no_link):
+    order = _order(lang)
+    subject = SRM[order[0]]["subject"].format(title=title)
+    blocks, text_parts = "", []
+    for i, l in enumerate(order):
+        c = SRM[l]
+        pl = f" ({escape(place)})" if place else ""
+        blocks += _simple_block(l, c["title"].format(name=name),
+                                [c["p1"].format(title=escape(title), when=escape(when), place=pl),
+                                 c["p2"].format(no=escape(no_link))], [], c["cta"], yes_link, i == 0)
+        text_parts.append(c["title"].format(name=name) + "\n" +
+                          c["p1"].format(title=title, when=when, place=f" ({place})" if place else "").replace("<b>", "").replace("</b>", "") +
+                          f"\n{c['cta']}: {yes_link}\n→ {no_link}")
+    return subject, _wrap(subject, blocks), "\n\n".join(text_parts)

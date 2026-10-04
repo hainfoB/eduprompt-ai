@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ s.title }}{% endblock %}
+{% block extra_head %}{% include "_admin_ui_css.html" %}{% endblock %}
+{% block content %}
+<div class="co-wrap">
+  <div class="co-head">
+    <h1>{{ s.title }} <span class="st st-{{ s.status }}">{{ t['sess_status_' ~ s.status] }}</span></h1>
+    <a href="{{ url_for('admin_sessions') }}" class="co-pill"><i class="bi bi-arrow-left-short"></i> {{ t.sess_page_title }}</a>
+  </div>
+  <p class="co-sub">{{ t.sess_free_label if s.is_free else (s.price_total ~ ' DA · ' ~ s.installments ~ ' ' ~ t.sess_payments) }}
+    {% if s.seats %} · {{ t.sess_seats }}: {{ s.taken() }}/{{ s.seats }}{% endif %}</p>
+
+  <div class="co-card">
+    <h3><i class="bi bi-link-45deg" style="color:var(--orange)"></i> {{ t.sess_public_link }}</h3>
+    <div class="linkbox"><span id="pl">{{ public_url }}</span>
+      <button type="button" class="co-btn sm ghost" onclick="navigator.clipboard.writeText(document.getElementById('pl').textContent);this.textContent='✓'">{{ t.sess_copy }}</button></div>
+    <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" class="co-row" style="margin-top:14px">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="status">
+      <div><label class="co-label">{{ t.sess_col_status }}</label>
+        <select class="co-input sm" name="status">{% for st in statuses %}<option value="{{ st }}" {% if s.status == st %}selected{% endif %}>{{ t['sess_status_' ~ st] }}</option>{% endfor %}</select></div>
+      <button class="co-btn sm" type="submit">{{ t.sess_apply }}</button>
+      <span class="co-note" style="margin:0">{{ t.sess_status_hint }}</span>
+    </form>
+  </div>
+
+  <div class="co-card">
+    <h3><i class="bi bi-calendar-event-fill" style="color:var(--orange)"></i> {{ t.sess_meetings }}</h3>
+    {% if meetings %}<table class="co-tbl"><thead><tr><th>#</th><th>{{ t.sess_meeting_date }}</th><th>{{ t.sess_meeting_time }}</th><th>{{ t.sess_meeting_topic }}</th><th></th></tr></thead><tbody>
+      {% for m in meetings %}<tr><td>{{ loop.index }}</td><td>{{ m.day.strftime('%d/%m/%Y') }}</td><td>{{ m.time_label or '' }}</td><td>{{ m.topic or '' }}</td>
+        <td style="white-space:nowrap"><a class="co-btn sm green" style="text-decoration:none;display:inline-block" href="{{ url_for('admin_session_attendance', session_id=s.id, meeting_id=m.id) }}">{{ t.sess_attendance }}</a>
+          <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" style="display:inline" onsubmit="return confirm('{{ t.sess_confirm_del }}')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="del_meeting"><input type="hidden" name="meeting_id" value="{{ m.id }}">
+            <button class="co-btn sm red" type="submit"><i class="bi bi-trash"></i></button></form></td></tr>{% endfor %}</tbody></table>
+    {% else %}<div class="co-note">{{ t.sess_no_meetings }}</div>{% endif %}
+    <div class="co-grid" style="margin-top:16px">
+      <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" class="co-row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add_meeting">
+        <div><label class="co-label">{{ t.sess_meeting_date }}</label><input class="co-input sm" type="date" name="day" required></div>
+        <div><label class="co-label">{{ t.sess_meeting_time }}</label><input class="co-input sm" name="time_label" placeholder="14:00 - 16:00" style="width:130px"></div>
+        <div><label class="co-label">{{ t.sess_meeting_topic }}</label><input class="co-input sm" name="topic" maxlength="200"></div>
+        <button class="co-btn sm" type="submit">{{ t.sess_add }}</button></form>
+      <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" class="co-row">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="gen_meetings">
+        <div><label class="co-label">{{ t.sess_gen_first }}</label><input class="co-input sm" type="date" name="day" required></div>
+        <div><label class="co-label">{{ t.sess_gen_count }}</label><input class="co-input sm" type="number" name="count" min="1" max="60" value="8" style="width:80px"></div>
+        <div><label class="co-label">{{ t.sess_gen_every }}</label><input class="co-input sm" type="number" name="every_days" min="1" max="31" value="7" style="width:80px"></div>
+        <div><label class="co-label">{{ t.sess_meeting_time }}</label><input class="co-input sm" name="time_label" placeholder="14:00 - 16:00" style="width:130px"></div>
+        <button class="co-btn sm ghost" type="submit">{{ t.sess_gen_btn }}</button></form>
+    </div>
+  </div>
+
+  <div class="co-card">
+    <h3><i class="bi bi-people-fill" style="color:var(--orange)"></i> {{ t.sess_enrollments }} ({{ enrollments|length }})
+      <a class="co-pill" style="margin-inline-start:auto" href="{{ url_for('admin_session_export', session_id=s.id) }}"><i class="bi bi-file-earmark-excel"></i> Excel</a></h3>
+    {% if enrollments %}<div style="overflow-x:auto"><table class="co-tbl">
+      <thead><tr><th>{{ t.sess_name }}</th><th>{{ t.cohort_col_email }}</th><th>{{ t.enr_phone }}</th><th>{{ t.enr_status }}</th><th>{{ t.sess_presence }}</th><th></th></tr></thead><tbody>
+      {% for e in enrollments %}{% set sts = marked.get(e.id, []) %}
+      <tr><td><b>{{ e.full_name }}</b><div style="font-size:11px;color:var(--muted)">{{ e.school or '' }}{% if e.wilaya %} · {{ e.wilaya }}{% endif %}</div></td>
+        <td style="direction:ltr;text-align:start">{{ e.email }}</td><td style="direction:ltr;text-align:start">{{ e.phone or '' }}</td>
+        <td><span class="st st-{{ e.status }}">{{ t['enr_status_' ~ e.status] }}</span>{% if e.gift_granted %} <span class="badge-pass" title="{{ t.sess_gift_given }}">🎁</span>{% endif %}</td>
+        <td>{{ sts|select('in', ['present','late'])|list|length }}/{{ meetings|length }}</td>
+        <td style="white-space:nowrap">
+          {% for a, cls, ic in (('enr_confirm','green','check2'),('enr_cancel','red','x-lg')) %}{% if not (a=='enr_confirm' and e.status=='confirmed') and not (a=='enr_cancel' and e.status=='cancelled') %}
+          <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" style="display:inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="{{ a }}"><input type="hidden" name="enrollment_id" value="{{ e.id }}">
+            <button class="co-btn sm {{ cls }}" type="submit" title="{{ t['sess_' ~ a] }}"><i class="bi bi-{{ ic }}"></i></button></form>{% endif %}{% endfor %}
+          <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" style="display:inline" onsubmit="return confirm('{{ t.sess_confirm_del }}')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="enr_delete"><input type="hidden" name="enrollment_id" value="{{ e.id }}">
+            <button class="co-btn sm ghost" type="submit"><i class="bi bi-trash"></i></button></form></td></tr>{% endfor %}</tbody></table></div>
+    {% else %}<div class="co-note">{{ t.sess_no_enrollments }}</div>{% endif %}
+    <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}" class="co-row" style="margin-top:16px">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="enr_add">
+      <div><label class="co-label">{{ t.cohort_col_last }}</label><input class="co-input sm" name="last_name" required></div>
+      <div><label class="co-label">{{ t.cohort_col_first }}</label><input class="co-input sm" name="first_name"></div>
+      <div><label class="co-label">{{ t.cohort_col_email }}</label><input class="co-input sm" type="email" name="email" required></div>
+      <div><label class="co-label">{{ t.enr_phone }}</label><input class="co-input sm" name="phone"></div>
+      <button class="co-btn sm ghost" type="submit">{{ t.sess_add_enr }}</button></form>
+  </div>
+
+  <div class="co-card">
+    <h3><i class="bi bi-pencil-square" style="color:var(--orange)"></i> {{ t.sess_edit }}</h3>
+    <form method="POST" action="{{ url_for('admin_session_action', session_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="edit">
+      {% with sv = s %}{% include "_session_form.html" %}{% endwith %}
+      <button class="co-btn" type="submit">{{ t.sess_save }}</button></form>
+  </div>
+</div>
+{% endblock %}

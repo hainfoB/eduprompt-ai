@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ t.sess_attendance }}{% endblock %}
+{% block extra_head %}{% include "_admin_ui_css.html" %}
+<style>.att-row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid var(--line)}
+.att-opts{display:flex;gap:6px;flex-wrap:wrap}.att-opts label{cursor:pointer}.att-opts input{position:absolute;opacity:0}
+.att-opts span{display:inline-block;padding:9px 14px;border-radius:9px;border:2px solid var(--line);font-size:13px;font-weight:700;min-height:40px}
+.att-opts input:checked+span.p{background:#dcfce7;border-color:#15803d;color:#15803d}.att-opts input:checked+span.a{background:#fee2e2;border-color:#b91c1c;color:#b91c1c}
+.att-opts input:checked+span.l{background:#fef3c7;border-color:#b45309;color:#b45309}.att-opts input:checked+span.e{background:var(--sky);border-color:var(--navy);color:var(--navy)}
+.rsvp{font-size:11px;font-weight:700;margin-inline-start:8px}</style>{% endblock %}
+{% block content %}
+<div class="co-wrap">
+  <div class="co-head"><h1><i class="bi bi-check2-square" style="color:var(--orange)"></i> {{ s.title }} · {{ m.day.strftime('%d/%m/%Y') }}</h1>
+    <a href="{{ url_for('admin_session_detail', session_id=s.id) }}" class="co-pill"><i class="bi bi-arrow-left-short"></i> {{ s.title }}</a></div>
+  <p class="co-sub">{{ t.sess_attendance_hint }}</p>
+  <form method="POST" class="co-card"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for e in enrollments %}{% set a = att.get(e.id) %}{% set cur = a.status if a and a.status else '' %}
+    <div class="att-row"><div><b>{{ e.full_name }}</b>
+      {% if a and a.rsvp == 'yes' %}<span class="rsvp" style="color:#15803d">✓ {{ t.sess_rsvp_yes }}</span>{% elif a and a.rsvp == 'no' %}<span class="rsvp" style="color:#b91c1c">✗ {{ t.sess_rsvp_no }}</span>{% endif %}
+      {% if not e.gift_granted and s.gift_pass %}<span class="rsvp" style="color:var(--muted)">🎁</span>{% endif %}</div>
+      <div class="att-opts">
+        {% for val, cls, label in (('present','p',t.att_present),('late','l',t.att_late),('excused','e',t.att_excused),('absent','a',t.att_absent)) %}
+        <label><input type="radio" name="st_{{ e.id }}" value="{{ val }}" {% if cur == val %}checked{% endif %}><span class="{{ cls }}">{{ label }}</span></label>{% endfor %}
+      </div></div>
+    {% else %}<div class="co-note">{{ t.sess_no_confirmed }}</div>{% endfor %}
+    {% if enrollments %}<button class="co-btn" type="submit" style="margin-top:16px"><i class="bi bi-check2-circle"></i> {{ t.sess_save }}</button>
+    {% if s.gift_pass %}<div class="co-note">🎁 {{ t.sess_gift_on_present }}</div>{% endif %}{% endif %}
+  </form>
+</div>
+{% endblock %}

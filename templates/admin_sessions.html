@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ t.sess_page_title }}{% endblock %}
+{% block extra_head %}{% include "_admin_ui_css.html" %}{% endblock %}
+{% block content %}
+<div class="co-wrap">
+  <div class="co-head">
+    <h1><i class="bi bi-mortarboard-fill" style="color:var(--orange)"></i> {{ t.sess_page_title }}</h1>
+    <div class="co-row"><a href="{{ url_for('admin_cohorts') }}" class="co-pill">{{ t.cohorts_title }}</a>
+      <a href="{{ url_for('admin_stats') }}" class="co-pill"><i class="bi bi-arrow-left-short"></i> {{ t.stats_title }}</a></div>
+  </div>
+  <p class="co-sub">{{ t.sess_subtitle }}</p>
+  <div class="co-card">
+    <h3><i class="bi bi-plus-circle-fill" style="color:var(--orange)"></i> {{ t.sess_new }}</h3>
+    <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% with sv = none %}{% include "_session_form.html" %}{% endwith %}
+      <button class="co-btn" type="submit"><i class="bi bi-check2-circle"></i> {{ t.sess_create_btn }}</button>
+    </form>
+  </div>
+  <div class="co-card">
+    <h3><i class="bi bi-collection-fill" style="color:var(--orange)"></i> {{ t.sess_list }}</h3>
+    {% if sessions %}<div style="overflow-x:auto"><table class="co-tbl">
+      <thead><tr><th>{{ t.sess_title }}</th><th>{{ t.sess_col_type }}</th><th>{{ t.sess_col_status }}</th><th>{{ t.enr_status_confirmed }}</th><th>{{ t.enr_status_pending }}</th><th>{{ t.enr_status_waitlist }}</th></tr></thead>
+      <tbody>{% for s in sessions %}{% set c = counts[s.id] %}
+      <tr><td><a href="{{ url_for('admin_session_detail', session_id=s.id) }}">{{ s.title }}</a>
+            <div style="font-size:11px;color:var(--muted)">{{ s.starts_on.strftime('%d/%m/%Y') if s.starts_on else '' }}</div></td>
+          <td>{{ t.sess_free_label if s.is_free else (s.price_total ~ ' DA') }}</td>
+          <td><span class="st st-{{ s.status }}">{{ t['sess_status_' ~ s.status] }}</span></td>
+          <td><b>{{ c.confirmed }}</b>{% if s.seats %} / {{ s.seats }}{% endif %}</td><td>{{ c.pending }}</td><td>{{ c.waitlist }}</td></tr>
+      {% endfor %}</tbody></table></div>
+    {% else %}<div style="text-align:center;color:var(--muted);font-size:13px;padding:14px">{{ t.sess_none }}</div>{% endif %}
+  </div>
+</div>
+{% endblock %}

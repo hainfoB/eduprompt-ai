@@ -438,3 +438,87 @@ def create_trial_subscription(user):
     )
     db.session.add(sub)
     return sub
+
+# ── TRAINING SESSIONS (registration form, attendance, later payments/certificates) ──
+SESSION_STATUSES = ("draft", "open", "running", "done")
+ENROLL_STATUSES = ("pending", "confirmed", "waitlist", "cancelled")
+
+
+class TrainingSession(db.Model):
+    """A training session the admin runs (free or paid), with its public sign-up form."""
+    id            = db.Column(db.Integer, primary_key=True)
+    title         = db.Column(db.String(160), nullable=False)
+    slug          = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    description   = db.Column(db.Text, nullable=True)
+    is_free       = db.Column(db.Boolean, default=True)
+    price_total   = db.Column(db.Integer, default=0)      # DA, paid sessions
+    installments  = db.Column(db.Integer, default=1)      # number of payments (patch 3)
+    starts_on     = db.Column(db.Date, nullable=True)
+    ends_on       = db.Column(db.Date, nullable=True)
+    location      = db.Column(db.String(200), nullable=True)
+    hours_total   = db.Column(db.Integer, default=0)
+    seats         = db.Column(db.Integer, default=0)      # 0 = unlimited
+    auto_confirm  = db.Column(db.Boolean, default=True)
+    gift_pass     = db.Column(db.String(20), nullable=True)   # PASS_TYPES key, given after 1st attended meeting
+    status        = db.Column(db.String(10), default="draft")
+    cohort_id     = db.Column(db.Integer, db.ForeignKey("cohort.id"), nullable=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    meetings      = db.relationship("SessionMeeting", backref="session", lazy="dynamic",
+                                    order_by="SessionMeeting.day", cascade="all, delete-orphan")
+    enrollments   = db.relationship("Enrollment", backref="session", lazy="dynamic",
+                                    order_by="Enrollment.created_at", cascade="all, delete-orphan")
+
+    def taken(self):
+        """Seats occupied (confirmed + waiting for admin validation)."""
+        return self.enrollments.filter(Enrollment.status.in_(("confirmed", "pending"))).count()
+
+    def seats_left(self):
+        return None if not self.seats else max(0, self.seats - self.taken())
+
+
+class SessionMeeting(db.Model):
+    """One séance of a session (one date, one time)."""
+    id         = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.Integer, db.ForeignKey("training_session.id"), nullable=False, index=True)
+    day        = db.Column(db.Date, nullable=False)
+    time_label = db.Column(db.String(30), nullable=True)   # e.g. "14:00 - 16:00"
+    topic      = db.Column(db.String(200), nullable=True)
+    reminder_sent = db.Column(db.Boolean, default=False)
+    attendances = db.relationship("Attendance", backref="meeting", lazy="dynamic",
+                                  cascade="all, delete-orphan")
+
+
+class Enrollment(db.Model):
+    """A person registered to a session through the public form (or added by the admin)."""
+    id         = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.Integer, db.ForeignKey("training_session.id"), nullable=False, index=True)
+    first_name = db.Column(db.String(80), nullable=False)
+    last_name  = db.Column(db.String(80), nullable=False)
+    email      = db.Column(db.String(150), nullable=False, index=True)
+    phone      = db.Column(db.String(30), nullable=True)
+    wilaya     = db.Column(db.String(60), nullable=True)
+    school     = db.Column(db.String(150), nullable=True)
+    subject    = db.Column(db.String(100), nullable=True)
+    lang       = db.Column(db.String(2), default="fr")
+    status     = db.Column(db.String(10), default="pending", index=True)
+    token      = db.Column(db.String(40), unique=True, nullable=False, default=lambda: secrets.token_urlsafe(24))
+    gift_granted = db.Column(db.Boolean, default=False)
+    user_id    = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    attendances = db.relationship("Attendance", backref="enrollment", lazy="dynamic",
+                                  cascade="all, delete-orphan")
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}".strip()
+
+
+class Attendance(db.Model):
+    """Attendance of one enrollment at one meeting. status: present | absent | late | excused.
+    rsvp is the answer to the J-1 reminder (yes | no)."""
+    id            = db.Column(db.Integer, primary_key=True)
+    meeting_id    = db.Column(db.Integer, db.ForeignKey("session_meeting.id"), nullable=False, index=True)
+    enrollment_id = db.Column(db.Integer, db.ForeignKey("enrollment.id"), nullable=False, index=True)
+    status        = db.Column(db.String(10), nullable=True)
+    rsvp          = db.Column(db.String(3), nullable=True)
+    __table_args__ = (db.UniqueConstraint("meeting_id", "enrollment_id", name="uq_attendance"),)

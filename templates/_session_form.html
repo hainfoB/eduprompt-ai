@@ -1,0 +1,25 @@
+{# fields shared by creation and edition. `sv` = TrainingSession or none #}
+{% set v = sv %}
+<div class="co-grid" style="margin-bottom:14px">
+  <div style="grid-column:1/-1"><label class="co-label">{{ t.sess_title }}</label>
+    <input class="co-input" name="title" required maxlength="160" value="{{ v.title if v else '' }}" placeholder="{{ t.sess_title_ph }}"></div>
+  <div style="grid-column:1/-1"><label class="co-label">{{ t.sess_desc }}</label>
+    <textarea class="co-input" name="description" rows="3" maxlength="4000">{{ v.description if v and v.description else '' }}</textarea></div>
+  <div><label class="co-label">{{ t.sess_starts }}</label><input class="co-input" type="date" name="starts_on" value="{{ v.starts_on if v and v.starts_on else '' }}"></div>
+  <div><label class="co-label">{{ t.sess_ends }}</label><input class="co-input" type="date" name="ends_on" value="{{ v.ends_on if v and v.ends_on else '' }}"></div>
+  <div><label class="co-label">{{ t.sess_location }}</label><input class="co-input" name="location" maxlength="200" value="{{ v.location if v and v.location else '' }}" placeholder="{{ t.sess_location_ph }}"></div>
+  <div><label class="co-label">{{ t.sess_hours }}</label><input class="co-input" type="number" min="0" name="hours_total" value="{{ v.hours_total if v else 0 }}"></div>
+  <div><label class="co-label">{{ t.sess_seats }}</label><input class="co-input" type="number" min="0" name="seats" value="{{ v.seats if v else 0 }}"><div class="co-note">{{ t.sess_seats_hint }}</div></div>
+  <div><label class="co-label">{{ t.sess_gift }}</label>
+    <select class="co-input" name="gift_pass"><option value="">{{ t.sess_gift_none }}</option>
+      {% for key in passes %}<option value="{{ key }}" {% if v and v.gift_pass == key %}selected{% endif %}>{{ t['pass_name_' ~ key] }}</option>{% endfor %}</select>
+    <div class="co-note">{{ t.sess_gift_hint }}</div></div>
+</div>
+<div class="co-grid" style="margin-bottom:14px">
+  <label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" name="is_free" value="1" id="isfree" {% if not v or v.is_free %}checked{% endif %} onchange="document.getElementById('paidbox').style.display=this.checked?'none':'grid'"> {{ t.sess_free }}</label>
+  <label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" name="auto_confirm" value="1" {% if not v or v.auto_confirm %}checked{% endif %}> {{ t.sess_auto }}</label>
+</div>
+<div class="co-grid" id="paidbox" style="margin-bottom:14px;display:{{ 'none' if (not v or v.is_free) else 'grid' }}">
+  <div><label class="co-label">{{ t.sess_price }}</label><input class="co-input" type="number" min="0" name="price_total" value="{{ v.price_total if v else 0 }}"></div>
+  <div><label class="co-label">{{ t.sess_installments }}</label><input class="co-input" type="number" min="1" max="36" name="installments" value="{{ v.installments if v else 1 }}"><div class="co-note">{{ t.sess_installments_hint }}</div></div>
+</div>

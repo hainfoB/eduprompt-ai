@@ -1998,5 +1998,10 @@ TRANSLATIONS = {
 }
 
 
+from translations_sessions import SESSION_TR
+for _l, _d in SESSION_TR.items():
+    TRANSLATIONS[_l].update(_d)
+
+
 def get_translations(lang):
     return TRANSLATIONS.get(lang, TRANSLATIONS["fr"])

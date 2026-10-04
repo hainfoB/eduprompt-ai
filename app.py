@@ -4,6 +4,7 @@ import re
 import io
 import base64
 import secrets
+import unicodedata
 import string
 from datetime import datetime, timedelta, date
 
@@ -34,6 +35,7 @@ from flask_limiter.util import get_remote_address
 from models import (db, User, Subscription, Document, LicenseCode, Payment, Message,
                      PaymentRequest, AdminLog, PlanChangeHistory, FunnelEvent, GenerationError,
                      PLAN_PRICES, PAYMENT_METHODS, PASS_TYPES, Cohort,
+                     TrainingSession, SessionMeeting, Enrollment, Attendance, SESSION_STATUSES,
                      create_trial_subscription, next_receipt_number)
 from werkzeug.utils import secure_filename
 from utils import build_sources_context
@@ -640,6 +642,7 @@ def _pass_jobs():
     try:
         send_credentials_batch()
         check_passes()
+        send_session_reminders()
     except Exception as e:  # never crash the scheduler
         print(f"⚠️  Training pass jobs failed: {e}")
 
@@ -3155,6 +3158,404 @@ def admin_cohort_template():
                            ["Benali", "Amina", "amina.benali@exemple.dz"],
                            ["Saidi", "Karim", "karim.saidi@exemple.dz"]],
                           "modele_import_formation.xlsx", [20, 20, 34])
+
+
+# ── TRAINING SESSIONS: public sign-up form, attendance, J-1 reminder, gift pass ──
+def _admin_only():
+    if not current_user.is_authenticated or current_user.role != "admin":
+        flash(tr("flash_admin_only"), "error")
+        return redirect(url_for("dashboard"))
+    return None
+
+
+def _parse_date(value):
+    try:
+        return datetime.strptime((value or "").strip(), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _unique_slug(title, exclude_id=None):
+    base = re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode().lower()).strip("-")[:50] or "formation"
+    slug, n = base, 1
+    while True:
+        q = TrainingSession.query.filter_by(slug=slug)
+        if exclude_id:
+            q = q.filter(TrainingSession.id != exclude_id)
+        if not q.first():
+            return slug
+        n += 1
+        slug = f"{base}-{n}"
+
+
+def _session_public_url(s):
+    return f"{APP_URL}/formation/{s.slug}"
+
+
+def _session_when(s):
+    first = s.meetings.first()
+    d = first.day if first else s.starts_on
+    if not d:
+        return ""
+    return d.strftime("%d/%m/%Y") + (f" {first.time_label}" if first and first.time_label else "")
+
+
+def _send_enrollment_email(enr, kind):
+    """kind: confirmed | pending | waitlist | promoted. Never raises."""
+    from notifications import send_email
+    from email_templates import enrollment_email
+    try:
+        s = enr.session
+        subject, html, text = enrollment_email(enr.lang or "fr", enr.first_name, kind, s.title,
+                                               _session_when(s), s.location or "", _session_public_url(s))
+        send_email(enr.email, subject, text, html)
+    except Exception as e:
+        print(f"⚠️  Enrollment email failed: {e}")
+
+
+def promote_waitlist(s):
+    """Fill freed seats with the oldest people on the waiting list."""
+    promoted = []
+    while True:
+        left = s.seats_left()
+        if left is not None and left <= 0:
+            break
+        nxt = s.enrollments.filter_by(status="waitlist").order_by(Enrollment.created_at).first()
+        if not nxt:
+            break
+        nxt.status = "confirmed"
+        db.session.flush()
+        promoted.append(nxt)
+    db.session.commit()
+    for enr in promoted:
+        _send_enrollment_email(enr, "promoted")
+    return len(promoted)
+
+
+def grant_session_gift(enr):
+    """Create the account (or extend an existing one) with the session's gift pass.
+    Called the first time the person is marked present: the gift rewards showing up."""
+    s = enr.session
+    if not s.gift_pass or s.gift_pass not in PASS_TYPES or enr.gift_granted:
+        return None
+    if not s.cohort_id:
+        cohort = Cohort(name=f"{s.title}"[:120], pass_type=s.gift_pass)
+        db.session.add(cohort)
+        db.session.flush()
+        s.cohort_id = cohort.id
+    cohort = db.session.get(Cohort, s.cohort_id)
+    report = import_participants([{"first_name": enr.first_name, "last_name": enr.last_name,
+                                   "email": enr.email.lower()}], s.gift_pass, cohort, True)
+    status = report[0]["status"] if report else "invalid"
+    if status in ("created", "existing", "already_paid"):
+        enr.gift_granted = True
+        user = User.query.filter_by(email=enr.email.lower()).first()
+        if user:
+            enr.user_id = user.id
+            if not user.preferred_lang:
+                user.preferred_lang = enr.lang
+    return status
+
+
+def set_attendance(meeting, enr, status):
+    att = Attendance.query.filter_by(meeting_id=meeting.id, enrollment_id=enr.id).first()
+    if not att:
+        att = Attendance(meeting_id=meeting.id, enrollment_id=enr.id)
+        db.session.add(att)
+    att.status = status or None
+    if status in ("present", "late"):
+        grant_session_gift(enr)
+    return att
+
+
+def send_session_reminders():
+    """J-1: ask each confirmed participant to confirm (or release the seat)."""
+    from notifications import send_email
+    from email_templates import session_reminder_email
+    with app.app_context():
+        tomorrow = (datetime.utcnow() + timedelta(hours=1)).date() + timedelta(days=1)
+        meetings = SessionMeeting.query.filter(SessionMeeting.day == tomorrow,
+                                               SessionMeeting.reminder_sent.is_(False)).all()
+        sent = 0
+        for m in meetings:
+            s = m.session
+            if s.status not in ("open", "running"):
+                continue
+            when = m.day.strftime("%d/%m/%Y") + (f" {m.time_label}" if m.time_label else "")
+            for enr in s.enrollments.filter_by(status="confirmed"):
+                base = f"{APP_URL}/formation/rsvp/{enr.token}/{m.id}"
+                subject, html, text = session_reminder_email(enr.lang or "fr", enr.first_name, s.title, when,
+                                                             s.location or "", base + "?a=yes", base + "?a=no")
+                if send_email(enr.email, subject, text, html):
+                    sent += 1
+            m.reminder_sent = True
+        db.session.commit()
+    if sent:
+        print(f"✅ Session reminders sent: {sent}")
+    return sent
+
+
+_SESSION_FIELDS_BOOL = ("is_free", "auto_confirm")
+
+
+def _apply_session_form(s, form):
+    s.title = form.get("title", "").strip()[:160] or s.title
+    s.description = form.get("description", "").strip()[:4000] or None
+    s.is_free = bool(form.get("is_free"))
+    s.auto_confirm = bool(form.get("auto_confirm"))
+    s.location = form.get("location", "").strip()[:200] or None
+    s.starts_on = _parse_date(form.get("starts_on"))
+    s.ends_on = _parse_date(form.get("ends_on"))
+    for field, hi in (("price_total", 10_000_000), ("installments", 36), ("hours_total", 5000), ("seats", 5000)):
+        try:
+            v = int(form.get(field) or 0)
+        except ValueError:
+            v = 0
+        setattr(s, field, min(max(v, 0), hi))
+    if s.is_free:
+        s.price_total, s.installments = 0, 1
+    s.installments = max(1, s.installments or 1)
+    gp = form.get("gift_pass", "")
+    s.gift_pass = gp if gp in PASS_TYPES else None
+
+
+@app.route("/admin/sessions", methods=["GET", "POST"])
+@login_required
+def admin_sessions():
+    denied = _admin_only()
+    if denied:
+        return denied
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()[:160]
+        if not title:
+            flash(tr("flash_session_title"), "error")
+            return redirect(url_for("admin_sessions"))
+        s = TrainingSession(title=title, slug=_unique_slug(title))
+        _apply_session_form(s, request.form)
+        db.session.add(s)
+        db.session.flush()
+        log_admin_action("session_created", target=s.title, details=f"free={s.is_free} seats={s.seats}")
+        db.session.commit()
+        flash(tr("flash_session_created"), "success")
+        return redirect(url_for("admin_session_detail", session_id=s.id))
+    sessions = TrainingSession.query.order_by(TrainingSession.created_at.desc()).all()
+    counts = {s.id: {"confirmed": s.enrollments.filter_by(status="confirmed").count(),
+                     "waitlist": s.enrollments.filter_by(status="waitlist").count(),
+                     "pending": s.enrollments.filter_by(status="pending").count()} for s in sessions}
+    return render_template("admin_sessions.html", sessions=sessions, counts=counts, passes=PASS_TYPES)
+
+
+@app.route("/admin/sessions/<int:session_id>")
+@login_required
+def admin_session_detail(session_id):
+    denied = _admin_only()
+    if denied:
+        return denied
+    s = TrainingSession.query.get_or_404(session_id)
+    meetings = s.meetings.all()
+    enrollments = s.enrollments.all()
+    # attendance rate per enrollment (over meetings already held or marked)
+    marked = {}
+    for a in Attendance.query.filter(Attendance.meeting_id.in_([m.id for m in meetings] or [0])):
+        marked.setdefault(a.enrollment_id, []).append(a.status)
+    return render_template("admin_session_detail.html", s=s, meetings=meetings, enrollments=enrollments,
+                           passes=PASS_TYPES, public_url=_session_public_url(s), marked=marked,
+                           statuses=SESSION_STATUSES)
+
+
+@app.route("/admin/sessions/<int:session_id>/action", methods=["POST"])
+@login_required
+def admin_session_action(session_id):
+    denied = _admin_only()
+    if denied:
+        return denied
+    s = TrainingSession.query.get_or_404(session_id)
+    f = request.form
+    action = f.get("action", "")
+    back = redirect(url_for("admin_session_detail", session_id=s.id))
+    if action == "edit":
+        _apply_session_form(s, f)
+        db.session.commit()
+        flash(tr("flash_session_saved"), "success")
+    elif action == "status":
+        new = f.get("status", "")
+        if new in SESSION_STATUSES:
+            s.status = new
+            log_admin_action("session_status", target=s.title, details=new)
+            db.session.commit()
+            flash(tr("flash_session_saved"), "success")
+    elif action == "add_meeting":
+        d = _parse_date(f.get("day"))
+        if d:
+            db.session.add(SessionMeeting(session_id=s.id, day=d, time_label=f.get("time_label", "").strip()[:30] or None,
+                                          topic=f.get("topic", "").strip()[:200] or None))
+            db.session.commit()
+        else:
+            flash(tr("flash_session_date"), "error")
+    elif action == "gen_meetings":
+        d = _parse_date(f.get("day"))
+        try:
+            n = min(max(int(f.get("count") or 0), 1), 60)
+            every = min(max(int(f.get("every_days") or 7), 1), 31)
+        except ValueError:
+            n, every = 0, 7
+        if d and n:
+            for i in range(n):
+                db.session.add(SessionMeeting(session_id=s.id, day=d + timedelta(days=every * i),
+                                              time_label=f.get("time_label", "").strip()[:30] or None))
+            db.session.commit()
+            flash(tr("flash_meetings_generated", n=n), "success")
+        else:
+            flash(tr("flash_session_date"), "error")
+    elif action == "del_meeting":
+        m = SessionMeeting.query.filter_by(id=f.get("meeting_id", type=int), session_id=s.id).first()
+        if m:
+            db.session.delete(m)
+            db.session.commit()
+    elif action in ("enr_confirm", "enr_cancel", "enr_delete"):
+        enr = Enrollment.query.filter_by(id=f.get("enrollment_id", type=int), session_id=s.id).first()
+        if enr:
+            if action == "enr_confirm":
+                was = enr.status
+                enr.status = "confirmed"
+                db.session.commit()
+                if was != "confirmed":
+                    _send_enrollment_email(enr, "confirmed")
+            elif action == "enr_cancel":
+                enr.status = "cancelled"
+                db.session.commit()
+                promote_waitlist(s)
+            else:
+                db.session.delete(enr)
+                db.session.commit()
+                promote_waitlist(s)
+    elif action == "enr_add":
+        email = f.get("email", "").strip().lower()
+        if _EMAIL_RE.match(email) and f.get("last_name", "").strip() and not s.enrollments.filter_by(email=email).first():
+            enr = Enrollment(session_id=s.id, first_name=f.get("first_name", "").strip()[:80] or email.split("@")[0],
+                             last_name=f.get("last_name", "").strip()[:80], email=email,
+                             phone=f.get("phone", "").strip()[:30] or None, lang="fr", status="confirmed")
+            db.session.add(enr)
+            db.session.commit()
+            _send_enrollment_email(enr, "confirmed")
+        else:
+            flash(tr("flash_session_enr_invalid"), "error")
+    return back
+
+
+@app.route("/admin/sessions/<int:session_id>/meetings/<int:meeting_id>", methods=["GET", "POST"])
+@login_required
+def admin_session_attendance(session_id, meeting_id):
+    denied = _admin_only()
+    if denied:
+        return denied
+    s = TrainingSession.query.get_or_404(session_id)
+    m = SessionMeeting.query.filter_by(id=meeting_id, session_id=s.id).first_or_404()
+    enrollments = s.enrollments.filter_by(status="confirmed").order_by(Enrollment.last_name, Enrollment.first_name).all()
+    if request.method == "POST":
+        gifts = 0
+        for enr in enrollments:
+            st = request.form.get(f"st_{enr.id}", "")
+            if st in ("present", "absent", "late", "excused", ""):
+                had_gift = enr.gift_granted
+                set_attendance(m, enr, st)
+                gifts += 1 if (enr.gift_granted and not had_gift) else 0
+        log_admin_action("attendance_saved", target=s.title, details=f"{m.day} gifts={gifts}")
+        db.session.commit()
+        flash(tr("flash_attendance_saved", n=gifts), "success")
+        return redirect(url_for("admin_session_attendance", session_id=s.id, meeting_id=m.id))
+    att = {a.enrollment_id: a for a in m.attendances}
+    return render_template("admin_attendance.html", s=s, m=m, enrollments=enrollments, att=att)
+
+
+@app.route("/admin/sessions/<int:session_id>/enrollments.xlsx")
+@login_required
+def admin_session_export(session_id):
+    denied = _admin_only()
+    if denied:
+        return denied
+    s = TrainingSession.query.get_or_404(session_id)
+    rows = [[tr("cohort_col_last"), tr("cohort_col_first"), tr("cohort_col_email"), tr("enr_phone"),
+             tr("enr_wilaya"), tr("enr_school"), tr("enr_subject"), tr("enr_status")]]
+    for e in s.enrollments:
+        rows.append([e.last_name, e.first_name, e.email, e.phone or "", e.wilaya or "", e.school or "",
+                     e.subject or "", tr("enr_status_" + e.status)])
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", s.slug)[:40] or "formation"
+    return _xlsx_response(rows, f"inscrits_{safe}.xlsx", [18, 18, 32, 16, 18, 28, 20, 14])
+
+
+@app.route("/formation/<slug>", methods=["GET", "POST"])
+@limiter.limit("30/hour", methods=["POST"])
+def formation_public(slug):
+    s = TrainingSession.query.filter_by(slug=slug).first_or_404()
+    if s.status == "draft":
+        abort(404)
+    is_open = s.status == "open"
+    done = None
+    if request.method == "POST" and is_open:
+        f = request.form
+        if f.get("website"):  # honeypot
+            return redirect(url_for("formation_public", slug=slug))
+        first, last = f.get("first_name", "").strip()[:80], f.get("last_name", "").strip()[:80]
+        email, phone = f.get("email", "").strip().lower(), f.get("phone", "").strip()[:30]
+        if not first or not last or not _EMAIL_RE.match(email) or len(re.sub(r"\D", "", phone)) < 8:
+            flash(tr("enr_invalid"), "error")
+            return render_template("formation_public.html", s=s, is_open=is_open, done=None, form=f)
+        existing = s.enrollments.filter_by(email=email).first()
+        if existing and existing.status != "cancelled":
+            return render_template("formation_public.html", s=s, is_open=is_open, done="duplicate", form={})
+        left = s.seats_left()
+        if left is not None and left <= 0:
+            status = "waitlist"
+        else:
+            status = "confirmed" if s.auto_confirm else "pending"
+        if existing:  # re-registration after a cancellation
+            enr = existing
+            enr.status = status
+        else:
+            enr = Enrollment(session_id=s.id, email=email)
+            db.session.add(enr)
+        enr.status = status
+        enr.first_name, enr.last_name, enr.phone = first, last, phone
+        enr.wilaya = f.get("wilaya", "").strip()[:60] or None
+        enr.school = f.get("school", "").strip()[:150] or None
+        enr.subject = f.get("subject", "").strip()[:100] or None
+        enr.lang = current_lang()
+        db.session.commit()
+        _send_enrollment_email(enr, status)
+        return render_template("formation_public.html", s=s, is_open=is_open, done=status, form={})
+    meetings = s.meetings.all()
+    return render_template("formation_public.html", s=s, is_open=is_open, done=done, form={}, meetings=meetings)
+
+
+@app.route("/formation/rsvp/<token>/<int:meeting_id>", methods=["GET", "POST"])
+def formation_rsvp(token, meeting_id):
+    enr = Enrollment.query.filter_by(token=token).first_or_404()
+    m = SessionMeeting.query.filter_by(id=meeting_id, session_id=enr.session_id).first_or_404()
+    s = enr.session
+    answer = (request.values.get("a") or "").lower()
+    if answer not in ("yes", "no"):
+        abort(404)
+    result = None
+    if request.method == "POST":
+        att = Attendance.query.filter_by(meeting_id=m.id, enrollment_id=enr.id).first()
+        if not att:
+            att = Attendance(meeting_id=m.id, enrollment_id=enr.id)
+            db.session.add(att)
+        att.rsvp = answer
+        released = False
+        if answer == "no":
+            first_meeting = s.meetings.first()
+            attended_before = Attendance.query.filter(Attendance.enrollment_id == enr.id,
+                                                      Attendance.status.in_(("present", "late"))).count() > 0
+            if first_meeting and first_meeting.id == m.id and not attended_before and enr.status == "confirmed":
+                enr.status = "cancelled"  # frees the seat for the waiting list
+                released = True
+        db.session.commit()
+        if released:
+            promote_waitlist(s)
+        result = "released" if released else answer
+    return render_template("formation_rsvp.html", s=s, m=m, enr=enr, answer=answer, result=result)
 
 
 if __name__ == "__main__":

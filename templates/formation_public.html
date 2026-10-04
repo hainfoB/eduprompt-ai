@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ s.title }}{% endblock %}
+{% block extra_head %}
+<style>
+.fp-hero{background:linear-gradient(135deg,var(--navy3),var(--navy) 60%,var(--navy2));color:#fff;padding:44px max(5vw,20px) 56px;text-align:center}
+.fp-hero h1{font-size:clamp(24px,5vw,38px);font-weight:800;margin:10px 0 8px;line-height:1.25}
+.fp-badge{display:inline-block;background:rgba(249,115,22,.22);border:1px solid rgba(249,115,22,.45);color:#f9a361;border-radius:99px;padding:6px 16px;font-size:12px;font-weight:800}
+.fp-wrap{max-width:720px;margin:-30px auto 40px;padding:0 max(4vw,16px)}
+.fp-card{background:var(--paper);border-radius:16px;box-shadow:var(--shadow2);padding:24px;margin-bottom:18px}
+.fp-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:14px}
+.fp-fact{background:var(--sky);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--muted)}.fp-fact b{display:block;font-size:15px;color:var(--navy);margin-top:3px}
+.fp-desc{font-size:14px;line-height:1.8;color:var(--ink);white-space:pre-line}
+.fp-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:560px){.fp-grid{grid-template-columns:1fr}}
+.fp-l{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:5px;display:block}
+.fp-i{width:100%;border:1.5px solid var(--line);border-radius:10px;padding:12px;font-size:15px;font-family:inherit;background:#fff}
+.fp-i:focus{outline:none;border-color:var(--orange)}
+.fp-btn{width:100%;margin-top:18px;border:none;border-radius:12px;padding:15px;font-size:16px;font-weight:800;background:var(--orange);color:#fff;cursor:pointer;min-height:50px}
+.fp-msg{text-align:center;padding:10px 0}.fp-msg i{font-size:46px;color:var(--orange)}.fp-msg h2{font-size:20px;color:var(--navy);margin:10px 0 6px}.fp-msg p{color:var(--muted);font-size:14px;line-height:1.7;margin:0}
+.fp-dates{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}.fp-dates span{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:9px;padding:6px 11px;font-size:12px;font-weight:700}
+</style>{% endblock %}
+{% block content %}
+<div class="fp-hero"><span class="fp-badge">{{ t.sess_free_badge if s.is_free else t.sess_paid_badge }}</span><h1>{{ s.title }}</h1></div>
+<div class="fp-wrap">
+  <div class="fp-card">
+    <div class="fp-facts">
+      {% if s.starts_on %}<div class="fp-fact">{{ t.sess_starts }}<b>{{ s.starts_on.strftime('%d/%m/%Y') }}</b></div>{% endif %}
+      {% if s.location %}<div class="fp-fact">{{ t.sess_location }}<b>{{ s.location }}</b></div>{% endif %}
+      {% if s.hours_total %}<div class="fp-fact">{{ t.sess_hours }}<b>{{ s.hours_total }}</b></div>{% endif %}
+      <div class="fp-fact">{{ t.sess_col_type }}<b>{{ t.sess_free_label if s.is_free else (s.price_total ~ ' DA') }}</b></div>
+      {% if s.seats %}<div class="fp-fact">{{ t.sess_seats }}<b>{{ s.seats_left() }} / {{ s.seats }}</b></div>{% endif %}
+    </div>
+    {% if s.description %}<div class="fp-desc">{{ s.description }}</div>{% endif %}
+    {% if meetings %}<div class="fp-dates">{% for m in meetings %}<span>{{ m.day.strftime('%d/%m') }}{% if m.time_label %} · {{ m.time_label }}{% endif %}</span>{% endfor %}</div>{% endif %}
+    {% if s.gift_pass %}<div style="margin-top:14px;background:#fff7ed;border-radius:12px;padding:12px 14px;font-size:13px;color:#9a3412;line-height:1.7">🎁 {{ t.sess_public_gift }}</div>{% endif %}
+  </div>
+  <div class="fp-card">
+    {% if done %}
+      <div class="fp-msg"><i class="bi bi-{{ 'hourglass-split' if done in ('pending','waitlist') else 'check-circle-fill' }}"></i>
+        <h2>{{ t['enr_done_' ~ done] }}</h2><p>{{ t['enr_done_' ~ done ~ '_p'] }}</p></div>
+    {% elif not is_open %}
+      <div class="fp-msg"><i class="bi bi-lock-fill"></i><h2>{{ t.enr_closed }}</h2><p>{{ t.enr_closed_p }}</p></div>
+    {% else %}
+      {% with messages = get_flashed_messages(with_categories=true) %}{% for cat, msg in messages %}<div style="background:#fee2e2;color:#b91c1c;border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:14px">{{ msg }}</div>{% endfor %}{% endwith %}
+      <h3 style="margin:0 0 4px;font-size:18px;color:var(--navy)">{{ t.enr_form_title }}</h3>
+      {% if s.seats and s.seats_left() == 0 %}<p style="font-size:13px;color:#b45309;margin:0 0 12px">{{ t.enr_full_note }}</p>{% else %}<div style="height:12px"></div>{% endif %}
+      <form method="POST" autocomplete="on"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+        <div class="fp-grid">
+          <div><label class="fp-l">{{ t.cohort_col_last }} *</label><input class="fp-i" name="last_name" required maxlength="80" value="{{ form.get('last_name','') }}" autocomplete="family-name"></div>
+          <div><label class="fp-l">{{ t.cohort_col_first }} *</label><input class="fp-i" name="first_name" required maxlength="80" value="{{ form.get('first_name','') }}" autocomplete="given-name"></div>
+          <div><label class="fp-l">{{ t.cohort_col_email }} *</label><input class="fp-i" type="email" name="email" required maxlength="150" value="{{ form.get('email','') }}" autocomplete="email" style="direction:ltr;text-align:start"></div>
+          <div><label class="fp-l">{{ t.enr_phone }} *</label><input class="fp-i" type="tel" name="phone" required maxlength="30" value="{{ form.get('phone','') }}" autocomplete="tel" placeholder="05 / 06 / 07 …" style="direction:ltr;text-align:start"></div>
+          <div><label class="fp-l">{{ t.enr_wilaya }}</label><input class="fp-i" name="wilaya" maxlength="60" value="{{ form.get('wilaya','') }}"></div>
+          <div><label class="fp-l">{{ t.enr_subject }}</label><input class="fp-i" name="subject" maxlength="100" value="{{ form.get('subject','') }}"></div>
+          <div style="grid-column:1/-1"><label class="fp-l">{{ t.enr_school }}</label><input class="fp-i" name="school" maxlength="150" value="{{ form.get('school','') }}"></div>
+        </div>
+        <button class="fp-btn" type="submit">{{ t.enr_submit }}</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
