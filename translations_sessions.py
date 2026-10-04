@@ -113,5 +113,10 @@ _FR += ['Mode', 'Présentiel', 'En ligne', 'Hybride (présentiel + en ligne)', '
 _EN += ['Mode', 'In person', 'Online', 'Hybrid (in person + online)', 'Start time', 'End time', 'Default time of the meetings (editable per meeting).', 'Connection link (Meet, Zoom, Teams…)', 'Never shown publicly: only sent by email to confirmed registrants (confirmation and day-before reminder).', 'Trainer', 'Target audience', 'E.g. primary and middle school teachers', 'Programme', 'E.g.:\nIntroduction to AI for teachers\nGenerate a lesson plan\nCreate a test with answer key', 'One item per line.', 'Prerequisites / what to bring', 'E.g. a smartphone or a computer, an email address', 'Time', 'Online', 'Link sent after confirmation', 'Meeting calendar']
 _AR += ['نمط التكوين', 'حضوري', 'عن بُعد', 'مختلط (حضوري + عن بُعد)', 'ساعة البداية', 'ساعة النهاية', 'التوقيت الافتراضي للحصص (قابل للتعديل لكل حصة).', 'رابط الحضور (Meet أو Zoom أو Teams…)', 'لا يظهر للعموم أبداً: يُرسل بالبريد فقط للمسجَّلين المؤكَّدين (التأكيد وتذكير اليوم السابق).', 'المكوِّن', 'الفئة المستهدفة', 'مثال: أساتذة الابتدائي والمتوسط', 'البرنامج', 'مثال:\nمدخل إلى الذكاء الاصطناعي للأستاذ\nتوليد مذكرة درس\nإنشاء فرض مع التصحيح', 'نقطة في كل سطر.', 'المتطلبات / ما يجب إحضاره', 'مثال: هاتف ذكي أو حاسوب، وبريد إلكتروني', 'التوقيت', 'عن بُعد', 'الرابط يُرسل بعد التأكيد', 'جدول الحصص']
 
+_K += ["sess_ar_hint"]
+_FR += ["Écrivez le texte en français (version par défaut) et, si vous voulez, sa version arabe dans le champ marqué AR : chaque visiteur verra la langue de son interface. Une version laissée vide est remplacée par l’autre."]
+_EN += ["Write the text in French (default version) and, if you want, its Arabic version in the field marked AR: each visitor sees the language of their interface. An empty version is replaced by the other one."]
+_AR += ["اكتب النص بالفرنسية (النسخة الافتراضية) ويمكنك كتابة النسخة العربية في الحقل المعلَّم AR: يرى كل زائر لغة واجهته. النسخة الفارغة تُستبدل بالأخرى."]
+
 assert len(_K) == len(_FR) == len(_EN) == len(_AR), (len(_K), len(_FR), len(_EN), len(_AR))
 SESSION_TR = {"fr": dict(zip(_K, _FR)), "en": dict(zip(_K, _EN)), "ar": dict(zip(_K, _AR))}

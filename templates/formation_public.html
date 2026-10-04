@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ s.title }}{% endblock %}
+{% block title %}{{ s.loc('title', lang) }}{% endblock %}
 {% block extra_head %}
 <style>
 .fp-hero{background:linear-gradient(135deg,var(--navy3),var(--navy) 60%,var(--navy2));color:#fff;padding:44px max(5vw,20px) 56px;text-align:center}
@@ -19,25 +19,25 @@
 .fp-dates{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}.fp-dates span{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:9px;padding:6px 11px;font-size:12px;font-weight:700}
 </style>{% endblock %}
 {% block content %}
-<div class="fp-hero"><span class="fp-badge">{{ t.sess_free_badge if s.is_free else t.sess_paid_badge }}</span> <span class="fp-badge" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.3);color:#fff">{% if s.mode != 'onsite' %}💻{% else %}📍{% endif %} {{ t['sess_mode_' ~ s.mode] }}</span><h1>{{ s.title }}</h1></div>
+<div class="fp-hero"><span class="fp-badge">{{ t.sess_free_badge if s.is_free else t.sess_paid_badge }}</span> <span class="fp-badge" style="background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.3);color:#fff">{% if s.mode != 'onsite' %}💻{% else %}📍{% endif %} {{ t['sess_mode_' ~ s.mode] }}</span><h1>{{ s.loc('title', lang) }}</h1></div>
 <div class="fp-wrap">
   <div class="fp-card">
     <div class="fp-facts">
       {% if s.starts_on %}<div class="fp-fact">{{ t.sess_starts }}<b>{{ s.starts_on.strftime('%d/%m/%Y') }}</b></div>{% endif %}
       {% if s.default_time_label() %}<div class="fp-fact">{{ t.sess_time }}<b style="direction:ltr;display:inline-block">{{ s.default_time_label() }}</b></div>{% endif %}
-      {% if s.location and s.mode != 'online' %}<div class="fp-fact">{{ t.sess_location }}<b>{{ s.location }}</b></div>{% endif %}
+      {% if s.loc('location', lang) and s.mode != 'online' %}<div class="fp-fact">{{ t.sess_location }}<b>{{ s.loc('location', lang) }}</b></div>{% endif %}
       {% if s.mode != 'onsite' %}<div class="fp-fact">{{ t.sess_online }}<b>{{ t.sess_online_after }}</b></div>{% endif %}
-      {% if s.trainer %}<div class="fp-fact">{{ t.sess_trainer }}<b>{{ s.trainer }}</b></div>{% endif %}
-      {% if s.audience %}<div class="fp-fact" style="grid-column:1/-1">{{ t.sess_audience }}<b>{{ s.audience }}</b></div>{% endif %}
+      {% if s.loc('trainer', lang) %}<div class="fp-fact">{{ t.sess_trainer }}<b>{{ s.loc('trainer', lang) }}</b></div>{% endif %}
+      {% if s.loc('audience', lang) %}<div class="fp-fact" style="grid-column:1/-1">{{ t.sess_audience }}<b>{{ s.loc('audience', lang) }}</b></div>{% endif %}
       {% if s.hours_total %}<div class="fp-fact">{{ t.sess_hours }}<b>{{ s.hours_total }}</b></div>{% endif %}
       <div class="fp-fact">{{ t.sess_col_type }}<b>{{ t.sess_free_label if s.is_free else (s.price_total ~ ' DA') }}</b></div>
       {% if s.seats %}<div class="fp-fact">{{ t.sess_seats }}<b>{{ s.seats_left() }} / {{ s.seats }}</b></div>{% endif %}
     </div>
-    {% if s.description %}<div class="fp-desc">{{ s.description }}</div>{% endif %}
-    {% if s.programme_items() %}<h3 style="font-size:16px;color:var(--navy);margin:18px 0 8px">{{ t.sess_programme }}</h3>
-      <ul style="margin:0;padding-inline-start:20px;font-size:14px;line-height:1.9;color:var(--ink)">{% for it in s.programme_items() %}<li>{{ it }}</li>{% endfor %}</ul>{% endif %}
-    {% if s.prerequisite_items() %}<h3 style="font-size:16px;color:var(--navy);margin:18px 0 8px">{{ t.sess_prereq }}</h3>
-      <ul style="margin:0;padding-inline-start:20px;font-size:14px;line-height:1.9;color:var(--ink)">{% for it in s.prerequisite_items() %}<li>{{ it }}</li>{% endfor %}</ul>{% endif %}
+    {% if s.loc('description', lang) %}<div class="fp-desc">{{ s.loc('description', lang) }}</div>{% endif %}
+    {% if s.programme_items(lang) %}<h3 style="font-size:16px;color:var(--navy);margin:18px 0 8px">{{ t.sess_programme }}</h3>
+      <ul style="margin:0;padding-inline-start:20px;font-size:14px;line-height:1.9;color:var(--ink)">{% for it in s.programme_items(lang) %}<li>{{ it }}</li>{% endfor %}</ul>{% endif %}
+    {% if s.prerequisite_items(lang) %}<h3 style="font-size:16px;color:var(--navy);margin:18px 0 8px">{{ t.sess_prereq }}</h3>
+      <ul style="margin:0;padding-inline-start:20px;font-size:14px;line-height:1.9;color:var(--ink)">{% for it in s.prerequisite_items(lang) %}<li>{{ it }}</li>{% endfor %}</ul>{% endif %}
     {% if meetings %}<h3 style="font-size:16px;color:var(--navy);margin:18px 0 8px">{{ t.sess_calendar }}</h3><div class="fp-dates">{% for m in meetings %}<span>{{ m.day.strftime('%d/%m') }}{% if m.time_label %} · {{ m.time_label }}{% endif %}</span>{% endfor %}</div>{% endif %}
     {% if s.gift_pass %}<div style="margin-top:14px;background:#fff7ed;border-radius:12px;padding:12px 14px;font-size:13px;color:#9a3412;line-height:1.7">🎁 {{ t.sess_public_gift }}</div>{% endif %}
   </div>

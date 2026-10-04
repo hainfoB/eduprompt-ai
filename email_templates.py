@@ -274,22 +274,25 @@ ENR = {
 }
 
 
-def enrollment_email(lang, name, status, title, when, place, link, online_url=""):
+def enrollment_email(lang, name, status, title, when, place, link, online_url="", ar=None):
+    ar = ar or {}
     order = _order(lang)
-    subject = ENR[order[0]][status][0].format(title=title)
+    subject = ENR[order[0]][status][0].format(title=(ar.get("title") or title) if order[0] == "ar" else title)
     blocks, text_parts = "", []
     for i, l in enumerate(order):
         c = ENR[l]
         _, h, p = c[status]
-        rows = [(c["label_session"], title)]
+        ttl = (ar.get("title") or title) if l == "ar" else title
+        plc = (ar.get("place") or place) if l == "ar" else place
+        rows = [(c["label_session"], ttl)]
         if when:
             rows.append((c["label_when"], when))
-        if place:
-            rows.append((c["label_place"], place))
+        if plc:
+            rows.append((c["label_place"], plc))
         if online_url:
             rows.append((c["label_link"], online_url))
-        blocks += _simple_block(l, h.format(name=name), [p.format(title=escape(title))], rows, c["cta"], link, i == 0)
-        text_parts.append(h.format(name=name) + "\n" + p.format(title=title).replace("<b>", "").replace("</b>", "") +
+        blocks += _simple_block(l, h.format(name=name), [p.format(title=escape(ttl))], rows, c["cta"], link, i == 0)
+        text_parts.append(h.format(name=name) + "\n" + p.format(title=ttl).replace("<b>", "").replace("</b>", "") +
                           "".join(f"\n{k}: {v}" for k, v in rows[1:]) + f"\n{link}")
     return subject, _wrap(subject, blocks), "\n\n".join(text_parts)
 
@@ -314,19 +317,22 @@ SRM = {
 _AT = {"fr": " à ", "ar": " · ", "en": " at "}
 
 
-def session_reminder_email(lang, name, title, when, place, yes_link, no_link, online_url=""):
+def session_reminder_email(lang, name, title, when, place, yes_link, no_link, online_url="", ar=None):
+    ar = ar or {}
     order = _order(lang)
-    subject = SRM[order[0]]["subject"].format(title=title)
+    subject = SRM[order[0]]["subject"].format(title=(ar.get("title") or title) if order[0] == "ar" else title)
     blocks, text_parts = "", []
     for i, l in enumerate(order):
         c = SRM[l]
-        pl = f" ({escape(place)})" if place else ""
+        ttl = (ar.get("title") or title) if l == "ar" else title
+        plc = (ar.get("place") or place) if l == "ar" else place
+        pl = f" ({escape(plc)})" if plc else ""
         blocks += _simple_block(l, c["title"].format(name=name),
-                                [c["p1"].format(title=escape(title), when=escape(when), place=pl),
+                                [c["p1"].format(title=escape(ttl), when=escape(when), place=pl),
                                  c["p2"].format(no=escape(no_link))],
                                 [(ENR[l]["label_link"], online_url)] if online_url else [], c["cta"], yes_link, i == 0)
         text_parts.append(c["title"].format(name=name) + "\n" +
-                          c["p1"].format(title=title, when=when, place=f" ({place})" if place else "").replace("<b>", "").replace("</b>", "") +
+                          c["p1"].format(title=ttl, when=when, place=f" ({plc})" if plc else "").replace("<b>", "").replace("</b>", "") +
                           (f"\n{ENR[l]['label_link']}: {online_url}" if online_url else "") +
                           f"\n{c['cta']}: {yes_link}\n→ {no_link}")
     return subject, _wrap(subject, blocks), "\n\n".join(text_parts)

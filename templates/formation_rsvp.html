@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}{{ s.title }}{% endblock %}
+{% block title %}{{ s.loc('title', lang) }}{% endblock %}
 {% block content %}
 <div style="max-width:520px;margin:60px auto;padding:0 max(4vw,16px)"><div style="background:var(--paper);border-radius:16px;box-shadow:var(--shadow2);padding:30px;text-align:center">
-  <div style="font-size:13px;color:var(--muted)">{{ s.title }} · {{ m.day.strftime('%d/%m/%Y') }}{% if m.time_label %} · {{ m.time_label }}{% endif %}</div>
+  <div style="font-size:13px;color:var(--muted)">{{ s.loc('title', lang) }} · {{ m.day.strftime('%d/%m/%Y') }}{% if m.time_label %} · {{ m.time_label }}{% endif %}</div>
   {% if result %}
     <i class="bi bi-{{ 'check-circle-fill' if result == 'yes' else 'info-circle-fill' }}" style="font-size:48px;color:var(--orange);display:block;margin:14px 0 6px"></i>
     <h2 style="font-size:20px;color:var(--navy);margin:0 0 8px">{{ t['rsvp_done_' ~ result] }}</h2>

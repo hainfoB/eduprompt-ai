@@ -258,6 +258,13 @@ def _migrate_sqlite_schema():
                 "audience": "VARCHAR(200)",
                 "programme": "TEXT",
                 "prerequisites": "TEXT",
+                "title_ar": "VARCHAR(160)",
+                "description_ar": "TEXT",
+                "location_ar": "VARCHAR(200)",
+                "trainer_ar": "VARCHAR(120)",
+                "audience_ar": "VARCHAR(200)",
+                "programme_ar": "TEXT",
+                "prerequisites_ar": "TEXT",
             },
             "payment_request": {
                 "method": "VARCHAR(10)",
@@ -3218,7 +3225,8 @@ def _send_enrollment_email(enr, kind):
         s = enr.session
         link = s.online_url if (kind in ("confirmed", "promoted") and s.mode != "onsite") else ""
         subject, html, text = enrollment_email(enr.lang or "fr", enr.first_name, kind, s.title,
-                                               _session_when(s), s.location or "", _session_public_url(s), link)
+                                               _session_when(s), s.location or "", _session_public_url(s), link,
+                                               ar={"title": s.loc("title", "ar"), "place": s.loc("location", "ar")})
         send_email(enr.email, subject, text, html)
     except Exception as e:
         print(f"⚠️  Enrollment email failed: {e}")
@@ -3297,7 +3305,8 @@ def send_session_reminders():
                 base = f"{APP_URL}/formation/rsvp/{enr.token}/{m.id}"
                 subject, html, text = session_reminder_email(enr.lang or "fr", enr.first_name, s.title, when,
                                                              s.location or "", base + "?a=yes", base + "?a=no",
-                                                             s.online_url if s.mode != "onsite" else "")
+                                                             s.online_url if s.mode != "onsite" else "",
+                                                             ar={"title": s.loc("title", "ar"), "place": s.loc("location", "ar")})
                 if send_email(enr.email, subject, text, html):
                     sent += 1
             m.reminder_sent = True
@@ -3340,6 +3349,9 @@ def _apply_session_form(s, form):
     s.audience = form.get("audience", "").strip()[:200] or None
     s.programme = form.get("programme", "").strip()[:6000] or None
     s.prerequisites = form.get("prerequisites", "").strip()[:2000] or None
+    for field, limit in (("title", 160), ("description", 4000), ("location", 200), ("trainer", 120),
+                         ("audience", 200), ("programme", 6000), ("prerequisites", 2000)):
+        setattr(s, field + "_ar", form.get(field + "_ar", "").strip()[:limit] or None)
 
 
 @app.route("/admin/sessions", methods=["GET", "POST"])

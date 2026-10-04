@@ -470,6 +470,14 @@ class TrainingSession(db.Model):
     audience      = db.Column(db.String(200), nullable=True)
     programme     = db.Column(db.Text, nullable=True)            # one line per point
     prerequisites = db.Column(db.Text, nullable=True)
+    # Arabic version of the texts (shown to Arabic visitors; the French ones are the default)
+    title_ar        = db.Column(db.String(160), nullable=True)
+    description_ar  = db.Column(db.Text, nullable=True)
+    location_ar     = db.Column(db.String(200), nullable=True)
+    trainer_ar      = db.Column(db.String(120), nullable=True)
+    audience_ar     = db.Column(db.String(200), nullable=True)
+    programme_ar    = db.Column(db.Text, nullable=True)
+    prerequisites_ar= db.Column(db.Text, nullable=True)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow)
     meetings      = db.relationship("SessionMeeting", backref="session", lazy="dynamic",
                                     order_by="SessionMeeting.day", cascade="all, delete-orphan")
@@ -488,11 +496,20 @@ class TrainingSession(db.Model):
             return f"{self.start_time} - {self.end_time}"
         return self.start_time or ""
 
-    def programme_items(self):
-        return [l.strip(" -•\t") for l in (self.programme or "").splitlines() if l.strip(" -•\t")]
+    def loc(self, field, lang):
+        """Text of `field` in `lang` (Arabic if provided, else French), falling back to the other one."""
+        base, ar = getattr(self, field) or "", getattr(self, field + "_ar") or ""
+        return (ar or base) if lang == "ar" else (base or ar)
 
-    def prerequisite_items(self):
-        return [l.strip(" -•\t") for l in (self.prerequisites or "").splitlines() if l.strip(" -•\t")]
+    @staticmethod
+    def _items(text):
+        return [l.strip(" -•\t") for l in (text or "").splitlines() if l.strip(" -•\t")]
+
+    def programme_items(self, lang="fr"):
+        return self._items(self.loc("programme", lang))
+
+    def prerequisite_items(self, lang="fr"):
+        return self._items(self.loc("prerequisites", lang))
 
 
 class SessionMeeting(db.Model):
