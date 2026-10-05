@@ -4,6 +4,8 @@ import re
 import io
 import base64
 import secrets
+import hmac
+import hashlib
 import unicodedata
 import string
 from datetime import datetime, timedelta, date
@@ -35,7 +37,7 @@ from flask_limiter.util import get_remote_address
 from models import (db, User, Subscription, Document, LicenseCode, Payment, Message,
                      PaymentRequest, AdminLog, PlanChangeHistory, FunnelEvent, GenerationError,
                      PLAN_PRICES, PAYMENT_METHODS, PASS_TYPES, Cohort,
-                     TrainingSession, SessionMeeting, Enrollment, Attendance, SessionVisit, SESSION_STATUSES,
+                     TrainingSession, SessionMeeting, Enrollment, Attendance, SessionVisit, SessionSlot, SESSION_STATUSES,
                      create_trial_subscription, next_receipt_number)
 from werkzeug.utils import secure_filename
 from utils import build_sources_context
@@ -268,7 +270,19 @@ def _migrate_sqlite_schema():
             "enrollment": {
                 "source": "VARCHAR(40)",
             },
+            "session_meeting": {
+                "scan_token": "VARCHAR(40)",
+                "room_token": "VARCHAR(40)",
+                "code_in": "VARCHAR(4)",
+                "code_out": "VARCHAR(4)",
+            },
+            "attendance": {
+                "checkin_at": "DATETIME",
+                "checkout_at": "DATETIME",
+                "method": "VARCHAR(12)",
+            },
             "training_session": {
+                "check_mode": "VARCHAR(5) DEFAULT 'in'",
                 "group_url": "VARCHAR(300)",
                 "min_attendance": "INTEGER DEFAULT 80",
                 "mode": "VARCHAR(10) DEFAULT 'onsite'",
@@ -3343,7 +3357,8 @@ def _send_enrollment_email(enr, kind):
         confirmed = kind in ("confirmed", "promoted")
         link = s.online_url if (confirmed and s.mode != "onsite") else ""
         cal = _calendar_links(enr) if confirmed else ("", "")
-        extra = {"group": s.group_url if confirmed else "", "gcal": cal[0], "ics": cal[1]}
+        extra = {"group": s.group_url if confirmed else "", "gcal": cal[0], "ics": cal[1],
+                 "ticket": f"{APP_URL}/formation/ticket/{enr.token}" if confirmed else ""}
         subject, html, text = enrollment_email(enr.lang or "fr", enr.first_name, kind, s.title,
                                                _session_when(s), s.location or "", _session_public_url(s), link,
                                                ar={"title": s.loc("title", "ar"), "place": s.loc("location", "ar")},
@@ -3408,6 +3423,159 @@ def set_attendance(meeting, enr, status):
     return att
 
 
+# ── Presence by scan (QR ticket, rotating room QR, online code) and slots ─────────────────────────
+LATE_TOLERANCE_MIN = 15
+_HM_RE = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
+
+
+def _local_now():
+    return datetime.utcnow() + timedelta(hours=1)
+
+
+@app.template_global()
+def local_hm(dt):
+    return (dt + timedelta(hours=1)).strftime("%H:%M") if dt else ""
+
+
+@app.template_global()
+def min_hm(v):
+    return f"{v // 60:02d}:{v % 60:02d}"
+
+
+def _hm_to_min(v):
+    mm = _HM_RE.match((v or "").strip())
+    return int(mm[1]) * 60 + int(mm[2]) if mm else None
+
+
+def _min_to_hm(v):
+    return f"{v // 60:02d}:{v % 60:02d}"
+
+
+def meeting_slots(m, s=None):
+    """Slots of a meeting as dicts (start/end in minutes). With none defined, the meeting's own time range is one slot."""
+    s = s or m.session
+    out = []
+    for sl in m.slots.all():
+        a, b = _hm_to_min(sl.start_time), _hm_to_min(sl.end_time)
+        if a is not None and b is not None and b > a:
+            out.append({"id": sl.id, "start": a, "end": b, "topic": sl.topic or "", "trainer": sl.trainer or "", "real": True})
+    if out:
+        return sorted(out, key=lambda x: x["start"])
+    mm = re.match(r"^\s*(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})\s*$", m.time_label or s.default_time_label() or "")
+    if mm:
+        a, b = int(mm[1]) * 60 + int(mm[2]), int(mm[3]) * 60 + int(mm[4])
+        if b > a:
+            return [{"id": None, "start": a, "end": b, "topic": m.topic or "", "trainer": s.trainer or "", "real": False}]
+    return []
+
+
+def slot_presence(m, a, s=None, slots=None):
+    """Per slot: minutes attended and state (present | partial | absent | excused) for one attendance record."""
+    s = s or m.session
+    slots = meeting_slots(m, s) if slots is None else slots
+    res = []
+    status = a.status if a else None
+    for sl in slots:
+        dur = sl["end"] - sl["start"]
+        if not status or status == "absent":
+            res.append((sl, 0, "absent"))
+        elif status == "excused":
+            res.append((sl, 0, "excused"))
+        elif a.checkin_at:
+            tin = a.checkin_at + timedelta(hours=1)
+            t_in = tin.hour * 60 + tin.minute
+            if a.checkout_at:
+                tout = a.checkout_at + timedelta(hours=1)
+                t_out = tout.hour * 60 + tout.minute
+            else:
+                t_out = 24 * 60          # no exit scanned: benefit of the doubt, flagged in the admin
+            eff_in = sl["start"] if t_in <= sl["start"] + LATE_TOLERANCE_MIN else t_in
+            eff_out = sl["end"] if t_out >= sl["end"] - LATE_TOLERANCE_MIN else t_out
+            minutes = max(0, min(eff_out, sl["end"]) - max(eff_in, sl["start"]))
+            res.append((sl, minutes, "present" if minutes > 0 and minutes >= dur - LATE_TOLERANCE_MIN else ("partial" if minutes > 0 else "absent")))
+        else:
+            res.append((sl, dur, "present"))   # marked by hand: the whole slot
+    return res
+
+
+def att_minutes(m, a, s=None):
+    return sum(x[1] for x in slot_presence(m, a, s))
+
+
+def ensure_meeting_tokens(m):
+    changed = False
+    for field in ("scan_token", "room_token"):
+        if not getattr(m, field):
+            setattr(m, field, secrets.token_urlsafe(12))
+            changed = True
+    if changed:
+        db.session.commit()
+
+
+def gen_meeting_codes(m):
+    a = f"{secrets.randbelow(10000):04d}"
+    b = a
+    while b == a:
+        b = f"{secrets.randbelow(10000):04d}"
+    m.code_in, m.code_out = a, b
+
+
+def do_checkin(m, enr, direction, method):
+    """Record an entry or exit scan. Returns (ok, key, info): key is a translation key suffix, info the time/name."""
+    s = m.session
+    if enr.session_id != s.id or enr.status != "confirmed":
+        return False, "not_enrolled", ""
+    if m.day != _local_now().date():
+        return False, "wrong_day", ""
+    att = Attendance.query.filter_by(meeting_id=m.id, enrollment_id=enr.id).first()
+    now = datetime.utcnow()
+    hm = (now + timedelta(hours=1)).strftime("%H:%M")
+    if direction == "out":
+        if s.check_mode != "inout":
+            return False, "no_exit", ""
+        if not att or not att.checkin_at:
+            return False, "no_entry", ""
+        if att.checkout_at:
+            return True, "out_dup", (att.checkout_at + timedelta(hours=1)).strftime("%H:%M")
+        att.checkout_at = now
+        db.session.commit()
+        return True, "out_ok", hm
+    if att and att.checkin_at:
+        return True, "in_dup", (att.checkin_at + timedelta(hours=1)).strftime("%H:%M")
+    slots = meeting_slots(m, s)
+    start = slots[0]["start"] if slots else None
+    t_now = (now + timedelta(hours=1)).hour * 60 + (now + timedelta(hours=1)).minute
+    late = start is not None and t_now > start + LATE_TOLERANCE_MIN
+    att = set_attendance(m, enr, "late" if late else "present")
+    att.checkin_at, att.method = now, method
+    db.session.commit()
+    return True, ("in_late" if late else "in_ok"), hm
+
+
+def _find_enrollment_by_ticket(session_obj, raw):
+    raw = (raw or "").strip()
+    if raw.upper().startswith("EP1:"):
+        raw = raw[4:]
+    return Enrollment.query.filter_by(session_id=session_obj.id, token=raw).first() if raw else None
+
+
+def _room_sig(mid, direction, window):
+    msg = f"{mid}|{direction}|{window}".encode()
+    return hmac.new(app.config["SECRET_KEY"].encode(), msg, hashlib.sha256).hexdigest()[:16]
+
+
+ROOM_WINDOW = 45  # seconds a room QR stays valid
+
+
+def _room_window_now():
+    return int(datetime.utcnow().timestamp() // ROOM_WINDOW)
+
+
+def _qr_svg(text, scale=6):
+    import segno
+    return segno.make(text, error="m").svg_inline(scale=scale, dark="#0b2545", light="#ffffff", border=2)
+
+
 def send_session_reminders():
     """J-1: ask each confirmed participant to confirm (or release the seat)."""
     from notifications import send_email
@@ -3428,7 +3596,8 @@ def send_session_reminders():
                                                              s.location or "", base + "?a=yes", base + "?a=no",
                                                              s.online_url if s.mode != "onsite" else "",
                                                              ar={"title": s.loc("title", "ar"), "place": s.loc("location", "ar")},
-                                                             group_url=s.group_url or "")
+                                                             group_url=s.group_url or "",
+                                                             ticket_url=f"{APP_URL}/formation/ticket/{enr.token}")
                 if send_email(enr.email, subject, text, html):
                     sent += 1
             m.reminder_sent = True
@@ -3472,6 +3641,7 @@ def _apply_session_form(s, form):
     for field in ("start_time", "end_time"):
         v = form.get(field, "").strip()
         setattr(s, field, v if re.match(r"^([01]\d|2[0-3]):[0-5]\d$", v) else None)
+    s.check_mode = "inout" if form.get("check_mode") == "inout" else "in"
     s.trainer = form.get("trainer", "").strip()[:120] or None
     s.audience = form.get("audience", "").strip()[:200] or None
     s.programme = form.get("programme", "").strip()[:6000] or None
@@ -3501,7 +3671,7 @@ def attendance_stats(s):
         excused = sum(1 for a in marks.values() if a.status == "excused")
         denom = len(held) - excused
         rate = round(attended * 100 / denom) if denom > 0 else 0
-        minutes = sum(m.duration_minutes(s) for m in held if m.id in marks and marks[m.id].status in ("present", "late"))
+        minutes = sum(att_minutes(m, marks[m.id], s) for m in held if m.id in marks and marks[m.id].status in ("present", "late"))
         rows.append({"enr": e, "attended": attended, "excused": excused, "absent": max(0, len(held) - attended - excused),
                      "rate": rate, "eligible": bool(held) and rate >= threshold, "marks": marks,
                      "hours": round(minutes / 60, 1)})
@@ -3652,20 +3822,64 @@ def admin_session_attendance(session_id, meeting_id):
     s = TrainingSession.query.get_or_404(session_id)
     m = SessionMeeting.query.filter_by(id=meeting_id, session_id=s.id).first_or_404()
     enrollments = s.enrollments.filter_by(status="confirmed").order_by(Enrollment.last_name, Enrollment.first_name).all()
+    back = redirect(url_for("admin_session_attendance", session_id=s.id, meeting_id=m.id))
     if request.method == "POST":
+        action = request.form.get("form_action", "save")
+        if action == "slot_add":
+            a, b = _hm_to_min(request.form.get("start_time")), _hm_to_min(request.form.get("end_time"))
+            if a is None or b is None or b <= a:
+                flash(tr("flash_slot_invalid"), "error")
+            else:
+                db.session.add(SessionSlot(meeting_id=m.id, start_time=_min_to_hm(a), end_time=_min_to_hm(b),
+                                           topic=request.form.get("topic", "").strip()[:200] or None,
+                                           trainer=request.form.get("trainer", "").strip()[:120] or s.trainer))
+                db.session.commit()
+            return back
+        if action == "slot_del":
+            sl = SessionSlot.query.filter_by(id=request.form.get("slot_id", type=int), meeting_id=m.id).first()
+            if sl:
+                db.session.delete(sl)
+                db.session.commit()
+            return back
+        if action == "gen_codes":
+            gen_meeting_codes(m)
+            db.session.commit()
+            flash(tr("flash_codes_ok"), "success")
+            return back
         gifts = 0
         for enr in enrollments:
             st = request.form.get(f"st_{enr.id}", "")
             if st in ("present", "absent", "late", "excused", ""):
                 had_gift = enr.gift_granted
-                set_attendance(m, enr, st)
+                att = set_attendance(m, enr, st)
                 gifts += 1 if (enr.gift_granted and not had_gift) else 0
+                # hand-corrected entry / exit times (HH:MM, Algeria time)
+                for field, key in (("checkin_at", f"in_{enr.id}"), ("checkout_at", f"out_{enr.id}")):
+                    raw = request.form.get(key)
+                    if raw is None:
+                        continue
+                    mins = _hm_to_min(raw)
+                    if raw.strip() == "":
+                        setattr(att, field, None)
+                    elif mins is not None:
+                        setattr(att, field, datetime(m.day.year, m.day.month, m.day.day) + timedelta(minutes=mins - 60))
+                        if field == "checkin_at" and not att.method:
+                            att.method = "manual"
         log_admin_action("attendance_saved", target=s.title, details=f"{m.day} gifts={gifts}")
         db.session.commit()
         flash(tr("flash_attendance_saved", n=gifts), "success")
-        return redirect(url_for("admin_session_attendance", session_id=s.id, meeting_id=m.id))
+        return back
+    ensure_meeting_tokens(m)
+    slots = meeting_slots(m, s)
     att = {a.enrollment_id: a for a in m.attendances}
-    return render_template("admin_attendance.html", s=s, m=m, enrollments=enrollments, att=att)
+    summary = []
+    for sl in slots:
+        present = sum(1 for e in enrollments
+                      if any(x[0]["start"] == sl["start"] and x[2] in ("present", "partial")
+                             for x in slot_presence(m, att.get(e.id), s, slots)))
+        summary.append({**sl, "present": present})
+    return render_template("admin_attendance.html", s=s, m=m, enrollments=enrollments, att=att, slots=slots,
+                           summary=summary, scan_url=f"{APP_URL}/scan/{m.scan_token}", room_url=f"{APP_URL}/room/{m.room_token}")
 
 
 @app.route("/admin/sessions/<int:session_id>/enrollments.xlsx")
@@ -3703,6 +3917,36 @@ def admin_session_attendance_export(session_id):
         rows.append([e.last_name, e.first_name, e.email] + cells + [r["rate"], r["hours"], tr("sess_yes") if r["eligible"] else tr("sess_no")])
     safe = re.sub(r"[^A-Za-z0-9_-]+", "_", s.slug)[:40] or "formation"
     return _xlsx_response(rows, f"presences_{safe}.xlsx", [18, 18, 30] + [11] * len(st["held"]) + [10, 14, 12])
+
+
+@app.route("/admin/sessions/<int:session_id>/attendance_slots.xlsx")
+@login_required
+def admin_session_slots_export(session_id):
+    denied = _admin_only()
+    if denied:
+        return denied
+    s = TrainingSession.query.get_or_404(session_id)
+    st = attendance_stats(s)
+    cols = []
+    for m in st["held"]:
+        for sl in meeting_slots(m, s):
+            label = f"{m.day.strftime('%d/%m')} {min_hm(sl['start'])}-{min_hm(sl['end'])}"
+            if sl["topic"]:
+                label += f" {sl['topic']}"
+            if sl["trainer"]:
+                label += f" ({sl['trainer']})"
+            cols.append((m, sl, label))
+    rows = [[tr("cohort_col_last"), tr("cohort_col_first"), tr("cohort_col_email")] + [c[2] for c in cols] + [tr("sess_hours_attended")]]
+    for r in st["rows"]:
+        cells, total = [], 0
+        for m, sl, _ in cols:
+            a = r["marks"].get(m.id)
+            minutes = next((x[1] for x in slot_presence(m, a, s) if x[0]["start"] == sl["start"]), 0) if a else 0
+            total += minutes
+            cells.append(minutes)
+        rows.append([r["enr"].last_name, r["enr"].first_name, r["enr"].email] + cells + [round(total / 60, 1)])
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", s.slug)[:40] or "formation"
+    return _xlsx_response(rows, f"creneaux_{safe}.xlsx", [18, 18, 30] + [22] * len(cols) + [14])
 
 
 @app.template_global()
@@ -3802,6 +4046,113 @@ def formation_rsvp(token, meeting_id):
             promote_waitlist(s)
         result = "released" if released else answer
     return render_template("formation_rsvp.html", s=s, m=m, enr=enr, answer=answer, result=result)
+
+
+# ── Presence scan routes ─────────────────────────────────────────────────────────────────────────
+def _scan_msg(key, info=""):
+    return tr("scan_" + key, t=info)
+
+
+def _ticket_lang(enr):
+    if "lang" not in session and enr.lang in ("fr", "en", "ar"):
+        session["lang"] = enr.lang
+
+
+@app.route("/formation/ticket/<token>")
+def formation_ticket(token):
+    enr = Enrollment.query.filter_by(token=token).first_or_404()
+    _ticket_lang(enr)
+    s = enr.session
+    today = _local_now().date()
+    meetings = s.meetings.all()
+    today_meeting = next((m for m in meetings if m.day == today), None)
+    atts = {a.meeting_id: a for a in Attendance.query.filter_by(enrollment_id=enr.id)}
+    qr = _qr_svg("EP1:" + enr.token, scale=7) if enr.status == "confirmed" else ""
+    return render_template("formation_ticket.html", enr=enr, s=s, meetings=meetings, today_meeting=today_meeting,
+                           atts=atts, qr=qr)
+
+
+@app.route("/formation/ticket/<token>/code", methods=["POST"])
+@limiter.limit("30/hour")
+def formation_ticket_code(token):
+    enr = Enrollment.query.filter_by(token=token).first_or_404()
+    _ticket_lang(enr)
+    code = re.sub(r"\D", "", request.form.get("code", ""))[:4]
+    today = _local_now().date()
+    m = None
+    direction = None
+    if len(code) == 4:
+        for cand in enr.session.meetings.filter_by(day=today):
+            if cand.code_in == code:
+                m, direction = cand, "in"
+            elif cand.code_out == code:
+                m, direction = cand, "out"
+    if not m:
+        flash(tr("scan_bad_code"), "error")
+    else:
+        ok, key, info = do_checkin(m, enr, direction, "code")
+        flash(_scan_msg(key, info), "success" if ok else "error")
+    return redirect(url_for("formation_ticket", token=token))
+
+
+@app.route("/scan/<scan_token>")
+def scan_page(scan_token):
+    m = SessionMeeting.query.filter_by(scan_token=scan_token).first_or_404()
+    return render_template("scan_page.html", m=m, s=m.session, slots=meeting_slots(m), token=scan_token)
+
+
+@app.route("/scan/<scan_token>/check", methods=["POST"])
+@limiter.limit("1200/hour")
+def scan_check(scan_token):
+    m = SessionMeeting.query.filter_by(scan_token=scan_token).first_or_404()
+    data = request.get_json(silent=True) or {}
+    direction = "out" if data.get("dir") == "out" else "in"
+    enr = _find_enrollment_by_ticket(m.session, data.get("code"))
+    if not enr:
+        return jsonify(ok=False, name="", message=_scan_msg("unknown"))
+    ok, key, info = do_checkin(m, enr, direction, "ticket")
+    return jsonify(ok=ok, name=enr.full_name, kind=key, message=_scan_msg(key, info))
+
+
+@app.route("/room/<room_token>")
+def room_display(room_token):
+    m = SessionMeeting.query.filter_by(room_token=room_token).first_or_404()
+    return render_template("room_display.html", m=m, s=m.session, token=room_token, window=ROOM_WINDOW)
+
+
+@app.route("/room/<room_token>/qr.json")
+def room_qr(room_token):
+    m = SessionMeeting.query.filter_by(room_token=room_token).first_or_404()
+    direction = "out" if (request.args.get("dir") == "out" and m.session.check_mode == "inout") else "in"
+    w = _room_window_now()
+    url = f"{APP_URL}/formation/checkin/{m.id}/{direction}/{w}/{_room_sig(m.id, direction, w)}"
+    resp = jsonify(svg=_qr_svg(url, scale=10), dir=direction)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/formation/checkin/<int:meeting_id>/<direction>/<int:window>/<sig>", methods=["GET", "POST"])
+@limiter.limit("240/hour", methods=["POST"])
+def formation_checkin(meeting_id, direction, window, sig):
+    m = SessionMeeting.query.get_or_404(meeting_id)
+    if direction not in ("in", "out") or not hmac.compare_digest(sig, _room_sig(m.id, direction, window)):
+        abort(404)
+    age = _room_window_now() - window
+    s = m.session
+    expired = age > (2 if request.method == "GET" else 8) or age < 0
+    result = None
+    if request.method == "POST" and not expired:
+        email = request.form.get("email", "").strip().lower()
+        enr = Enrollment.query.filter_by(session_id=s.id, email=email).first() if _EMAIL_RE.match(email) else None
+        if not enr:
+            result = ("error", _scan_msg("unknown_email"))
+        else:
+            ok, key, info = do_checkin(m, enr, direction, "room")
+            result = ("success" if ok else "error", _scan_msg(key, info))
+            if ok:
+                session["ck_email"] = email
+    return render_template("formation_checkin.html", m=m, s=s, direction=direction, expired=expired, result=result,
+                           email=session.get("ck_email", ""))
 
 
 if __name__ == "__main__":

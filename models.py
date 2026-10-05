@@ -458,6 +458,7 @@ class TrainingSession(db.Model):
     location      = db.Column(db.String(200), nullable=True)
     hours_total   = db.Column(db.Integer, default=0)
     seats         = db.Column(db.Integer, default=0)      # 0 = unlimited
+    check_mode = db.Column(db.String(5), default="in")    # in = entry scan only | inout = entry and exit
     min_attendance = db.Column(db.Integer, default=80)    # % of held meetings needed for the certificate
     auto_confirm  = db.Column(db.Boolean, default=True)
     gift_pass     = db.Column(db.String(20), nullable=True)   # PASS_TYPES key, given after 1st attended meeting
@@ -526,6 +527,10 @@ class SessionMeeting(db.Model):
     time_label = db.Column(db.String(30), nullable=True)   # e.g. "14:00 - 16:00"
     topic      = db.Column(db.String(200), nullable=True)
     reminder_sent = db.Column(db.Boolean, default=False)
+    scan_token = db.Column(db.String(40), nullable=True, unique=True)   # secret link of the person scanning tickets
+    room_token = db.Column(db.String(40), nullable=True, unique=True)   # secret link of the projected rotating QR
+    code_in    = db.Column(db.String(4), nullable=True)                 # online: code announced at the start
+    code_out   = db.Column(db.String(4), nullable=True)                 # online: code announced at the end
 
     def duration_minutes(self, session=None):
         """Minutes between the two times of "HH:MM - HH:MM" (0 if unreadable)."""
@@ -540,6 +545,18 @@ class SessionMeeting(db.Model):
 
     attendances = db.relationship("Attendance", backref="meeting", lazy="dynamic",
                                   cascade="all, delete-orphan")
+    slots = db.relationship("SessionSlot", backref="meeting", lazy="dynamic",
+                            cascade="all, delete-orphan", order_by="SessionSlot.start_time")
+
+
+class SessionSlot(db.Model):
+    """One time slot of a meeting: a part of the programme taught by one trainer."""
+    id         = db.Column(db.Integer, primary_key=True)
+    meeting_id = db.Column(db.Integer, db.ForeignKey("session_meeting.id"), nullable=False, index=True)
+    start_time = db.Column(db.String(5), nullable=False)   # "HH:MM"
+    end_time   = db.Column(db.String(5), nullable=False)
+    topic      = db.Column(db.String(200), nullable=True)
+    trainer    = db.Column(db.String(120), nullable=True)
 
 
 class Enrollment(db.Model):
@@ -576,6 +593,9 @@ class Attendance(db.Model):
     enrollment_id = db.Column(db.Integer, db.ForeignKey("enrollment.id"), nullable=False, index=True)
     status        = db.Column(db.String(10), nullable=True)
     rsvp          = db.Column(db.String(3), nullable=True)
+    checkin_at    = db.Column(db.DateTime, nullable=True)    # UTC
+    checkout_at   = db.Column(db.DateTime, nullable=True)    # UTC
+    method        = db.Column(db.String(12), nullable=True)  # ticket | room | code | manual
     __table_args__ = (db.UniqueConstraint("meeting_id", "enrollment_id", name="uq_attendance"),)
 
 

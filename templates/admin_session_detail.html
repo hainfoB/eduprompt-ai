@@ -71,7 +71,8 @@
 
   <div class="co-card">
     <h3><i class="bi bi-bar-chart-fill" style="color:var(--orange)"></i> {{ t.sess_stats_title }}
-      <a class="co-pill" style="margin-inline-start:auto" href="{{ url_for('admin_session_attendance_export', session_id=s.id) }}"><i class="bi bi-file-earmark-excel"></i> {{ t.sess_export_att }}</a></h3>
+      <a class="co-pill" style="margin-inline-start:auto" href="{{ url_for('admin_session_attendance_export', session_id=s.id) }}"><i class="bi bi-file-earmark-excel"></i> {{ t.sess_export_att }}</a>
+      <a class="co-pill" href="{{ url_for('admin_session_slots_export', session_id=s.id) }}"><i class="bi bi-file-earmark-excel"></i> {{ t.sess_export_slots }}</a></h3>
     <div class="co-grid">
       <div class="fp-fact" style="background:var(--sky);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--muted)">{{ t.sess_stat_held }}<b style="display:block;font-size:20px;color:var(--navy)">{{ stats.held|length }} / {{ stats.all_meetings|length }}</b></div>
       <div style="background:var(--sky);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--muted)">{{ t.sess_stat_avg }}<b style="display:block;font-size:20px;color:var(--navy)">{{ stats.avg }} %</b></div>

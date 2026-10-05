@@ -15,7 +15,37 @@
   {% set counts = {'present':0,'late':0,'excused':0,'absent':0} %}{% for e in enrollments %}{% set a = att.get(e.id) %}{% if a and a.status %}{% if counts.update({a.status: counts[a.status] + 1}) %}{% endif %}{% endif %}{% endfor %}
   <div class="co-row" style="margin-bottom:14px"><span class="st st-present">{{ t.att_present }} {{ counts.present }}</span><span class="st st-late">{{ t.att_late }} {{ counts.late }}</span><span class="st st-excused">{{ t.att_excused }} {{ counts.excused }}</span><span class="st st-absent">{{ t.att_absent }} {{ counts.absent }}</span>
     <button type="button" class="co-btn sm ghost" onclick="document.querySelectorAll('input[value=present]').forEach(i=>i.checked=true)">{{ t.sess_all_present }}</button></div>
-  <form method="POST" class="co-card"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="co-card" style="margin-bottom:14px">
+    <h3><i class="bi bi-qr-code-scan" style="color:var(--orange)"></i> {{ t.ctl_title }}</h3>
+    <div class="co-note">{{ t.sess_check_mode }} : <b>{{ t.sess_check_inout if s.check_mode == 'inout' else t.sess_check_in }}</b></div>
+    <div style="margin-top:10px"><label class="co-label">{{ t.ctl_scan }}</label>
+      <div class="co-row"><input class="co-input" readonly value="{{ scan_url }}" style="direction:ltr;text-align:start;flex:1;min-width:200px" onclick="this.select()">
+      <a class="co-btn sm" target="_blank" href="{{ scan_url }}">{{ t.ctl_open }}</a></div><div class="co-note">{{ t.ctl_scan_hint }}</div></div>
+    <div style="margin-top:10px"><label class="co-label">{{ t.ctl_room }}</label>
+      <div class="co-row"><input class="co-input" readonly value="{{ room_url }}" style="direction:ltr;text-align:start;flex:1;min-width:200px" onclick="this.select()">
+      <a class="co-btn sm" target="_blank" href="{{ room_url }}">{{ t.ctl_open }}</a></div><div class="co-note">{{ t.ctl_room_hint }}</div></div>
+    <div style="margin-top:10px"><label class="co-label">{{ t.ctl_codes }}</label>
+      <form method="POST" class="co-row"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="form_action" value="gen_codes">
+        {% if m.code_in %}<span class="st st-present">{{ t.ctl_code_in }} <b style="font-size:16px;letter-spacing:3px">{{ m.code_in }}</b></span>
+        {% if s.check_mode == 'inout' %}<span class="st st-late">{{ t.ctl_code_out }} <b style="font-size:16px;letter-spacing:3px">{{ m.code_out }}</b></span>{% endif %}{% endif %}
+        <button class="co-btn sm ghost" type="submit">{{ t.ctl_gen }}</button></form>
+      <div class="co-note">{{ t.ctl_codes_hint }}</div></div>
+  </div>
+  <div class="co-card" style="margin-bottom:14px">
+    <h3><i class="bi bi-list-check" style="color:var(--orange)"></i> {{ t.sess_slots_title }}</h3>
+    <div class="co-note">{{ t.sess_slots_hint }}</div>
+    {% if summary %}<table class="co-tbl" style="margin-top:8px"><thead><tr><th>{{ t.slot_start }}–{{ t.slot_end }}</th><th>{{ t.slot_topic }}</th><th>{{ t.slot_trainer }}</th><th>{{ t.slot_summary }}</th><th></th></tr></thead><tbody>
+      {% for sl in summary %}<tr><td style="direction:ltr">{{ min_hm(sl.start) }}–{{ min_hm(sl.end) }}</td><td>{{ sl.topic }}</td><td>{{ sl.trainer }}</td><td><b>{{ sl.present }}</b> / {{ enrollments|length }} {{ t.slot_present }}</td>
+        <td>{% if sl.real %}<form method="POST" onsubmit="return confirm('{{ t.sess_confirm_del }}')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="form_action" value="slot_del"><input type="hidden" name="slot_id" value="{{ sl.id }}"><button class="co-btn sm ghost" type="submit"><i class="bi bi-trash"></i></button></form>{% endif %}</td></tr>{% endfor %}</tbody></table>
+    {% else %}<div class="co-note">{{ t.slot_none }}</div>{% endif %}
+    <form method="POST" class="co-grid" style="margin-top:10px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="form_action" value="slot_add">
+      <div><label class="co-label">{{ t.slot_start }}</label><input class="co-input" type="time" name="start_time" required></div>
+      <div><label class="co-label">{{ t.slot_end }}</label><input class="co-input" type="time" name="end_time" required></div>
+      <div><label class="co-label">{{ t.slot_topic }}</label><input class="co-input" name="topic" maxlength="200"></div>
+      <div><label class="co-label">{{ t.slot_trainer }}</label><input class="co-input" name="trainer" maxlength="120" value="{{ s.trainer or '' }}"></div>
+      <div style="grid-column:1/-1"><button class="co-btn sm" type="submit"><i class="bi bi-plus-lg"></i> {{ t.slot_add }}</button></div></form>
+  </div>
+  <form method="POST" class="co-card"><input type="hidden" name="form_action" value="save"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% for e in enrollments %}{% set a = att.get(e.id) %}{% set cur = a.status if a and a.status else '' %}
     <div class="att-row"><div><b>{{ e.full_name }}</b>
       {% if a and a.rsvp == 'yes' %}<span class="rsvp" style="color:#15803d">✓ {{ t.sess_rsvp_yes }}</span>{% elif a and a.rsvp == 'no' %}<span class="rsvp" style="color:#b91c1c">✗ {{ t.sess_rsvp_no }}</span>{% endif %}
@@ -23,7 +53,12 @@
       <div class="att-opts">
         {% for val, cls, label in (('present','p',t.att_present),('late','l',t.att_late),('excused','e',t.att_excused),('absent','a',t.att_absent)) %}
         <label><input type="radio" name="st_{{ e.id }}" value="{{ val }}" {% if cur == val %}checked{% endif %}><span class="{{ cls }}">{{ label }}</span></label>{% endfor %}
-      </div></div>
+      </div>
+      <div style="flex-basis:100%;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)">
+        <label>{{ t.sess_att_in }} <input type="time" name="in_{{ e.id }}" value="{{ local_hm(a.checkin_at) if a else '' }}" style="border:1px solid var(--line);border-radius:8px;padding:4px"></label>
+        {% if s.check_mode == 'inout' %}<label>{{ t.sess_att_out }} <input type="time" name="out_{{ e.id }}" value="{{ local_hm(a.checkout_at) if a else '' }}" style="border:1px solid var(--line);border-radius:8px;padding:4px"></label>
+          {% if a and a.checkin_at and not a.checkout_at %}<span style="color:#b45309;font-weight:700">⚠ {{ t.sess_att_missing_exit }}</span>{% endif %}{% endif %}
+        {% if a and a.method %}<span>· {{ a.method }}</span>{% endif %}</div></div>
     {% else %}<div class="co-note">{{ t.sess_no_confirmed }}</div>{% endfor %}
     {% if enrollments %}<button class="co-btn" type="submit" style="margin-top:16px"><i class="bi bi-check2-circle"></i> {{ t.sess_save }}</button>
     {% if s.gift_pass %}<div class="co-note">🎁 {{ t.sess_gift_on_present }}</div>{% endif %}{% endif %}

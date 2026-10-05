@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ t.checkin_title }}{% endblock %}
+{% block content %}
+<div style="max-width:480px;margin:50px auto;padding:0 max(4vw,16px)"><div style="background:var(--paper);border-radius:16px;box-shadow:var(--shadow2);padding:28px;text-align:center">
+  <div style="font-size:13px;color:var(--muted)">{{ s.loc('title', lang) }} · {{ m.day.strftime('%d/%m/%Y') }}</div>
+  <h1 style="font-size:21px;color:var(--navy);margin:8px 0 14px"><i class="bi bi-{{ 'box-arrow-in-right' if direction == 'in' else 'box-arrow-right' }}" style="color:var(--orange)"></i> {{ t.checkin_title }} · {{ t.checkin_in if direction == 'in' else t.checkin_out }}</h1>
+  {% if result %}
+    <div style="padding:16px;border-radius:12px;font-weight:800;font-size:15px;background:{{ '#dcfce7' if result[0] == 'success' else '#fee2e2' }};color:{{ '#15803d' if result[0] == 'success' else '#b91c1c' }}">{{ result[1] }}</div>
+    {% if result[0] != 'success' %}<form method="POST" style="margin-top:14px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input class="co-input" type="email" name="email" required value="{{ email }}" style="width:100%;padding:12px;border:2px solid var(--line);border-radius:12px;direction:ltr"><button type="submit" style="margin-top:10px;border:none;border-radius:12px;padding:13px 26px;font-size:15px;font-weight:800;background:var(--orange);color:#fff;cursor:pointer">{{ t.checkin_btn }}</button></form>{% endif %}
+  {% elif expired %}
+    <p style="font-size:14px;color:#b91c1c;font-weight:700;line-height:1.7">{{ t.checkin_expired }}</p>
+  {% else %}
+    <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px">{{ t.checkin_email }}</label>
+      <input type="email" name="email" required autocomplete="email" value="{{ email }}" style="width:100%;padding:13px;font-size:16px;border:2px solid var(--line);border-radius:12px;direction:ltr">
+      <button type="submit" style="margin-top:12px;border:none;border-radius:12px;padding:14px 28px;font-size:16px;font-weight:800;background:var(--orange);color:#fff;cursor:pointer;min-height:48px">{{ t.checkin_btn }}</button></form>
+  {% endif %}
+</div></div>
+{% endblock %}

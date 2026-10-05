@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ t.tick_title }}{% endblock %}
+{% block content %}
+<div style="max-width:520px;margin:40px auto;padding:0 max(4vw,16px)">
+  {% with msgs = get_flashed_messages(with_categories=true) %}{% for cat, msg in msgs %}
+  <div style="margin-bottom:12px;padding:12px 16px;border-radius:12px;font-weight:700;font-size:14px;background:{{ '#dcfce7' if cat == 'success' else '#fee2e2' }};color:{{ '#15803d' if cat == 'success' else '#b91c1c' }}">{{ msg }}</div>{% endfor %}{% endwith %}
+  <div style="background:var(--paper);border-radius:16px;box-shadow:var(--shadow2);padding:26px;text-align:center">
+    <div style="font-size:13px;color:var(--muted)">{{ s.loc('title', lang) }}</div>
+    <h1 style="font-size:22px;color:var(--navy);margin:6px 0 2px">{{ enr.full_name }}</h1>
+    <div style="font-size:13px;color:var(--orange);font-weight:800;margin-bottom:14px">{{ t.tick_title }}</div>
+    {% if enr.status == 'confirmed' %}
+      <div style="display:inline-block;padding:10px;border:3px solid var(--navy);border-radius:16px;background:#fff;max-width:260px;width:100%">{{ qr|safe }}</div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.7;margin:12px 0 0">{{ t.tick_hint }}</p>
+    {% else %}
+      <p style="font-size:14px;color:var(--muted);line-height:1.7">{{ t.tick_not_confirmed }}</p>
+    {% endif %}
+  </div>
+  {% if enr.status == 'confirmed' and today_meeting and (today_meeting.code_in or today_meeting.code_out) %}
+  <div style="background:var(--paper);border-radius:16px;box-shadow:var(--shadow2);padding:22px;margin-top:16px;text-align:center">
+    <h2 style="font-size:17px;color:var(--navy);margin:0 0 6px"><i class="bi bi-laptop" style="color:var(--orange)"></i> {{ t.tick_code_title }}</h2>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 12px">{{ t.tick_code_hint }}</p>
+    <form method="POST" action="{{ url_for('formation_ticket_code', token=enr.token) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required autocomplete="off" placeholder="••••"
+        style="width:160px;text-align:center;font-size:28px;letter-spacing:8px;font-weight:800;padding:10px;border:2px solid var(--line);border-radius:12px;direction:ltr">
+      <div><button type="submit" style="margin-top:12px;border:none;border-radius:12px;padding:13px 26px;font-size:15px;font-weight:800;background:var(--orange);color:#fff;cursor:pointer;min-height:46px">{{ t.tick_code_btn }}</button></div>
+    </form>
+  </div>{% endif %}
+  {% if enr.status == 'confirmed' and meetings %}
+  <div style="background:var(--paper);border-radius:16px;box-shadow:var(--shadow2);padding:22px;margin-top:16px">
+    <h2 style="font-size:17px;color:var(--navy);margin:0 0 10px">{{ t.tick_history }}</h2>
+    {% for m in meetings %}{% set a = atts.get(m.id) %}
+    <div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:13px">
+      <span>{{ m.day.strftime('%d/%m/%Y') }}{% if m.time_label %} · <span style="direction:ltr;display:inline-block">{{ m.time_label }}</span>{% endif %}</span>
+      <b style="color:{{ '#15803d' if a and a.status == 'present' else ('#b45309' if a and a.status == 'late' else 'var(--muted)') }}">
+        {% if a and a.status in ('present','late') %}✓ {{ t['att_' ~ a.status] }}{% if a.checkin_at %} · {{ local_hm(a.checkin_at) }}{% endif %}{% elif a and a.status %}{{ t['att_' ~ a.status] }}{% else %}{{ t.tick_state_none }}{% endif %}</b>
+    </div>{% endfor %}
+  </div>{% endif %}
+</div>
+{% endblock %}

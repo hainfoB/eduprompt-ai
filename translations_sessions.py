@@ -138,5 +138,55 @@ _FR += ['Places limitées', 'Plus que {n} place(s)', 'Complet · liste d’atten
 _EN += ['Limited seats', 'Only {n} seat(s) left', 'Full · waiting list open', 'Add to my calendar', 'WhatsApp / Telegram group link', 'Only sent by email to confirmed registrants (with the connection link), never shown publicly.', 'Where registrants come from', 'Source', 'Visits', 'Registrants', 'Conversion', 'No visit recorded yet.', 'Links to use for each post (the source is measured automatically):']
 _AR += ['المقاعد محدودة', 'بقي {n} مقعد فقط', 'مكتمل · قائمة الانتظار مفتوحة', 'أضِف إلى جدولي', 'رابط مجموعة واتساب / تيليغرام', 'يُرسل بالبريد فقط للمسجَّلين المؤكَّدين (مع رابط الحضور) ولا يظهر للعموم أبداً.', 'من أين يأتي المسجَّلون', 'المصدر', 'الزيارات', 'المسجَّلون', 'نسبة التحويل', 'لا توجد زيارات مسجَّلة بعد.', 'روابط تُستعمل لكل منشور (يُقاس المصدر تلقائياً):']
 
+_K += ['scan_in_ok', 'scan_in_late', 'scan_in_dup', 'scan_out_ok', 'scan_out_dup', 'scan_no_entry', 'scan_no_exit', 'scan_wrong_day', 'scan_not_enrolled', 'scan_unknown', 'scan_unknown_email', 'scan_bad_code',
+       'tick_title', 'tick_hint', 'tick_not_confirmed', 'tick_code_title', 'tick_code_hint', 'tick_code_btn', 'tick_history', 'tick_state_none', 'tick_in', 'tick_out',
+       'scan_title', 'scan_hint', 'scan_dir', 'scan_dir_in', 'scan_dir_out', 'scan_start', 'scan_recent', 'scan_program',
+       'room_title', 'room_hint', 'room_dir_in', 'room_dir_out', 'room_refresh',
+       'checkin_title', 'checkin_email', 'checkin_btn', 'checkin_expired', 'checkin_in', 'checkin_out',
+       'sess_check_mode', 'sess_check_in', 'sess_check_inout', 'sess_check_hint',
+       'sess_slots_title', 'sess_slots_hint', 'slot_start', 'slot_end', 'slot_topic', 'slot_trainer', 'slot_add', 'slot_none', 'slot_present', 'slot_summary',
+       'ctl_title', 'ctl_scan', 'ctl_scan_hint', 'ctl_room', 'ctl_room_hint', 'ctl_codes', 'ctl_codes_hint', 'ctl_gen', 'ctl_code_in', 'ctl_code_out', 'ctl_open',
+       'sess_att_in', 'sess_att_out', 'sess_att_missing_exit', 'att_partial', 'sess_att_manual_times', 'sess_export_slots', 'sess_slot_hours',
+       'flash_slot_invalid', 'flash_codes_ok', 'mail_ticket']
+_FR += ['Entrée enregistrée à {t}', 'Entrée enregistrée à {t} (en retard)', 'Déjà enregistré à {t}', 'Sortie enregistrée à {t}', 'Sortie déjà enregistrée à {t}',
+        'Aucune entrée enregistrée : la sortie est impossible', 'Cette formation ne demande pas de scan de sortie', 'Le contrôle n’est ouvert que le jour de la séance',
+        'Inscription non confirmée pour cette formation', 'Ticket inconnu', 'Cet e-mail n’est pas parmi les inscrits confirmés', 'Code incorrect, ou pas de séance aujourd’hui',
+        'Mon ticket de présence', 'Présentez ce QR code à l’entrée de la salle (et à la sortie si on vous le demande). Gardez cette page dans vos favoris.', 'Votre inscription n’est pas encore confirmée : le ticket sera disponible dès la confirmation.',
+        'Présence en ligne', 'Saisissez le code à 4 chiffres annoncé par le formateur pendant la séance.', 'Valider ma présence', 'Mes séances', 'Pas encore', 'Entrée', 'Sortie',
+        'Scanner les tickets', 'Autorisez la caméra puis présentez chaque QR code devant l’appareil. Le nom s’affiche en vert quand la présence est enregistrée.', 'Mode de scan', 'Entrée', 'Sortie', 'Démarrer la caméra', 'Derniers scans', 'Programme du jour',
+        'Scannez pour signaler votre présence', 'Ouvrez l’appareil photo de votre téléphone, scannez ce code et saisissez votre e-mail d’inscription. Le code change toutes les 45 secondes.', 'Entrée', 'Sortie', 'Le QR code se renouvelle automatiquement',
+        'Signaler ma présence', 'Votre e-mail d’inscription', 'Valider', 'Ce QR code a expiré. Scannez à nouveau le code affiché dans la salle.', 'Entrée', 'Sortie',
+        'Contrôle de présence', 'Entrée seule', 'Entrée + sortie', 'Entrée seule : un scan à l’arrivée suffit. Entrée + sortie : un second scan en partant permet de compter les heures réellement suivies.',
+        'Programme de la séance (créneaux)', 'Découpez la séance en créneaux avec leur enseignant. Les heures suivies sont calculées créneau par créneau d’après l’entrée et la sortie. Sans créneau, la séance entière compte comme un seul créneau.', 'Début', 'Fin', 'Thème', 'Enseignant', 'Ajouter le créneau', 'Aucun créneau défini.', 'présents', 'Présence par créneau',
+        'Scan et codes de la séance', 'Lien du scanner (formateur / responsable de l’entrée)', 'À ouvrir sur un téléphone pour scanner les tickets des stagiaires. Pas de compte nécessaire : gardez ce lien privé.', 'QR code de salle (à projeter)', 'À projeter dans la salle : le code change toutes les 45 secondes. Les stagiaires le scannent avec leur téléphone.', 'Codes en ligne (à annoncer dans le chat)', 'Le jour de la séance, annoncez le code d’entrée au début et le code de sortie à la fin.', 'Générer / changer les codes', 'Code d’entrée', 'Code de sortie', 'Ouvrir',
+        'Entrée', 'Sortie', 'sortie manquante', 'Partiel', 'Corriger les heures (HH:MM)', 'Exporter les présences par créneau', 'Heures par créneau',
+        'Créneau invalide : indiquez un début et une fin (HH:MM) avec la fin après le début.', 'Codes générés.', 'Mon ticket de présence']
+_EN += ['Entry recorded at {t}', 'Entry recorded at {t} (late)', 'Already recorded at {t}', 'Exit recorded at {t}', 'Exit already recorded at {t}',
+        'No entry recorded: exit is not possible', 'This training does not require an exit scan', 'Check-in is only open on the day of the meeting',
+        'Registration not confirmed for this training', 'Unknown ticket', 'This email is not among the confirmed registrants', 'Wrong code, or no meeting today',
+        'My attendance ticket', 'Show this QR code at the room entrance (and when leaving if asked). Bookmark this page.', 'Your registration is not confirmed yet: the ticket will be available once it is.',
+        'Online attendance', 'Enter the 4-digit code announced by the trainer during the meeting.', 'Confirm my attendance', 'My meetings', 'Not yet', 'Entry', 'Exit',
+        'Scan tickets', 'Allow the camera, then hold each QR code in front of the device. The name turns green when attendance is recorded.', 'Scan mode', 'Entry', 'Exit', 'Start the camera', 'Latest scans', 'Programme of the day',
+        'Scan to confirm your attendance', 'Open your phone camera, scan this code and type the email you registered with. The code changes every 45 seconds.', 'Entry', 'Exit', 'The QR code refreshes automatically',
+        'Confirm my attendance', 'Your registration email', 'Confirm', 'This QR code has expired. Scan the code displayed in the room again.', 'Entry', 'Exit',
+        'Attendance check', 'Entry only', 'Entry + exit', 'Entry only: one scan on arrival is enough. Entry + exit: a second scan when leaving lets us count the hours actually attended.',
+        'Meeting programme (slots)', 'Split the meeting into slots with their trainer. Hours attended are computed slot by slot from the entry and exit times. With no slot, the whole meeting counts as one slot.', 'Start', 'End', 'Topic', 'Trainer', 'Add the slot', 'No slot defined.', 'present', 'Attendance per slot',
+        'Meeting scan and codes', 'Scanner link (trainer / entrance staff)', 'Open on a phone to scan trainees’ tickets. No account needed: keep this link private.', 'Room QR code (to project)', 'Project it in the room: the code changes every 45 seconds. Trainees scan it with their phone.', 'Online codes (announce in the chat)', 'On the day, announce the entry code at the start and the exit code at the end.', 'Generate / change the codes', 'Entry code', 'Exit code', 'Open',
+        'Entry', 'Exit', 'exit missing', 'Partial', 'Fix times (HH:MM)', 'Export attendance per slot', 'Hours per slot',
+        'Invalid slot: give a start and an end (HH:MM) with the end after the start.', 'Codes generated.', 'My attendance ticket']
+_AR += ['تم تسجيل الدخول على الساعة {t}', 'تم تسجيل الدخول على الساعة {t} (متأخر)', 'سُجّل مسبقاً على الساعة {t}', 'تم تسجيل الخروج على الساعة {t}', 'سُجّل الخروج مسبقاً على الساعة {t}',
+        'لا يوجد دخول مسجَّل: لا يمكن تسجيل الخروج', 'هذا التكوين لا يتطلب مسح الخروج', 'التسجيل مفتوح فقط يوم الحصة',
+        'التسجيل غير مؤكَّد في هذا التكوين', 'تذكرة غير معروفة', 'هذا البريد ليس ضمن المسجَّلين المؤكَّدين', 'رمز خاطئ أو لا توجد حصة اليوم',
+        'تذكرة حضوري', 'اعرض رمز QR هذا عند مدخل القاعة (وعند الخروج إن طُلب منك). احتفظ بهذه الصفحة في المفضلة.', 'تسجيلك لم يُؤكَّد بعد: ستتوفر التذكرة فور التأكيد.',
+        'الحضور عن بُعد', 'أدخل الرمز المكوَّن من 4 أرقام الذي يعلنه المكوِّن أثناء الحصة.', 'تأكيد حضوري', 'حصصي', 'لم يُسجَّل بعد', 'دخول', 'خروج',
+        'مسح التذاكر', 'اسمح باستعمال الكاميرا ثم قرِّب كل رمز QR منها. يظهر الاسم باللون الأخضر عند تسجيل الحضور.', 'نمط المسح', 'دخول', 'خروج', 'تشغيل الكاميرا', 'آخر عمليات المسح', 'برنامج اليوم',
+        'امسح لتأكيد حضورك', 'افتح كاميرا هاتفك وامسح هذا الرمز ثم اكتب بريدك الإلكتروني المسجَّل. يتغير الرمز كل 45 ثانية.', 'دخول', 'خروج', 'يتجدد رمز QR تلقائياً',
+        'تأكيد حضوري', 'بريدك الإلكتروني المسجَّل', 'تأكيد', 'انتهت صلاحية رمز QR هذا. امسح الرمز المعروض في القاعة من جديد.', 'دخول', 'خروج',
+        'مراقبة الحضور', 'الدخول فقط', 'الدخول + الخروج', 'الدخول فقط: يكفي مسح واحد عند الوصول. الدخول + الخروج: مسح ثانٍ عند المغادرة يتيح حساب الساعات المتابَعة فعلاً.',
+        'برنامج الحصة (الفترات)', 'قسِّم الحصة إلى فترات مع مكوِّن كل فترة. تُحسب الساعات المتابَعة فترة بفترة انطلاقاً من وقتَي الدخول والخروج. بدون فترات تُحسب الحصة كاملة فترة واحدة.', 'البداية', 'النهاية', 'الموضوع', 'المكوِّن', 'إضافة الفترة', 'لا توجد فترات.', 'حاضرون', 'الحضور حسب الفترة',
+        'المسح ورموز الحصة', 'رابط الماسح (المكوِّن / مسؤول المدخل)', 'يُفتح على هاتف لمسح تذاكر المتكوِّنين. لا حاجة لحساب: احتفظ بهذا الرابط سرياً.', 'رمز QR للقاعة (للعرض)', 'يُعرض في القاعة: يتغير الرمز كل 45 ثانية ويمسحه المتكوِّنون بهواتفهم.', 'رموز الحضور عن بُعد (تُعلن في الدردشة)', 'يوم الحصة أعلن رمز الدخول في البداية ورمز الخروج في النهاية.', 'توليد / تغيير الرموز', 'رمز الدخول', 'رمز الخروج', 'فتح',
+        'دخول', 'خروج', 'خروج غير مسجَّل', 'جزئي', 'تصحيح الأوقات (HH:MM)', 'تصدير الحضور حسب الفترة', 'الساعات حسب الفترة',
+        'فترة غير صالحة: أدخل بداية ونهاية (HH:MM) مع نهاية بعد البداية.', 'تم توليد الرموز.', 'تذكرة حضوري']
+
 assert len(_K) == len(_FR) == len(_EN) == len(_AR), (len(_K), len(_FR), len(_EN), len(_AR))
 SESSION_TR = {"fr": dict(zip(_K, _FR)), "en": dict(zip(_K, _EN)), "ar": dict(zip(_K, _AR))}

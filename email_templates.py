@@ -244,7 +244,7 @@ def pass_reminder_email(lang, name, date, pct, until, link, optout):
 
 # ── Training-session emails (registration confirmation, J-1 reminder) ────────
 ENR = {
-    "fr": {"label_session": "Formation", "label_when": "Date", "label_place": "Lieu", "label_link": "Lien de connexion", "label_group": "Groupe WhatsApp", "cal": "Ajouter à mon agenda", "cta": "Voir la formation",
+    "fr": {"label_session": "Formation", "label_when": "Date", "label_place": "Lieu", "label_link": "Lien de connexion", "label_group": "Groupe WhatsApp", "cal": "Ajouter à mon agenda", "ticket": "Mon ticket de présence (QR code)", "cta": "Voir la formation",
            "confirmed": ("Inscription confirmée : {title}", "{name}, votre place est réservée",
                          "Votre inscription à la formation <b>{title}</b> est confirmée. Nous vous enverrons un rappel la veille de la première séance."),
            "pending":   ("Inscription reçue : {title}", "{name}, nous avons bien reçu votre inscription",
@@ -253,7 +253,7 @@ ENR = {
                          "La formation <b>{title}</b> est complète pour le moment. Vous êtes sur liste d’attente : si une place se libère, vous serez prévenu(e) automatiquement par e-mail."),
            "promoted":  ("Une place s’est libérée : {title}", "{name}, bonne nouvelle : une place s’est libérée !",
                          "Une place vient de se libérer pour <b>{title}</b>. Votre inscription est maintenant confirmée.")},
-    "ar": {"label_session": "التكوين", "label_when": "التاريخ", "label_place": "المكان", "label_link": "رابط الحضور", "label_group": "مجموعة واتساب", "cal": "أضِف إلى جدولي", "cta": "تفاصيل التكوين",
+    "ar": {"label_session": "التكوين", "label_when": "التاريخ", "label_place": "المكان", "label_link": "رابط الحضور", "label_group": "مجموعة واتساب", "cal": "أضِف إلى جدولي", "ticket": "تذكرة حضوري (رمز QR)", "cta": "تفاصيل التكوين",
            "confirmed": ("تم تأكيد تسجيلك: {title}", "{name}، مقعدك محجوز",
                          "تم تأكيد تسجيلك في التكوين <b>{title}</b>. سنرسل لك تذكيراً عشية الحصة الأولى."),
            "pending":   ("استلمنا تسجيلك: {title}", "{name}، استلمنا طلب تسجيلك",
@@ -262,7 +262,7 @@ ENR = {
                          "التكوين <b>{title}</b> مكتمل حالياً. أنت في قائمة الانتظار، وإذا شغر مقعد سنُعلمك تلقائياً عبر البريد."),
            "promoted":  ("شغر مقعد لك: {title}", "{name}، خبر سار: شغر مقعد!",
                          "شغر مقعد في <b>{title}</b> وتم الآن تأكيد تسجيلك.")},
-    "en": {"label_session": "Training", "label_when": "Date", "label_place": "Place", "label_link": "Join link", "label_group": "WhatsApp group", "cal": "Add to my calendar", "cta": "View the training",
+    "en": {"label_session": "Training", "label_when": "Date", "label_place": "Place", "label_link": "Join link", "label_group": "WhatsApp group", "cal": "Add to my calendar", "ticket": "My attendance ticket (QR code)", "cta": "View the training",
            "confirmed": ("Registration confirmed: {title}", "{name}, your seat is reserved",
                          "Your registration to <b>{title}</b> is confirmed. We will send you a reminder the day before the first session."),
            "pending":   ("Registration received: {title}", "{name}, we received your registration",
@@ -298,10 +298,13 @@ def enrollment_email(lang, name, status, title, when, place, link, online_url=""
         if extra.get("gcal"):
             paras.append(f'📅 {c["cal"]} : <a href="{escape(extra["gcal"])}" style="color:#f97316;font-weight:700">Google</a> · '
                          f'<a href="{escape(extra["ics"])}" style="color:#f97316;font-weight:700">Outlook / Apple (.ics)</a>')
+        if extra.get("ticket"):
+            paras.append(f'🎫 <a href="{escape(extra["ticket"])}" style="color:#f97316;font-weight:700">{c["ticket"]}</a>')
         blocks += _simple_block(l, h.format(name=name), paras, rows, c["cta"], link, i == 0)
         text_parts.append(h.format(name=name) + "\n" + p.format(title=ttl).replace("<b>", "").replace("</b>", "") +
                           "".join(f"\n{k}: {v}" for k, v in rows[1:]) +
-                          (f"\n{c['cal']}: {extra['gcal']}\n.ics: {extra['ics']}" if extra.get("gcal") else "") + f"\n{link}")
+                          (f"\n{c['cal']}: {extra['gcal']}\n.ics: {extra['ics']}" if extra.get("gcal") else "") +
+                          (f"\n{c['ticket']}: {extra['ticket']}" if extra.get("ticket") else "") + f"\n{link}")
     return subject, _wrap(subject, blocks), "\n\n".join(text_parts)
 
 
@@ -325,7 +328,7 @@ SRM = {
 _AT = {"fr": " à ", "ar": " · ", "en": " at "}
 
 
-def session_reminder_email(lang, name, title, when, place, yes_link, no_link, online_url="", ar=None, group_url=""):
+def session_reminder_email(lang, name, title, when, place, yes_link, no_link, online_url="", ar=None, group_url="", ticket_url=""):
     ar = ar or {}
     order = _order(lang)
     subject = SRM[order[0]]["subject"].format(title=(ar.get("title") or title) if order[0] == "ar" else title)
@@ -337,11 +340,13 @@ def session_reminder_email(lang, name, title, when, place, yes_link, no_link, on
         pl = f" ({escape(plc)})" if plc else ""
         blocks += _simple_block(l, c["title"].format(name=name),
                                 [c["p1"].format(title=escape(ttl), when=escape(when), place=pl),
-                                 c["p2"].format(no=escape(no_link))],
+                                 c["p2"].format(no=escape(no_link))] +
+                                ([f'🎫 <a href="{escape(ticket_url)}" style="color:#f97316;font-weight:700">{ENR[l]["ticket"]}</a>'] if ticket_url else []),
                                 ([(ENR[l]["label_link"], online_url)] if online_url else []) +
                                 ([(ENR[l]["label_group"], group_url)] if group_url else []), c["cta"], yes_link, i == 0)
         text_parts.append(c["title"].format(name=name) + "\n" +
                           c["p1"].format(title=ttl, when=when, place=f" ({plc})" if plc else "").replace("<b>", "").replace("</b>", "") +
                           (f"\n{ENR[l]['label_link']}: {online_url}" if online_url else "") +
+                          (f"\n{ENR[l]['ticket']}: {ticket_url}" if ticket_url else "") +
                           f"\n{c['cta']}: {yes_link}\n→ {no_link}")
     return subject, _wrap(subject, blocks), "\n\n".join(text_parts)
