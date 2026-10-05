@@ -133,5 +133,10 @@ _FR += ["Votre session de formulaire a expiré. Rien n’a été enregistré : r
 _EN += ["Your form session expired. Nothing was saved: reload the page and try again."]
 _AR += ["انتهت صلاحية الاستمارة. لم يُحفظ شيء: أعد تحميل الصفحة ثم حاول من جديد."]
 
+_K += ['seats_limited', 'seats_few', 'seats_full', 'cal_add', 'sess_group_url', 'sess_group_hint', 'sess_sources_title', 'sess_source', 'sess_visits', 'sess_enrolled', 'sess_conv', 'sess_no_sources', 'sess_src_links']
+_FR += ['Places limitées', 'Plus que {n} place(s)', 'Complet · liste d’attente ouverte', 'Ajouter à mon agenda', 'Lien du groupe WhatsApp / Telegram', 'Envoyé uniquement par e-mail aux inscrits confirmés (avec le lien de connexion), jamais affiché publiquement.', 'D’où viennent les inscrits', 'Source', 'Visites', 'Inscrits', 'Conversion', 'Aucune visite enregistrée pour l’instant.', 'Liens à utiliser pour chaque publication (la source est mesurée automatiquement) :']
+_EN += ['Limited seats', 'Only {n} seat(s) left', 'Full · waiting list open', 'Add to my calendar', 'WhatsApp / Telegram group link', 'Only sent by email to confirmed registrants (with the connection link), never shown publicly.', 'Where registrants come from', 'Source', 'Visits', 'Registrants', 'Conversion', 'No visit recorded yet.', 'Links to use for each post (the source is measured automatically):']
+_AR += ['المقاعد محدودة', 'بقي {n} مقعد فقط', 'مكتمل · قائمة الانتظار مفتوحة', 'أضِف إلى جدولي', 'رابط مجموعة واتساب / تيليغرام', 'يُرسل بالبريد فقط للمسجَّلين المؤكَّدين (مع رابط الحضور) ولا يظهر للعموم أبداً.', 'من أين يأتي المسجَّلون', 'المصدر', 'الزيارات', 'المسجَّلون', 'نسبة التحويل', 'لا توجد زيارات مسجَّلة بعد.', 'روابط تُستعمل لكل منشور (يُقاس المصدر تلقائياً):']
+
 assert len(_K) == len(_FR) == len(_EN) == len(_AR), (len(_K), len(_FR), len(_EN), len(_AR))
 SESSION_TR = {"fr": dict(zip(_K, _FR)), "en": dict(zip(_K, _EN)), "ar": dict(zip(_K, _AR))}

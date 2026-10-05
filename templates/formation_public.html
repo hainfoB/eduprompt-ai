@@ -31,7 +31,7 @@
       {% if s.loc('audience', lang) %}<div class="fp-fact" style="grid-column:1/-1">{{ t.sess_audience }}<b>{{ s.loc('audience', lang) }}</b></div>{% endif %}
       {% if s.hours_total %}<div class="fp-fact">{{ t.sess_hours }}<b>{{ s.hours_total }}</b></div>{% endif %}
       <div class="fp-fact">{{ t.sess_col_type }}<b>{{ t.sess_free_label if s.is_free else (s.price_total ~ ' DA') }}</b></div>
-      {% if s.seats %}<div class="fp-fact">{{ t.sess_seats }}<b>{{ s.seats_left() }} / {{ s.seats }}</b></div>{% endif %}
+      {% set ss = seats_state(s) %}{% if ss %}<div class="fp-fact" {% if ss != 'limited' %}style="background:#fff7ed;color:#9a3412"{% endif %}>{{ t.sess_seats }}<b>{% if ss == 'full' %}{{ t.seats_full }}{% elif ss == 'few' %}{{ t.seats_few.format(n=s.seats_left()) }}{% else %}{{ t.seats_limited }}{% endif %}</b></div>{% endif %}
     </div>
     {% if s.loc('description', lang) %}<div class="fp-desc">{{ s.loc('description', lang) }}</div>{% endif %}
     {% if s.programme_items(lang) %}<h3 style="font-size:16px;color:var(--navy);margin:18px 0 8px">{{ t.sess_programme }}</h3>
@@ -45,6 +45,9 @@
     {% if done %}
       <div class="fp-msg"><i class="bi bi-{{ 'hourglass-split' if done in ('pending','waitlist') else 'check-circle-fill' }}"></i>
         <h2>{{ t['enr_done_' ~ done] }}</h2><p>{{ t['enr_done_' ~ done ~ '_p'] }}</p></div>
+      {% if gcal %}<div style="margin-top:16px;text-align:center"><div style="font-size:13px;color:var(--muted);margin-bottom:8px">📅 {{ t.cal_add }}</div>
+        <a class="fp-btn" style="display:inline-block;width:auto;margin:0 4px;padding:11px 20px;font-size:14px;text-decoration:none" href="{{ gcal }}" target="_blank" rel="noopener">Google</a>
+        <a class="fp-btn" style="display:inline-block;width:auto;margin:0 4px;padding:11px 20px;font-size:14px;text-decoration:none;background:var(--navy)" href="{{ ics }}">Outlook / Apple (.ics)</a></div>{% endif %}
     {% elif not is_open %}
       <div class="fp-msg"><i class="bi bi-lock-fill"></i><h2>{{ t.enr_closed }}</h2><p>{{ t.enr_closed_p }}</p></div>
     {% else %}

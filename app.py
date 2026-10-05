@@ -9,7 +9,7 @@ import string
 from datetime import datetime, timedelta, date
 
 from flask import (Flask, render_template, request, jsonify, send_file, redirect, url_for, flash,
-                   session, after_this_request, abort)
+                   session, after_this_request, abort, Response)
 
 from flask_login import (LoginManager, login_user, logout_user, login_required,
                           current_user)
@@ -35,7 +35,7 @@ from flask_limiter.util import get_remote_address
 from models import (db, User, Subscription, Document, LicenseCode, Payment, Message,
                      PaymentRequest, AdminLog, PlanChangeHistory, FunnelEvent, GenerationError,
                      PLAN_PRICES, PAYMENT_METHODS, PASS_TYPES, Cohort,
-                     TrainingSession, SessionMeeting, Enrollment, Attendance, SESSION_STATUSES,
+                     TrainingSession, SessionMeeting, Enrollment, Attendance, SessionVisit, SESSION_STATUSES,
                      create_trial_subscription, next_receipt_number)
 from werkzeug.utils import secure_filename
 from utils import build_sources_context
@@ -265,7 +265,11 @@ def _migrate_sqlite_schema():
                 "rating_comment": "VARCHAR(500)",
                 "rated_at": "DATETIME",
             },
+            "enrollment": {
+                "source": "VARCHAR(40)",
+            },
             "training_session": {
+                "group_url": "VARCHAR(300)",
                 "min_attendance": "INTEGER DEFAULT 80",
                 "mode": "VARCHAR(10) DEFAULT 'onsite'",
                 "online_url": "VARCHAR(300)",
@@ -3243,16 +3247,107 @@ def _session_when(s):
     return d.strftime("%d/%m/%Y") + (f" {first.time_label}" if first and first.time_label else "")
 
 
+_SRC_RE = re.compile(r"^[a-z0-9_-]{1,40}$")
+
+
+def _visit_source():
+    """Where a visitor comes from: ?src=… if valid, else facebook/linkedin/whatsapp from the referrer, else direct."""
+    src = (request.args.get("src") or "").strip().lower()
+    if _SRC_RE.match(src):
+        return src
+    ref = (request.referrer or "").lower()
+    for name in ("facebook", "linkedin", "whatsapp", "instagram", "t.co", "google"):
+        if name in ref:
+            return "twitter" if name == "t.co" else name
+    return "direct"
+
+
+def _meeting_window(s, m):
+    """(date, start_minutes, end_minutes|None) of a meeting, from its time label or the session default."""
+    for label in (m.time_label, s.default_time_label()):
+        mm = re.match(r"^\s*(\d{1,2}):(\d{2})(?:\s*[-–]\s*(\d{1,2}):(\d{2}))?\s*$", label or "")
+        if mm:
+            a = int(mm[1]) * 60 + int(mm[2])
+            b = int(mm[3]) * 60 + int(mm[4]) if mm[3] else None
+            return m.day, a, (b if b and b > a else None)
+    return m.day, None, None
+
+
+def _utc_stamp(day, minutes):
+    """Algeria is UTC+1 all year: local time -> UTC "YYYYMMDDTHHMMSSZ"."""
+    dt = datetime(day.year, day.month, day.day) + timedelta(minutes=minutes - 60)
+    return dt.strftime("%Y%m%dT%H%M%SZ")
+
+
+def _event_times(s, m):
+    day, a, b = _meeting_window(s, m)
+    if a is None:
+        return None
+    return _utc_stamp(day, a), _utc_stamp(day, b if b else a + 60)
+
+
+def _ics_escape(text):
+    return (text or "").replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")
+
+
+def session_ics(enr):
+    s = enr.session
+    lang = enr.lang or "fr"
+    title = s.loc("title", lang)
+    place = s.online_url if (s.mode != "onsite" and s.online_url) else s.loc("location", lang)
+    desc_parts = []
+    if s.online_url and s.mode != "onsite":
+        desc_parts.append(s.online_url)
+    if s.group_url:
+        desc_parts.append(s.group_url)
+    now = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//HaithemEduAI//Formation//FR", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"]
+    for m in s.meetings:
+        times = _event_times(s, m)
+        if not times:
+            continue
+        lines += ["BEGIN:VEVENT", f"UID:{enr.token}-{m.id}@haithemeduai", f"DTSTAMP:{now}",
+                  f"DTSTART:{times[0]}", f"DTEND:{times[1]}", f"SUMMARY:{_ics_escape(title)}"]
+        if place:
+            lines.append(f"LOCATION:{_ics_escape(place)}")
+        if desc_parts:
+            lines.append(f"DESCRIPTION:{_ics_escape(chr(10).join(desc_parts))}")
+        lines += ["BEGIN:VALARM", "TRIGGER:-PT1H", "ACTION:DISPLAY", f"DESCRIPTION:{_ics_escape(title)}", "END:VALARM", "END:VEVENT"]
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(lines) + "\r\n"
+
+
+def _calendar_links(enr):
+    """(google_calendar_url, ics_url) for the next meeting; ('', '') when no meeting has a time yet."""
+    from urllib.parse import quote
+    s = enr.session
+    today = (datetime.utcnow() + timedelta(hours=1)).date()
+    upcoming = [m for m in s.meetings if m.day >= today and _event_times(s, m)]
+    if not upcoming:
+        return "", ""
+    start, end = _event_times(s, upcoming[0])
+    lang = enr.lang or "fr"
+    details = "\n".join(x for x in ((s.online_url if s.mode != "onsite" else ""), s.group_url) if x)
+    place = s.online_url if (s.mode != "onsite" and s.online_url) else s.loc("location", lang)
+    g = ("https://calendar.google.com/calendar/render?action=TEMPLATE&text=" + quote(s.loc("title", lang)) +
+         f"&dates={start}/{end}&details=" + quote(details) + "&location=" + quote(place or ""))
+    return g, f"{APP_URL}/formation/agenda/{enr.token}.ics"
+
+
 def _send_enrollment_email(enr, kind):
     """kind: confirmed | pending | waitlist | promoted. Never raises."""
     from notifications import send_email
     from email_templates import enrollment_email
     try:
         s = enr.session
-        link = s.online_url if (kind in ("confirmed", "promoted") and s.mode != "onsite") else ""
+        confirmed = kind in ("confirmed", "promoted")
+        link = s.online_url if (confirmed and s.mode != "onsite") else ""
+        cal = _calendar_links(enr) if confirmed else ("", "")
+        extra = {"group": s.group_url if confirmed else "", "gcal": cal[0], "ics": cal[1]}
         subject, html, text = enrollment_email(enr.lang or "fr", enr.first_name, kind, s.title,
                                                _session_when(s), s.location or "", _session_public_url(s), link,
-                                               ar={"title": s.loc("title", "ar"), "place": s.loc("location", "ar")})
+                                               ar={"title": s.loc("title", "ar"), "place": s.loc("location", "ar")},
+                                               extra=extra)
         send_email(enr.email, subject, text, html)
     except Exception as e:
         print(f"⚠️  Enrollment email failed: {e}")
@@ -3332,7 +3427,8 @@ def send_session_reminders():
                 subject, html, text = session_reminder_email(enr.lang or "fr", enr.first_name, s.title, when,
                                                              s.location or "", base + "?a=yes", base + "?a=no",
                                                              s.online_url if s.mode != "onsite" else "",
-                                                             ar={"title": s.loc("title", "ar"), "place": s.loc("location", "ar")})
+                                                             ar={"title": s.loc("title", "ar"), "place": s.loc("location", "ar")},
+                                                             group_url=s.group_url or "")
                 if send_email(enr.email, subject, text, html):
                     sent += 1
             m.reminder_sent = True
@@ -3371,6 +3467,8 @@ def _apply_session_form(s, form):
     s.mode = mode if mode in ("onsite", "online", "hybrid") else "onsite"
     url = form.get("online_url", "").strip()[:300]
     s.online_url = url if url.lower().startswith(("http://", "https://")) and s.mode != "onsite" else None
+    gurl = form.get("group_url", "").strip()[:300]
+    s.group_url = gurl if gurl.lower().startswith(("http://", "https://")) else None
     for field in ("start_time", "end_time"):
         v = form.get(field, "").strip()
         setattr(s, field, v if re.match(r"^([01]\d|2[0-3]):[0-5]\d$", v) else None)
@@ -3450,9 +3548,19 @@ def admin_session_detail(session_id):
     # attendance rate per enrollment (over meetings already held or marked)
     stats = attendance_stats(s)
     by_enr = {r["enr"].id: r for r in stats["rows"]}
+    visits = dict(db.session.query(SessionVisit.source, db.func.count(SessionVisit.id))
+                  .filter_by(session_id=s.id).group_by(SessionVisit.source).all())
+    enrolled = {}
+    for e in enrollments:
+        if e.status != "cancelled":
+            enrolled[e.source or "direct"] = enrolled.get(e.source or "direct", 0) + 1
+    sources = []
+    for src in sorted(set(visits) | set(enrolled), key=lambda k: -(visits.get(k, 0) + enrolled.get(k, 0))):
+        v, n = visits.get(src, 0), enrolled.get(src, 0)
+        sources.append({"source": src, "visits": v, "enrolled": n, "rate": round(n * 100 / v) if v else 0})
     return render_template("admin_session_detail.html", s=s, meetings=meetings, enrollments=enrollments,
                            passes=PASS_TYPES, public_url=_session_public_url(s), stats=stats, by_enr=by_enr,
-                           statuses=SESSION_STATUSES)
+                           statuses=SESSION_STATUSES, sources=sources)
 
 
 @app.route("/admin/sessions/<int:session_id>/action", methods=["POST"])
@@ -3597,6 +3705,15 @@ def admin_session_attendance_export(session_id):
     return _xlsx_response(rows, f"presences_{safe}.xlsx", [18, 18, 30] + [11] * len(st["held"]) + [10, 14, 12])
 
 
+@app.template_global()
+def seats_state(s):
+    """'' (no limit) | 'limited' | 'few' (5 or fewer left) | 'full' — never reveals the exact number unless few."""
+    left = s.seats_left()
+    if left is None:
+        return ""
+    return "full" if left <= 0 else ("few" if left <= 5 else "limited")
+
+
 @app.route("/formation/<slug>", methods=["GET", "POST"])
 @limiter.limit("30/hour", methods=["POST"])
 def formation_public(slug):
@@ -3605,6 +3722,10 @@ def formation_public(slug):
         abort(404)
     is_open = s.status == "open"
     done = None
+    if request.method == "GET" and not session.get(f"visit_{s.id}"):   # one visit per browser session
+        session[f"visit_{s.id}"] = _visit_source()
+        db.session.add(SessionVisit(session_id=s.id, source=session[f"visit_{s.id}"]))
+        db.session.commit()
     if request.method == "POST" and is_open:
         f = request.form
         if f.get("website"):  # honeypot
@@ -3634,11 +3755,23 @@ def formation_public(slug):
         enr.school = f.get("school", "").strip()[:150] or None
         enr.subject = f.get("subject", "").strip()[:100] or None
         enr.lang = current_lang()
+        enr.source = session.get(f"visit_{s.id}") or "direct"
         db.session.commit()
         _send_enrollment_email(enr, status)
-        return render_template("formation_public.html", s=s, is_open=is_open, done=status, form={})
+        gcal, ics = _calendar_links(enr) if status == "confirmed" else ("", "")
+        return render_template("formation_public.html", s=s, is_open=is_open, done=status, form={}, gcal=gcal, ics=ics)
     meetings = s.meetings.all()
     return render_template("formation_public.html", s=s, is_open=is_open, done=done, form={}, meetings=meetings)
+
+
+@app.route("/formation/agenda/<token>.ics")
+def formation_ics(token):
+    enr = Enrollment.query.filter_by(token=token).first_or_404()
+    if enr.status != "confirmed":
+        abort(404)
+    body = session_ics(enr)
+    return Response(body, mimetype="text/calendar",
+                    headers={"Content-Disposition": 'attachment; filename="formation.ics"'})
 
 
 @app.route("/formation/rsvp/<token>/<int:meeting_id>", methods=["GET", "POST"])

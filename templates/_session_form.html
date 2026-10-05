@@ -17,6 +17,8 @@
   <div><label class="co-label">{{ t.sess_end_time }}</label><input class="co-input" type="time" name="end_time" value="{{ v.end_time if v and v.end_time else '' }}"><div class="co-note">{{ t.sess_time_hint }}</div></div>
   <div id="urlbox" style="grid-column:1/-1;display:{{ 'block' if v and v.mode != 'onsite' else 'none' }}"><label class="co-label">{{ t.sess_online_url }}</label>
     <input class="co-input" name="online_url" maxlength="300" value="{{ v.online_url if v and v.online_url else '' }}" placeholder="https://meet.google.com/…" style="direction:ltr;text-align:start"><div class="co-note">{{ t.sess_online_hint }}</div></div>
+  <div style="grid-column:1/-1"><label class="co-label">{{ t.sess_group_url }}</label>
+    <input class="co-input" name="group_url" maxlength="300" value="{{ v.group_url if v and v.group_url else '' }}" placeholder="https://chat.whatsapp.com/…" style="direction:ltr;text-align:start"><div class="co-note">{{ t.sess_group_hint }}</div></div>
   <div><label class="co-label">{{ t.sess_location }}</label><input class="co-input" name="location" maxlength="200" value="{{ v.location if v and v.location else '' }}" placeholder="{{ t.sess_location_ph }}"></div>
   <div><label class="co-label">{{ t.sess_location }} <span class="st st-waitlist">AR</span></label><input class="co-input" dir="rtl" name="location_ar" maxlength="300" value="{{ v.location_ar if v and v.location_ar else '' }}"></div>
   <div><label class="co-label">{{ t.sess_hours }}</label><input class="co-input" type="number" min="0" name="hours_total" value="{{ v.hours_total if v else 0 }}"></div>

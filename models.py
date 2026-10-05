@@ -465,6 +465,7 @@ class TrainingSession(db.Model):
     cohort_id     = db.Column(db.Integer, db.ForeignKey("cohort.id"), nullable=True)
     mode          = db.Column(db.String(10), default="onsite")   # onsite | online | hybrid
     online_url    = db.Column(db.String(300), nullable=True)     # sent to confirmed people only
+    group_url     = db.Column(db.String(300), nullable=True)     # WhatsApp / Telegram group, sent to confirmed people only
     start_time    = db.Column(db.String(5), nullable=True)       # "HH:MM", default for every meeting
     end_time      = db.Column(db.String(5), nullable=True)
     trainer       = db.Column(db.String(120), nullable=True)
@@ -556,6 +557,7 @@ class Enrollment(db.Model):
     status     = db.Column(db.String(10), default="pending", index=True)
     token      = db.Column(db.String(40), unique=True, nullable=False, default=lambda: secrets.token_urlsafe(24))
     gift_granted = db.Column(db.Boolean, default=False)
+    source     = db.Column(db.String(40), nullable=True, index=True)   # ?src=… of the link they came from
     user_id    = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     attendances = db.relationship("Attendance", backref="enrollment", lazy="dynamic",
@@ -575,3 +577,11 @@ class Attendance(db.Model):
     status        = db.Column(db.String(10), nullable=True)
     rsvp          = db.Column(db.String(3), nullable=True)
     __table_args__ = (db.UniqueConstraint("meeting_id", "enrollment_id", name="uq_attendance"),)
+
+
+class SessionVisit(db.Model):
+    """One visitor (per browser) opening a session's public page, to measure which post brings people."""
+    id         = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.Integer, db.ForeignKey("training_session.id"), nullable=False, index=True)
+    source     = db.Column(db.String(40), nullable=False, default="direct", index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

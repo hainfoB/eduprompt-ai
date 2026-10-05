@@ -57,6 +57,19 @@
   </div>
 
   <div class="co-card">
+    <h3><i class="bi bi-megaphone-fill" style="color:var(--orange)"></i> {{ t.sess_sources_title }}</h3>
+    {% if sources %}<table class="co-tbl"><thead><tr><th>{{ t.sess_source }}</th><th>{{ t.sess_visits }}</th><th>{{ t.sess_enrolled }}</th><th>{{ t.sess_conv }}</th></tr></thead><tbody>
+      {% for r in sources %}<tr><td><b>{{ r.source }}</b></td><td>{{ r.visits }}</td><td>{{ r.enrolled }}</td><td>{{ r.rate }} %</td></tr>{% endfor %}</tbody></table>
+    {% else %}<div class="co-note">{{ t.sess_no_sources }}</div>{% endif %}
+    <div class="co-note" style="margin-top:12px">{{ t.sess_src_links }}</div>
+    <div style="display:grid;gap:8px;margin-top:6px">
+      {% for k in ('facebook','groupe-fb','whatsapp','linkedin','instagram') %}
+      <div class="linkbox"><span id="sl_{{ k }}">{{ public_url }}?src={{ k }}</span>
+        <button type="button" class="co-btn sm ghost" onclick="navigator.clipboard.writeText(document.getElementById('sl_{{ k }}').textContent);this.textContent='✓'">{{ t.sess_copy }}</button></div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="co-card">
     <h3><i class="bi bi-bar-chart-fill" style="color:var(--orange)"></i> {{ t.sess_stats_title }}
       <a class="co-pill" style="margin-inline-start:auto" href="{{ url_for('admin_session_attendance_export', session_id=s.id) }}"><i class="bi bi-file-earmark-excel"></i> {{ t.sess_export_att }}</a></h3>
     <div class="co-grid">
@@ -72,7 +85,7 @@
       <a class="co-pill" style="margin-inline-start:auto" href="{{ url_for('admin_session_export', session_id=s.id) }}"><i class="bi bi-file-earmark-excel"></i> Excel</a></h3>
     {% if enrollments %}<div style="overflow-x:auto"><table class="co-tbl">
       <thead><tr><th>{{ t.sess_name }}</th><th>{{ t.cohort_col_email }}</th><th>{{ t.enr_phone }}</th><th>{{ t.enr_status }}</th><th>{{ t.sess_presence }}</th><th></th></tr></thead><tbody>
-      {% for e in enrollments %}      <tr><td><b>{{ e.full_name }}</b><div style="font-size:11px;color:var(--muted)">{{ e.school or '' }}{% if e.wilaya %} · {{ e.wilaya }}{% endif %}</div></td>
+      {% for e in enrollments %}      <tr><td><b>{{ e.full_name }}</b><div style="font-size:11px;color:var(--muted)">{{ e.school or '' }}{% if e.wilaya %} · {{ e.wilaya }}{% endif %}{% if e.source %} · <span class="st st-waitlist">{{ e.source }}</span>{% endif %}</div></td>
         <td style="direction:ltr;text-align:start">{{ e.email }}</td><td style="direction:ltr;text-align:start">{{ e.phone or '' }}</td>
         <td><span class="st st-{{ e.status }}">{{ t['enr_status_' ~ e.status] }}</span>{% if e.gift_granted %} <span class="badge-pass" title="{{ t.sess_gift_given }}">🎁</span>{% endif %}</td>
         <td>{% set r = by_enr.get(e.id) %}{% if r %}<b>{{ r.rate }} %</b> <span style="color:var(--muted);font-size:11px">({{ r.attended }}/{{ stats.held|length }})</span>
