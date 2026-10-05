@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ t.tick_code_title }}{% endblock %}
+{% block content %}
+<div style="max-width:480px;margin:50px auto;padding:0 max(4vw,16px)"><div style="background:var(--paper);border-radius:16px;box-shadow:var(--shadow2);padding:28px;text-align:center">
+  <div style="font-size:13px;color:var(--muted)">{{ s.loc('title', lang) }}</div>
+  <h1 style="font-size:21px;color:var(--navy);margin:8px 0 6px"><i class="bi bi-laptop" style="color:var(--orange)"></i> {{ t.tick_code_title }}</h1>
+  <p style="font-size:13px;color:var(--muted);margin:0 0 14px">{{ t.tick_code_hint }}</p>
+  {% if result %}<div style="margin-bottom:14px;padding:14px;border-radius:12px;font-weight:800;font-size:15px;background:{{ '#dcfce7' if result[0] == 'success' else '#fee2e2' }};color:{{ '#15803d' if result[0] == 'success' else '#b91c1c' }}">{{ result[1] }}</div>{% endif %}
+  {% if not result or result[0] != 'success' %}
+  <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px;text-align:start">{{ t.checkin_email }}</label>
+    <input type="email" name="email" required autocomplete="email" value="{{ email }}" style="width:100%;padding:13px;font-size:16px;border:2px solid var(--line);border-radius:12px;direction:ltr">
+    <input name="code" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" required autocomplete="off" placeholder="••••"
+      style="width:170px;margin-top:14px;text-align:center;font-size:28px;letter-spacing:8px;font-weight:800;padding:10px;border:2px solid var(--line);border-radius:12px;direction:ltr">
+    <div><button type="submit" style="margin-top:14px;border:none;border-radius:12px;padding:14px 28px;font-size:16px;font-weight:800;background:var(--orange);color:#fff;cursor:pointer;min-height:48px">{{ t.tick_code_btn }}</button></div>
+  </form>{% endif %}
+</div></div>
+{% endblock %}

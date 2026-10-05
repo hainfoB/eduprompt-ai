@@ -29,7 +29,8 @@
         {% if m.code_in %}<span class="st st-present">{{ t.ctl_code_in }} <b style="font-size:16px;letter-spacing:3px">{{ m.code_in }}</b></span>
         {% if s.check_mode == 'inout' %}<span class="st st-late">{{ t.ctl_code_out }} <b style="font-size:16px;letter-spacing:3px">{{ m.code_out }}</b></span>{% endif %}{% endif %}
         <button class="co-btn sm ghost" type="submit">{{ t.ctl_gen }}</button></form>
-      <div class="co-note">{{ t.ctl_codes_hint }}</div></div>
+      <div class="co-row" style="margin-top:8px"><input class="co-input" readonly value="{{ presence_url }}" style="direction:ltr;text-align:start;flex:1;min-width:200px" onclick="this.select()"><a class="co-btn sm" target="_blank" href="{{ presence_url }}">{{ t.ctl_open }}</a></div>
+      <div class="co-note">{{ t.ctl_codes_hint }} {{ t.ctl_presence_link }}</div></div>
   </div>
   <div class="co-card" style="margin-bottom:14px">
     <h3><i class="bi bi-list-check" style="color:var(--orange)"></i> {{ t.sess_slots_title }}</h3>

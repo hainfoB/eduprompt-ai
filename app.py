@@ -3879,7 +3879,7 @@ def admin_session_attendance(session_id, meeting_id):
                              for x in slot_presence(m, att.get(e.id), s, slots)))
         summary.append({**sl, "present": present})
     return render_template("admin_attendance.html", s=s, m=m, enrollments=enrollments, att=att, slots=slots,
-                           summary=summary, scan_url=f"{APP_URL}/scan/{m.scan_token}", room_url=f"{APP_URL}/room/{m.room_token}")
+                           summary=summary, presence_url=f"{APP_URL}/formation/{s.slug}/presence", scan_url=f"{APP_URL}/scan/{m.scan_token}", room_url=f"{APP_URL}/room/{m.room_token}")
 
 
 @app.route("/admin/sessions/<int:session_id>/enrollments.xlsx")
@@ -4093,6 +4093,39 @@ def formation_ticket_code(token):
         ok, key, info = do_checkin(m, enr, direction, "code")
         flash(_scan_msg(key, info), "success" if ok else "error")
     return redirect(url_for("formation_ticket", token=token))
+
+
+@app.route("/formation/<slug>/presence", methods=["GET", "POST"])
+@limiter.limit("60/hour", methods=["POST"])
+def formation_presence(slug):
+    """One shared link for online sessions: email + the code announced in the chat."""
+    s = TrainingSession.query.filter_by(slug=slug).first_or_404()
+    if s.status == "draft":
+        abort(404)
+    result = None
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        code = re.sub(r"\D", "", request.form.get("code", ""))[:4]
+        enr = Enrollment.query.filter_by(session_id=s.id, email=email).first() if _EMAIL_RE.match(email) else None
+        if enr:
+            _ticket_lang(enr)
+        m, direction = None, None
+        if len(code) == 4:
+            for cand in s.meetings.filter_by(day=_local_now().date()):
+                if cand.code_in == code:
+                    m, direction = cand, "in"
+                elif cand.code_out == code and s.check_mode == "inout":
+                    m, direction = cand, "out"
+        if not enr:
+            result = ("error", _scan_msg("unknown_email"))
+        elif not m:
+            result = ("error", tr("scan_bad_code"))
+        else:
+            ok, key, info = do_checkin(m, enr, direction, "code")
+            result = ("success" if ok else "error", _scan_msg(key, info))
+            if ok:
+                session["ck_email"] = email
+    return render_template("formation_presence.html", s=s, result=result, email=request.form.get("email", session.get("ck_email", "")))
 
 
 @app.route("/scan/<scan_token>")

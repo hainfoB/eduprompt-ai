@@ -188,5 +188,10 @@ _AR += ['تم تسجيل الدخول على الساعة {t}', 'تم تسجيل
         'دخول', 'خروج', 'خروج غير مسجَّل', 'جزئي', 'تصحيح الأوقات (HH:MM)', 'تصدير الحضور حسب الفترة', 'الساعات حسب الفترة',
         'فترة غير صالحة: أدخل بداية ونهاية (HH:MM) مع نهاية بعد البداية.', 'تم توليد الرموز.', 'تذكرة حضوري']
 
+_K += ['ctl_presence_link']
+_FR += ['Collez ce lien unique dans le chat avec le code : les participants y saisissent leur e-mail d’inscription et le code.']
+_EN += ['Paste this single link in the chat along with the code: participants enter their registration email and the code.']
+_AR += ['الصق هذا الرابط الموحَّد في الدردشة مع الرمز: يُدخل المشاركون بريدهم المسجَّل والرمز.']
+
 assert len(_K) == len(_FR) == len(_EN) == len(_AR), (len(_K), len(_FR), len(_EN), len(_AR))
 SESSION_TR = {"fr": dict(zip(_K, _FR)), "en": dict(zip(_K, _EN)), "ar": dict(zip(_K, _AR))}
