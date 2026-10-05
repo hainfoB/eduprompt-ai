@@ -1,0 +1,13 @@
+<!doctype html><html lang="{{ lang }}" dir="{{ 'rtl' if is_rtl else 'ltr' }}"><head><meta charset="utf-8"><title>{{ t.pay_receipt_title }} {{ p.receipt_no }}</title>
+<style>body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:#0b2545;margin:0;padding:32px;background:#fff}.box{max-width:640px;margin:0 auto;border:2px solid #0b2545;border-radius:16px;padding:32px}
+h1{margin:0 0 4px;font-size:24px}.sub{color:#f97316;font-weight:800;margin-bottom:22px}.row{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-top:1px solid #e5e7eb;font-size:15px}.row span{color:#6b7280}.amt{font-size:28px;font-weight:900;color:#f97316;text-align:center;margin:20px 0}
+.sig{margin-top:40px;display:flex;justify-content:space-between;font-size:13px;color:#6b7280}.noprint{text-align:center;margin-bottom:18px}@media print{.noprint{display:none}body{padding:0}}</style></head><body>
+<div class="noprint"><button onclick="window.print()" style="background:#f97316;color:#fff;border:none;border-radius:10px;padding:12px 24px;font-weight:800;font-size:15px;cursor:pointer">{{ t.pay_receipt_print }}</button></div>
+<div class="box"><h1>{{ t.pay_receipt_title }}</h1><div class="sub">{{ t.pay_receipt_of }} {{ p.receipt_no }}</div>
+  <div class="row"><span>{{ t.pay_received_from }}</span><b>{{ enr.full_name }}</b></div>
+  <div class="row"><span>{{ t.pay_for }}</span><b>{{ s.title }}</b></div>
+  <div class="row"><span>{{ t.pay_col_n }}</span><b>{{ p.number }} / {{ total }}</b></div>
+  <div class="row"><span>{{ t.pay_paid_on }}</span><b>{{ p.paid_on.strftime('%d/%m/%Y') if p.paid_on }}</b></div>
+  <div class="row"><span>{{ t.pay_method }}</span><b>{{ t['pay_method_' ~ (p.method or 'other')] }}</b></div>
+  <div class="amt">{{ p.amount|da }}</div>
+  <div class="sig"><span>{{ s.trainer or '' }}</span><span>HaithemEduAI</span></div></div></body></html>

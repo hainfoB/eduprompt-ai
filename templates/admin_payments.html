@@ -1,119 +1,44 @@
 {% extends "base.html" %}
-{% block title %}{{ t.nav_payments }} — HaithemEduAI{% endblock %}
-{% block extra_head %}
-<style>
-.adm-wrap{max-width:1000px;margin:32px auto;padding:0 max(4vw,16px)}
-.adm-header h1{font-size:22px;font-weight:800;color:var(--navy);margin:0 0 20px}
-.tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
-.tab{padding:9px 16px;border-radius:9px;font-size:12.5px;font-weight:700;color:var(--muted);background:var(--sky);text-decoration:none}
-.tab.active{background:var(--navy);color:#fff}
-.search-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:14px 16px;margin-bottom:18px;display:flex;gap:10px}
-.search-card input{flex:1;border:1.5px solid var(--line);border-radius:10px;padding:9px 12px;font-size:13px}
-.btn-search{background:var(--navy);color:#fff;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer}
-
-.req-card{background:var(--paper);border-radius:14px;box-shadow:var(--shadow);padding:18px 20px;margin-bottom:14px}
-.req-top{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px}
-.req-num{color:var(--muted);font-weight:700;font-size:12px;margin-inline-end:8px}
-.req-name{font-weight:800;color:var(--navy);font-size:14px}
-.req-email{color:var(--muted);font-size:12px}
-.plan-tag{padding:3px 10px;border-radius:7px;font-size:11px;font-weight:800;display:inline-block}
-.plan-pro{background:#ecfdf5;color:#065f46}
-.plan-ultimate{background:#f5f3ff;color:#6d28d9}
-.status-tag{padding:3px 10px;border-radius:7px;font-size:10px;font-weight:800}
-.status-pending{background:#fff7ed;color:#c2410c}
-.status-approved{background:#ecfdf5;color:#065f46}
-.status-rejected{background:#fef2f2;color:var(--red)}
-.req-details{font-size:12.5px;color:var(--ink);background:var(--ivory);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:6px}
-.req-details b{color:var(--navy)}
-.req-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.act-approve{background:#10b981;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:700;cursor:pointer}
-.act-reject{background:#fef2f2;color:var(--red);border:none;border-radius:9px;padding:9px 16px;font-size:12.5px;font-weight:700;cursor:pointer}
-.act-reject-input{border:1.5px solid var(--line);border-radius:9px;padding:9px 12px;font-size:12.5px;flex:1;min-width:180px}
-.act-days select{border:1.5px solid var(--line);border-radius:9px;padding:9px 10px;font-size:12.5px}
-.reviewed-note{font-size:11.5px;color:var(--muted);margin-top:8px}
-.empty-state{text-align:center;padding:40px;color:var(--muted);font-size:13px}
-.pager{display:flex;justify-content:center;gap:6px;padding:16px;flex-wrap:wrap}
-.pager a,.pager span{padding:7px 12px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;color:var(--navy);background:var(--sky)}
-.pager .current{background:var(--navy);color:#fff}
-</style>
-{% endblock %}
+{% block title %}{{ t.pay_title }}{% endblock %}
+{% block extra_head %}{% include "_admin_ui_css.html" %}
+<style>.pay-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 0;border-top:1px solid var(--line);font-size:13px}.pay-row .n{width:26px;font-weight:800;color:var(--muted)}
+.pay-row form{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0}.pay-row select,.pay-row input{border:1px solid var(--line);border-radius:8px;padding:6px;font-size:12px}
+.stp{padding:3px 10px;border-radius:99px;font-size:11px;font-weight:800}.stp-paid{background:#dcfce7;color:#15803d}.stp-due{background:var(--sky);color:var(--navy)}.stp-overdue{background:#fee2e2;color:#b91c1c}.stp-waived{background:#f3f4f6;color:#6b7280}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}.kpi{background:var(--sky);border-radius:12px;padding:12px 14px;font-size:12px;color:var(--muted)}.kpi b{display:block;font-size:20px;color:var(--navy);margin-top:2px}</style>{% endblock %}
 {% block content %}
-<div class="adm-wrap">
-  <div class="adm-header"><h1><i class="bi bi-cash-coin"></i> {{ t.nav_payments }}</h1></div>
-
-  <div class="tabs">
-    <a class="tab {% if status_filter=='pending' %}active{% endif %}" href="{{ url_for('admin_payments', status='pending') }}">{{ t.status_pending }}</a>
-    <a class="tab {% if status_filter=='approved' %}active{% endif %}" href="{{ url_for('admin_payments', status='approved') }}">{{ t.status_approved }}</a>
-    <a class="tab {% if status_filter=='rejected' %}active{% endif %}" href="{{ url_for('admin_payments', status='rejected') }}">{{ t.status_rejected }}</a>
-  </div>
-
-  <form class="search-card" method="GET">
-    <input type="hidden" name="status" value="{{ status_filter }}"/>
-    <input type="text" name="q" value="{{ q }}" placeholder="{{ t.search_placeholder_teacher }}"/>
-    <button type="submit" class="btn-search"><i class="bi bi-search"></i></button>
-  </form>
-
-  {% if pager.items %}
-  {% for r in pager.items %}
-  <div class="req-card">
-    <div class="req-top">
-      <div>
-        <span class="req-num">{{ (pager.page - 1) * pager.per_page + loop.index }}</span>
-        <span class="req-name">{{ r.user.full_name }}</span> · <span class="req-email">{{ r.user.email }}</span>
-      </div>
-      <div style="display:flex;gap:8px">
-        <span class="plan-tag plan-{{ r.plan }}">{{ r.plan|upper }}</span>
-        <span class="status-tag status-{{ r.status }}">{{ r.status_label() }}</span>
-      </div>
-    </div>
-    <div class="req-details">
-      <div><b>{{ t.label_amount_claimed }}:</b> {{ r.amount_claimed }} DA</div>
-      <div><b>{{ t.label_payment_method }}:</b> {{ r.method_label() }}</div>
-      <div><b>{{ t.label_reference }}:</b> {{ r.reference or "—" }}</div>
-      <div><b>{{ t.table_date }}:</b> {{ r.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
-      {% if r.receipt_number %}<div><b>{{ t.table_receipt_number }}:</b> {{ r.receipt_number }}</div>{% endif %}
-      {% if r.receipt_path %}
-      <div><a href="{{ url_for('admin_view_receipt', req_id=r.id) }}" target="_blank" style="color:var(--navy);font-weight:700;text-decoration:none"><i class="bi bi-image-fill"></i> {{ t.label_view_receipt }}</a></div>
-      {% endif %}
-      {% if r.note %}<div style="grid-column:1/-1"><b>{{ t.label_note }}:</b> {{ r.note }}</div>{% endif %}
-    </div>
-
-    {% if r.status == 'pending' %}
-    <div class="req-actions">
-      <form method="POST" action="{{ url_for('admin_approve_payment', req_id=r.id) }}" style="display:flex;gap:8px;align-items:center">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="act-days">
-          <select name="days">
-            <option value="30">+30 {{ t.days_suffix }}</option>
-            <option value="365" selected>+365 {{ t.days_suffix }}</option>
-          </select>
-        </div>
-        <button type="submit" class="act-approve"><i class="bi bi-check-circle-fill"></i> {{ t.btn_approve }}</button>
-      </form>
-      <form method="POST" action="{{ url_for('admin_reject_payment', req_id=r.id) }}" style="display:flex;gap:8px;flex:1;min-width:220px" onsubmit="return confirm('{{ t.confirm_reject_payment }}')">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="text" name="reason" class="act-reject-input" placeholder="{{ t.label_rejection_reason }}"/>
-        <button type="submit" class="act-reject"><i class="bi bi-x-circle-fill"></i> {{ t.btn_reject }}</button>
-      </form>
-    </div>
-    {% else %}
-    <div class="reviewed-note">
-      {{ t.label_reviewed_by }} {{ r.reviewer.full_name if r.reviewer else "—" }} · {{ r.reviewed_at.strftime('%d/%m/%Y %H:%M') if r.reviewed_at else "" }}
-      {% if r.admin_note %} · {{ r.admin_note }}{% endif %}
-    </div>
-    {% endif %}
-  </div>
-  {% endfor %}
-  {% if pager.pages > 1 %}
-  <div class="pager">
-    {% for p in range(1, pager.pages + 1) %}
-      {% if p == pager.page %}<span class="current">{{ p }}</span>
-      {% else %}<a href="{{ url_for('admin_payments', q=q, status=status_filter, page=p) }}">{{ p }}</a>{% endif %}
-    {% endfor %}
-  </div>
-  {% endif %}
+<div class="co-wrap">
+  <div class="co-head"><h1><i class="bi bi-cash-coin" style="color:var(--orange)"></i> {{ s.title }} · {{ t.pay_title }}</h1>
+    <a href="{{ url_for('admin_session_detail', session_id=s.id) }}" class="co-pill"><i class="bi bi-arrow-left-short"></i> {{ s.title }}</a></div>
+  {% if s.is_free or not s.price_total %}<div class="co-card"><div class="co-note">{{ t.pay_free }}</div></div>
   {% else %}
-  <div class="empty-state">{{ t.empty_payments }}</div>
+  <p class="co-sub">{{ s.price_total|da }} · {{ s.installments }} {{ t.sess_payments }}</p>
+  <div class="kpis"><div class="kpi">{{ t.pay_expected }}<b>{{ tot.expected|da }}</b></div><div class="kpi">{{ t.pay_collected }}<b style="color:#15803d">{{ tot.collected|da }}</b></div>
+    <div class="kpi">{{ t.pay_remaining }}<b>{{ tot.remaining|da }}</b></div><div class="kpi">{{ t.pay_overdue }}<b style="color:#b91c1c">{{ tot.overdue|da }}</b></div></div>
+  <div class="co-row" style="margin-bottom:12px"><a class="co-pill" href="{{ url_for('admin_session_payments_export', session_id=s.id) }}"><i class="bi bi-file-earmark-excel"></i> {{ t.pay_export }}</a>
+    <span class="co-note" style="margin:0">{{ t.pay_reminders_note }}</span></div>
+  {% for r in rows %}{% set e = r.enr %}
+  <div class="co-card" id="e{{ e.id }}" style="margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><b>{{ e.full_name }}</b>
+      <span style="font-size:12px;color:var(--muted)">{{ t.pay_collected }} <b>{{ r.paid|da }}</b> / {{ r.expected|da }}{% if r.overdue %} · <b style="color:#b91c1c">{{ t.pay_overdue }} {{ r.overdue|da }}</b>{% endif %}</span></div>
+    {% for p in r.pays %}{% set st = state(p, today) %}
+    <div class="pay-row"><span class="n">{{ p.number }}</span><span style="direction:ltr">{{ p.due_on.strftime('%d/%m/%Y') }}</span><b>{{ p.amount|da }}</b><span class="stp stp-{{ st }}">{{ t['pay_st_' ~ st] }}</span>
+      {% if p.status == 'paid' %}<span style="color:var(--muted)">{{ p.paid_on.strftime('%d/%m/%Y') if p.paid_on }} · {{ t['pay_method_' ~ (p.method or 'other')] }} · {{ p.receipt_no }}</span>
+        <a class="co-btn sm ghost" target="_blank" style="text-decoration:none" href="{{ url_for('admin_session_receipt', session_id=s.id, payment_id=p.id) }}"><i class="bi bi-printer"></i> {{ t.pay_receipt_print }}</a>
+        <form method="POST" action="{{ url_for('admin_session_payment_action', session_id=s.id, payment_id=p.id) }}" onsubmit="return confirm('{{ t.sess_confirm_del }}')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="undo"><button class="co-btn sm ghost" type="submit">{{ t.pay_undo }}</button></form>
+      {% elif p.status == 'waived' %}<form method="POST" action="{{ url_for('admin_session_payment_action', session_id=s.id, payment_id=p.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="undo"><button class="co-btn sm ghost" type="submit">{{ t.pay_undo }}</button></form>
+      {% else %}
+        <form method="POST" action="{{ url_for('admin_session_payment_action', session_id=s.id, payment_id=p.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="paid">
+          <select name="method">{% for mth in methods %}<option value="{{ mth }}">{{ t['pay_method_' ~ mth] }}</option>{% endfor %}</select>
+          <input type="date" name="paid_on" value="{{ today }}"><input name="receipt_no" maxlength="30" placeholder="{{ t.pay_receipt_no }}" style="width:150px">
+          <label style="font-size:11px"><input type="checkbox" name="notify" value="1" checked> {{ t.pay_notify }}</label>
+          <button class="co-btn sm green" type="submit">{{ t.pay_mark_paid }}</button></form>
+        <form method="POST" action="{{ url_for('admin_session_payment_action', session_id=s.id, payment_id=p.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="waive"><button class="co-btn sm ghost" type="submit">{{ t.pay_waive }}</button></form>
+      {% endif %}</div>
+    {% else %}<div class="co-note">—</div>{% endfor %}
+    <form method="POST" action="{{ url_for('admin_session_payment_regen', session_id=s.id, enrollment_id=e.id) }}" style="margin-top:8px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="co-btn sm ghost" type="submit"><i class="bi bi-arrow-repeat"></i> {{ t.pay_regen }}</button> <span class="co-note" style="display:inline;margin:0">{{ t.pay_regen_hint }}</span></form>
+  </div>
+  {% else %}<div class="co-card"><div class="co-note">{{ t.pay_none }}</div></div>{% endfor %}
   {% endif %}
 </div>
 {% endblock %}

@@ -25,6 +25,14 @@
       <div><button type="submit" style="margin-top:12px;border:none;border-radius:12px;padding:13px 26px;font-size:15px;font-weight:800;background:var(--orange);color:#fff;cursor:pointer;min-height:46px">{{ t.tick_code_btn }}</button></div>
     </form>
   </div>{% endif %}
+  {% if pays %}
+  <div style="background:var(--paper);border-radius:16px;box-shadow:var(--shadow2);padding:22px;margin-top:16px">
+    <h2 style="font-size:17px;color:var(--navy);margin:0 0 10px"><i class="bi bi-cash-coin" style="color:var(--orange)"></i> {{ t.pay_my }}</h2>
+    {% for p, st in pays %}<div style="display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:13px;flex-wrap:wrap">
+      <span>{{ p.number }}/{{ pays|length }} · <span style="direction:ltr;display:inline-block">{{ p.due_on.strftime('%d/%m/%Y') }}</span></span><b>{{ p.amount|da }}</b>
+      <b style="color:{{ '#15803d' if st == 'paid' else ('#b91c1c' if st == 'overdue' else 'var(--muted)') }}">{{ t['pay_st_' ~ st] }}</b></div>{% endfor %}
+    {% if s.payment_info %}<div style="margin-top:10px;background:var(--sky);border-radius:10px;padding:10px 12px;font-size:12px;white-space:pre-line">{{ s.payment_info }}</div>{% endif %}
+  </div>{% endif %}
   {% if enr.status == 'confirmed' and meetings %}
   <div style="background:var(--paper);border-radius:16px;box-shadow:var(--shadow2);padding:22px;margin-top:16px">
     <h2 style="font-size:17px;color:var(--navy);margin:0 0 10px">{{ t.tick_history }}</h2>

@@ -37,7 +37,7 @@ from flask_limiter.util import get_remote_address
 from models import (db, User, Subscription, Document, LicenseCode, Payment, Message,
                      PaymentRequest, AdminLog, PlanChangeHistory, FunnelEvent, GenerationError,
                      PLAN_PRICES, PAYMENT_METHODS, PASS_TYPES, Cohort,
-                     TrainingSession, SessionMeeting, Enrollment, Attendance, SessionVisit, SessionSlot, SESSION_STATUSES,
+                     TrainingSession, SessionMeeting, Enrollment, Attendance, SessionVisit, SessionSlot, SessionPayment, SESSION_STATUSES,
                      create_trial_subscription, next_receipt_number)
 from werkzeug.utils import secure_filename
 from utils import build_sources_context
@@ -282,6 +282,7 @@ def _migrate_sqlite_schema():
                 "method": "VARCHAR(12)",
             },
             "training_session": {
+                "payment_info": "TEXT",
                 "check_mode": "VARCHAR(5) DEFAULT 'in'",
                 "group_url": "VARCHAR(300)",
                 "min_attendance": "INTEGER DEFAULT 80",
@@ -695,6 +696,7 @@ def _pass_jobs():
         send_credentials_batch()
         check_passes()
         send_session_reminders()
+        send_payment_reminders()
     except Exception as e:  # never crash the scheduler
         print(f"⚠️  Training pass jobs failed: {e}")
 
@@ -3355,6 +3357,8 @@ def _send_enrollment_email(enr, kind):
     try:
         s = enr.session
         confirmed = kind in ("confirmed", "promoted")
+        if confirmed:
+            ensure_schedule(enr)
         link = s.online_url if (confirmed and s.mode != "onsite") else ""
         cal = _calendar_links(enr) if confirmed else ("", "")
         extra = {"group": s.group_url if confirmed else "", "gcal": cal[0], "ics": cal[1],
@@ -3642,6 +3646,7 @@ def _apply_session_form(s, form):
         v = form.get(field, "").strip()
         setattr(s, field, v if re.match(r"^([01]\d|2[0-3]):[0-5]\d$", v) else None)
     s.check_mode = "inout" if form.get("check_mode") == "inout" else "in"
+    s.payment_info = form.get("payment_info", "").strip()[:1000] or None
     s.trainer = form.get("trainer", "").strip()[:120] or None
     s.audience = form.get("audience", "").strip()[:200] or None
     s.programme = form.get("programme", "").strip()[:6000] or None
@@ -3949,6 +3954,225 @@ def admin_session_slots_export(session_id):
     return _xlsx_response(rows, f"creneaux_{safe}.xlsx", [18, 18, 30] + [22] * len(cols) + [14])
 
 
+# ── Paid sessions: instalments, follow-up, reminders ─────────────────────────────────────────────
+PAY_METHODS = ("cash", "transfer", "ccp", "baridimob", "other")
+REMINDER_STAGES = ("b3", "d0", "a3", "a10")
+
+
+def _add_months(d, k):
+    import calendar
+    y, m = divmod(d.month - 1 + k, 12)
+    y, m = d.year + y, m + 1
+    return date(y, m, min(d.day, calendar.monthrange(y, m)[1]))
+
+
+def fmt_da(n):
+    return f"{int(n or 0):,}".replace(",", " ") + " DA"
+
+
+app.jinja_env.filters["da"] = fmt_da
+
+
+def ensure_schedule(enr, force=False):
+    """Create the instalment schedule of a confirmed enrollment in a paid session (idempotent)."""
+    s = enr.session
+    if s.is_free or not s.price_total:
+        return False
+    if enr.payments.count():
+        if not force:
+            return False
+        for old in enr.payments.all():
+            db.session.delete(old)
+        db.session.flush()
+    n = max(1, min(s.installments or 1, 36))
+    base, rest = divmod(s.price_total, n)
+    first_meeting = s.meetings.first()
+    start = max((first_meeting.day if first_meeting else s.starts_on) or _local_now().date(), _local_now().date())
+    for k in range(n):
+        db.session.add(SessionPayment(enrollment_id=enr.id, number=k + 1, due_on=_add_months(start, k),
+                                      amount=base + (rest if k == 0 else 0)))
+    db.session.commit()
+    return True
+
+
+def payment_state(p, today=None):
+    today = today or _local_now().date()
+    if p.status in ("paid", "waived"):
+        return p.status
+    return "overdue" if p.due_on < today else "due"
+
+
+def payment_summary(s):
+    """Per confirmed enrollment: instalments, paid, remaining, overdue amounts."""
+    today = _local_now().date()
+    rows, tot = [], {"expected": 0, "collected": 0, "overdue": 0}
+    for e in s.enrollments.filter_by(status="confirmed").order_by(Enrollment.last_name, Enrollment.first_name):
+        pays = e.payments.all()
+        exp = sum(p.amount for p in pays if p.status != "waived")
+        paid = sum(p.amount for p in pays if p.status == "paid")
+        over = sum(p.amount for p in pays if payment_state(p, today) == "overdue")
+        rows.append({"enr": e, "pays": pays, "expected": exp, "paid": paid, "remaining": exp - paid, "overdue": over})
+        tot["expected"] += exp
+        tot["collected"] += paid
+        tot["overdue"] += over
+    tot["remaining"] = tot["expected"] - tot["collected"]
+    return rows, tot
+
+
+def _reminder_stage(p, today):
+    days = (p.due_on - today).days
+    if days > 3:
+        return None
+    if days > 0:
+        return "b3"
+    if days > -3:
+        return "d0"
+    if days > -10:
+        return "a3"
+    return "a10"
+
+
+def _pay_email(enr, p, kind):
+    from notifications import send_email
+    from email_templates import payment_email
+    s = enr.session
+    total = enr.payments.count()
+    subject, html, text = payment_email(enr.lang or "fr", enr.first_name, kind, s.title, p.number, total,
+                                        fmt_da(p.amount), p.due_on.strftime("%d/%m/%Y"),
+                                        f"{APP_URL}/formation/ticket/{enr.token}", s.payment_info or "",
+                                        receipt=p.receipt_no or "", ar={"title": s.loc("title", "ar")})
+    return send_email(enr.email, subject, text, html)
+
+
+def send_payment_reminders():
+    """Before / on / after each due date. Only one email per instalment per stage, in daytime hours."""
+    now = _local_now()
+    if not 9 <= now.hour < 20:
+        return 0
+    sent = 0
+    with app.app_context():
+        q = (SessionPayment.query.join(Enrollment, SessionPayment.enrollment_id == Enrollment.id)
+             .join(TrainingSession, Enrollment.session_id == TrainingSession.id)
+             .filter(SessionPayment.status == "due", Enrollment.status == "confirmed",
+                     TrainingSession.status != "draft", SessionPayment.due_on <= now.date() + timedelta(days=3)))
+        for p in q.limit(100).all():
+            stage = _reminder_stage(p, now.date())
+            done = set(filter(None, (p.reminders or "").split(",")))
+            if not stage or stage in done:
+                continue
+            try:
+                ok = _pay_email(p.enrollment, p, stage)
+            except Exception as e:
+                print(f"⚠️  Payment reminder failed: {e}")
+                ok = False
+            if ok:
+                idx = REMINDER_STAGES.index(stage)
+                p.reminders = ",".join(REMINDER_STAGES[:idx + 1])
+                p.last_reminder = datetime.utcnow()
+                sent += 1
+        db.session.commit()
+    if sent:
+        print(f"✅ Payment reminders sent: {sent}")
+    return sent
+
+
+@app.route("/admin/sessions/<int:session_id>/payments")
+@login_required
+def admin_session_payments(session_id):
+    denied = _admin_only()
+    if denied:
+        return denied
+    s = TrainingSession.query.get_or_404(session_id)
+    rows, tot = payment_summary(s)
+    return render_template("admin_payments.html", s=s, rows=rows, tot=tot, methods=PAY_METHODS,
+                           today=_local_now().date(), state=payment_state)
+
+
+@app.route("/admin/sessions/<int:session_id>/payments/<int:payment_id>", methods=["POST"])
+@login_required
+def admin_session_payment_action(session_id, payment_id):
+    denied = _admin_only()
+    if denied:
+        return denied
+    s = TrainingSession.query.get_or_404(session_id)
+    p = (SessionPayment.query.join(Enrollment).filter(SessionPayment.id == payment_id,
+                                                      Enrollment.session_id == s.id).first_or_404())
+    action = request.form.get("action", "")
+    back = redirect(url_for("admin_session_payments", session_id=s.id) + f"#e{p.enrollment_id}")
+    if action == "paid":
+        method = request.form.get("method", "cash")
+        p.method = method if method in PAY_METHODS else "other"
+        p.paid_on = _parse_date(request.form.get("paid_on")) or _local_now().date()
+        p.status = "paid"
+        p.receipt_no = request.form.get("receipt_no", "").strip()[:30] or f"REC-{s.id}-{p.id:04d}"
+        db.session.commit()
+        log_admin_action("session_payment_paid", target=s.title, details=f"{p.enrollment.email} #{p.number} {p.amount}")
+        if request.form.get("notify"):
+            _pay_email(p.enrollment, p, "received")
+        flash(tr("pay_flash_paid"), "success")
+    elif action == "undo":
+        p.status, p.paid_on, p.method, p.receipt_no = "due", None, None, None
+        db.session.commit()
+    elif action == "waive":
+        p.status = "waived"
+        db.session.commit()
+    return back
+
+
+@app.route("/admin/sessions/<int:session_id>/payments/regen/<int:enrollment_id>", methods=["POST"])
+@login_required
+def admin_session_payment_regen(session_id, enrollment_id):
+    denied = _admin_only()
+    if denied:
+        return denied
+    s = TrainingSession.query.get_or_404(session_id)
+    enr = Enrollment.query.filter_by(id=enrollment_id, session_id=s.id).first_or_404()
+    if enr.payments.filter(SessionPayment.status != "due").count():
+        flash(tr("pay_regen_blocked"), "error")
+    elif enr.status == "confirmed":
+        ensure_schedule(enr, force=True)
+        flash(tr("pay_flash_regen"), "success")
+    return redirect(url_for("admin_session_payments", session_id=s.id) + f"#e{enr.id}")
+
+
+@app.route("/admin/sessions/<int:session_id>/payments/<int:payment_id>/receipt")
+@login_required
+def admin_session_receipt(session_id, payment_id):
+    denied = _admin_only()
+    if denied:
+        return denied
+    s = TrainingSession.query.get_or_404(session_id)
+    p = (SessionPayment.query.join(Enrollment).filter(SessionPayment.id == payment_id,
+                                                      Enrollment.session_id == s.id, SessionPayment.status == "paid").first_or_404())
+    return render_template("session_receipt.html", s=s, p=p, enr=p.enrollment, total=p.enrollment.payments.count())
+
+
+@app.route("/admin/sessions/<int:session_id>/payments.xlsx")
+@login_required
+def admin_session_payments_export(session_id):
+    denied = _admin_only()
+    if denied:
+        return denied
+    s = TrainingSession.query.get_or_404(session_id)
+    rows_, tot = payment_summary(s)
+    n = max([len(r["pays"]) for r in rows_] or [0])
+    head = [tr("cohort_col_last"), tr("cohort_col_first"), tr("cohort_col_email"), tr("enr_phone")] + \
+           [f"#{i + 1}" for i in range(n)] + [tr("pay_expected"), tr("pay_collected"), tr("pay_remaining"), tr("pay_overdue")]
+    out = [head]
+    for r in rows_:
+        e = r["enr"]
+        cells = []
+        for i in range(n):
+            p = r["pays"][i] if i < len(r["pays"]) else None
+            cells.append("" if not p else f"{p.amount} · {p.due_on.strftime('%d/%m/%Y')} · " +
+                         (tr("pay_st_paid") + (f" {p.paid_on.strftime('%d/%m')}" if p.paid_on else "") if p.status == "paid"
+                          else tr("pay_st_" + payment_state(p))))
+        out.append([e.last_name, e.first_name, e.email, e.phone or ""] + cells +
+                   [r["expected"], r["paid"], r["remaining"], r["overdue"]])
+    safe = re.sub(r"[^A-Za-z0-9_-]+", "_", s.slug)[:40] or "formation"
+    return _xlsx_response(out, f"paiements_{safe}.xlsx", [18, 18, 30, 16] + [30] * n + [12, 12, 12, 12])
+
+
 @app.template_global()
 def seats_state(s):
     """'' (no limit) | 'limited' | 'few' (5 or fewer left) | 'full' — never reveals the exact number unless few."""
@@ -4068,8 +4292,9 @@ def formation_ticket(token):
     today_meeting = next((m for m in meetings if m.day == today), None)
     atts = {a.meeting_id: a for a in Attendance.query.filter_by(enrollment_id=enr.id)}
     qr = _qr_svg("EP1:" + enr.token, scale=7) if enr.status == "confirmed" else ""
+    pays = [(p, payment_state(p, today)) for p in enr.payments.all()] if enr.status == "confirmed" else []
     return render_template("formation_ticket.html", enr=enr, s=s, meetings=meetings, today_meeting=today_meeting,
-                           atts=atts, qr=qr)
+                           atts=atts, qr=qr, pays=pays)
 
 
 @app.route("/formation/ticket/<token>/code", methods=["POST"])

@@ -9,6 +9,7 @@
   </div>
   <p class="co-sub">{{ t.sess_free_label if s.is_free else (s.price_total ~ ' DA · ' ~ s.installments ~ ' ' ~ t.sess_payments) }}
     {% if s.seats %} · {{ t.sess_seats }}: {{ s.taken() }}/{{ s.seats }}{% endif %}</p>
+  {% if not s.is_free and s.price_total %}<p><a class="co-pill" href="{{ url_for('admin_session_payments', session_id=s.id) }}"><i class="bi bi-cash-coin"></i> {{ t.pay_title }}</a></p>{% endif %}
 
   <div class="co-card">
     <h3><i class="bi bi-link-45deg" style="color:var(--orange)"></i> {{ t.sess_public_link }}</h3>

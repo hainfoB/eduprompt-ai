@@ -350,3 +350,46 @@ def session_reminder_email(lang, name, title, when, place, yes_link, no_link, on
                           (f"\n{ENR[l]['ticket']}: {ticket_url}" if ticket_url else "") +
                           f"\n{c['cta']}: {yes_link}\n→ {no_link}")
     return subject, _wrap(subject, blocks), "\n\n".join(text_parts)
+
+
+PAYM = {
+    "fr": {"lbl_session": "Formation", "lbl_n": "Échéance", "lbl_amount": "Montant", "lbl_due": "Date limite", "lbl_receipt": "N° de reçu", "lbl_how": "Comment payer", "cta": "Voir mes paiements",
+           "b3": ("Rappel : échéance dans quelques jours · {title}", "{name}, une échéance arrive bientôt", "Un petit rappel : l’échéance {n}/{total} de la formation <b>{title}</b> arrive à échéance le <b>{due}</b> ({amount})."),
+           "d0": ("Échéance du jour · {title}", "{name}, votre échéance est due", "L’échéance {n}/{total} de la formation <b>{title}</b> est due : <b>{amount}</b>, au plus tard le <b>{due}</b>."),
+           "a3": ("Échéance en retard · {title}", "{name}, une échéance est en retard", "L’échéance {n}/{total} de <b>{title}</b> ({amount}, prévue le {due}) n’est pas encore réglée. Merci de régulariser dès que possible, ou de nous contacter si vous avez déjà payé."),
+           "a10": ("Dernier rappel : échéance impayée · {title}", "{name}, dernier rappel", "L’échéance {n}/{total} de <b>{title}</b> ({amount}, prévue le {due}) reste impayée. Merci de régulariser ou de nous contacter pour convenir d’une solution."),
+           "received": ("Paiement reçu · {title}", "{name}, merci : paiement enregistré", "Nous avons bien enregistré votre paiement de <b>{amount}</b> (échéance {n}/{total}) pour la formation <b>{title}</b>.")},
+    "ar": {"lbl_session": "التكوين", "lbl_n": "القسط", "lbl_amount": "المبلغ", "lbl_due": "آخر أجل", "lbl_receipt": "رقم الوصل", "lbl_how": "طريقة الدفع", "cta": "اطّلع على دفعاتي",
+           "b3": ("تذكير: قسط يحلّ أجله قريباً · {title}", "{name}، قسط يقترب أجله", "تذكير بسيط: القسط {n}/{total} من التكوين <b>{title}</b> يحلّ أجله يوم <b>{due}</b> ({amount})."),
+           "d0": ("موعد القسط اليوم · {title}", "{name}، حان موعد القسط", "حان موعد القسط {n}/{total} من التكوين <b>{title}</b>: <b>{amount}</b>، في أجل أقصاه <b>{due}</b>."),
+           "a3": ("قسط متأخر · {title}", "{name}، لديك قسط متأخر", "القسط {n}/{total} من <b>{title}</b> ({amount}، المقرر يوم {due}) لم يُسدَّد بعد. يرجى التسوية في أقرب وقت أو مراسلتنا إن كنت قد دفعت."),
+           "a10": ("تذكير أخير: قسط غير مسدَّد · {title}", "{name}، تذكير أخير", "القسط {n}/{total} من <b>{title}</b> ({amount}، المقرر يوم {due}) ما زال غير مسدَّد. يرجى التسوية أو التواصل معنا للاتفاق على حل."),
+           "received": ("تم استلام الدفعة · {title}", "{name}، شكراً: تم تسجيل دفعتك", "سجّلنا دفعتك بقيمة <b>{amount}</b> (القسط {n}/{total}) للتكوين <b>{title}</b>.")},
+    "en": {"lbl_session": "Training", "lbl_n": "Instalment", "lbl_amount": "Amount", "lbl_due": "Due date", "lbl_receipt": "Receipt no.", "lbl_how": "How to pay", "cta": "View my payments",
+           "b3": ("Reminder: instalment due soon · {title}", "{name}, an instalment is coming up", "A quick reminder: instalment {n}/{total} of <b>{title}</b> is due on <b>{due}</b> ({amount})."),
+           "d0": ("Instalment due today · {title}", "{name}, your instalment is due", "Instalment {n}/{total} of <b>{title}</b> is due: <b>{amount}</b>, by <b>{due}</b> at the latest."),
+           "a3": ("Overdue instalment · {title}", "{name}, an instalment is overdue", "Instalment {n}/{total} of <b>{title}</b> ({amount}, due {due}) has not been settled yet. Please pay as soon as possible, or contact us if you already did."),
+           "a10": ("Final reminder: unpaid instalment · {title}", "{name}, final reminder", "Instalment {n}/{total} of <b>{title}</b> ({amount}, due {due}) is still unpaid. Please settle it or contact us to agree on a solution."),
+           "received": ("Payment received · {title}", "{name}, thank you: payment recorded", "We recorded your payment of <b>{amount}</b> (instalment {n}/{total}) for <b>{title}</b>.")},
+}
+
+
+def payment_email(lang, name, kind, title, n, total, amount, due, link, how="", receipt="", ar=None):
+    ar = ar or {}
+    order = _order(lang)
+    subject = PAYM[order[0]][kind][0].format(title=(ar.get("title") or title) if order[0] == "ar" else title)
+    blocks, text_parts = "", []
+    for i, l in enumerate(order):
+        c = PAYM[l]
+        _, h, p = c[kind]
+        ttl = (ar.get("title") or title) if l == "ar" else title
+        rows = [(c["lbl_session"], ttl), (c["lbl_n"], f"{n} / {total}"), (c["lbl_amount"], amount), (c["lbl_due"], due)]
+        if receipt:
+            rows.append((c["lbl_receipt"], receipt))
+        paras = [p.format(title=escape(ttl), n=n, total=total, due=due, amount=amount)]
+        if how and kind != "received":
+            paras.append(f'<b>{c["lbl_how"]} :</b> ' + escape(how).replace("\n", "<br>"))
+        blocks += _simple_block(l, h.format(name=name), paras, rows, c["cta"], link, i == 0)
+        text_parts.append(h.format(name=name) + "\n" + p.format(title=ttl, n=n, total=total, due=due, amount=amount).replace("<b>", "").replace("</b>", "") +
+                          "".join(f"\n{k}: {v}" for k, v in rows[1:]) + (f"\n{c['lbl_how']}: {how}" if how and kind != "received" else "") + f"\n{link}")
+    return subject, _wrap(subject, blocks), "\n\n".join(text_parts)

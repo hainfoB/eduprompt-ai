@@ -458,6 +458,7 @@ class TrainingSession(db.Model):
     location      = db.Column(db.String(200), nullable=True)
     hours_total   = db.Column(db.Integer, default=0)
     seats         = db.Column(db.Integer, default=0)      # 0 = unlimited
+    payment_info = db.Column(db.Text, nullable=True)      # how to pay (CCP, BaridiMob, cash…), shown in reminders
     check_mode = db.Column(db.String(5), default="in")    # in = entry scan only | inout = entry and exit
     min_attendance = db.Column(db.Integer, default=80)    # % of held meetings needed for the certificate
     auto_confirm  = db.Column(db.Boolean, default=True)
@@ -597,6 +598,25 @@ class Attendance(db.Model):
     checkout_at   = db.Column(db.DateTime, nullable=True)    # UTC
     method        = db.Column(db.String(12), nullable=True)  # ticket | room | code | manual
     __table_args__ = (db.UniqueConstraint("meeting_id", "enrollment_id", name="uq_attendance"),)
+
+
+class SessionPayment(db.Model):
+    """One instalment of one enrollment in a paid session. status: due | paid | waived."""
+    id            = db.Column(db.Integer, primary_key=True)
+    enrollment_id = db.Column(db.Integer, db.ForeignKey("enrollment.id"), nullable=False, index=True)
+    number        = db.Column(db.Integer, nullable=False)        # 1..n
+    due_on        = db.Column(db.Date, nullable=False)
+    amount        = db.Column(db.Integer, nullable=False)        # DA
+    status        = db.Column(db.String(8), default="due", index=True)
+    paid_on       = db.Column(db.Date, nullable=True)
+    method        = db.Column(db.String(12), nullable=True)      # cash | transfer | ccp | baridimob | other
+    receipt_no    = db.Column(db.String(30), nullable=True)
+    reminders     = db.Column(db.String(40), default="")         # stages already sent, e.g. "b3,d0"
+    last_reminder = db.Column(db.DateTime, nullable=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    enrollment = db.relationship("Enrollment", backref=db.backref("payments", lazy="dynamic",
+                                 cascade="all, delete-orphan", order_by="SessionPayment.number"))
+    __table_args__ = (db.UniqueConstraint("enrollment_id", "number", name="uq_session_payment"),)
 
 
 class SessionVisit(db.Model):

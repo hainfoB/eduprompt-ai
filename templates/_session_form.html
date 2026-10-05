@@ -23,6 +23,7 @@
   <div><label class="co-label">{{ t.sess_location }} <span class="st st-waitlist">AR</span></label><input class="co-input" dir="rtl" name="location_ar" maxlength="300" value="{{ v.location_ar if v and v.location_ar else '' }}"></div>
   <div><label class="co-label">{{ t.sess_hours }}</label><input class="co-input" type="number" min="0" name="hours_total" value="{{ v.hours_total if v else 0 }}"></div>
   <div><label class="co-label">{{ t.sess_seats }}</label><input class="co-input" type="number" min="0" name="seats" value="{{ v.seats if v else 0 }}"><div class="co-note">{{ t.sess_seats_hint }}</div></div>
+  <div style="grid-column:1/-1"><label class="co-label">{{ t.pay_info }}</label><textarea class="co-input" name="payment_info" rows="2" maxlength="1000">{{ v.payment_info if v and v.payment_info else '' }}</textarea><div class="co-note">{{ t.pay_info_hint }}</div></div>
   <div><label class="co-label">{{ t.sess_check_mode }}</label><select class="co-input" name="check_mode">
       <option value="in" {% if not v or v.check_mode != 'inout' %}selected{% endif %}>{{ t.sess_check_in }}</option>
       <option value="inout" {% if v and v.check_mode == 'inout' %}selected{% endif %}>{{ t.sess_check_inout }}</option></select><div class="co-note">{{ t.sess_check_hint }}</div></div>

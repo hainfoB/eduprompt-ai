@@ -193,5 +193,26 @@ _FR += ['Collez ce lien unique dans le chat avec le code : les participants y sa
 _EN += ['Paste this single link in the chat along with the code: participants enter their registration email and the code.']
 _AR += ['الصق هذا الرابط الموحَّد في الدردشة مع الرمز: يُدخل المشاركون بريدهم المسجَّل والرمز.']
 
+_K += ['pay_title', 'pay_expected', 'pay_collected', 'pay_remaining', 'pay_overdue', 'pay_col_n', 'pay_col_due', 'pay_col_amount', 'pay_col_status',
+       'pay_st_due', 'pay_st_paid', 'pay_st_waived', 'pay_st_overdue', 'pay_mark_paid', 'pay_undo', 'pay_waive', 'pay_method', 'pay_method_cash', 'pay_method_transfer',
+       'pay_method_ccp', 'pay_method_baridimob', 'pay_method_other', 'pay_receipt_no', 'pay_paid_on', 'pay_notify', 'pay_regen', 'pay_regen_hint', 'pay_export',
+       'pay_free', 'pay_info', 'pay_info_hint', 'pay_none', 'pay_my', 'pay_receipt_print', 'pay_receipt_title', 'pay_flash_paid', 'pay_flash_regen', 'pay_regen_blocked',
+       'pay_reminders_note', 'pay_receipt_of', 'pay_received_from', 'pay_for']
+_FR += ['Suivi des paiements', 'Attendu', 'Encaissé', 'Reste à encaisser', 'En retard', 'N°', 'Échéance', 'Montant', 'Statut',
+        'À payer', 'Payé', 'Dispensé', 'En retard', 'Marquer payé', 'Annuler le paiement', 'Dispenser', 'Mode de paiement', 'Espèces', 'Virement',
+        'CCP', 'BaridiMob', 'Autre', 'N° de reçu (automatique si vide)', 'Payé le', 'Envoyer un e-mail de confirmation', 'Recalculer l’échéancier', 'Possible tant qu’aucun paiement n’est enregistré.', 'Exporter (Excel)',
+        'Cette session est gratuite : il n’y a pas de paiements à suivre.', 'Instructions de paiement', 'Affichées dans les rappels et sur la page du stagiaire. Ex. : CCP n° …, BaridiMob …, espèces à l’INSFP.', 'Aucun inscrit confirmé.', 'Mes paiements', 'Imprimer le reçu', 'Reçu de paiement', 'Paiement enregistré.', 'Échéancier recalculé.', 'Impossible : un paiement est déjà enregistré pour cette personne.',
+        'Rappels automatiques par e-mail : 3 jours avant l’échéance, le jour même, 3 jours après, puis 10 jours après.', 'Reçu n°', 'Reçu de', 'Pour']
+_EN += ['Payment tracking', 'Expected', 'Collected', 'Left to collect', 'Overdue', 'No.', 'Due date', 'Amount', 'Status',
+        'To pay', 'Paid', 'Waived', 'Overdue', 'Mark as paid', 'Undo payment', 'Waive', 'Payment method', 'Cash', 'Bank transfer',
+        'CCP', 'BaridiMob', 'Other', 'Receipt no. (automatic if empty)', 'Paid on', 'Send a confirmation email', 'Recalculate the schedule', 'Possible as long as no payment is recorded.', 'Export (Excel)',
+        'This session is free: there are no payments to track.', 'Payment instructions', 'Shown in the reminders and on the trainee’s page. E.g. CCP no. …, BaridiMob …, cash at the institute.', 'No confirmed registrant.', 'My payments', 'Print the receipt', 'Payment receipt', 'Payment recorded.', 'Schedule recalculated.', 'Not possible: a payment is already recorded for this person.',
+        'Automatic email reminders: 3 days before the due date, on the day, 3 days after, then 10 days after.', 'Receipt no.', 'Received from', 'For']
+_AR += ['متابعة الدفعات', 'المتوقَّع', 'المحصَّل', 'المتبقي للتحصيل', 'متأخر', 'الرقم', 'آخر أجل', 'المبلغ', 'الحالة',
+        'للدفع', 'مدفوع', 'معفى', 'متأخر', 'تسجيل كمدفوع', 'إلغاء الدفعة', 'إعفاء', 'طريقة الدفع', 'نقداً', 'تحويل بنكي',
+        'CCP', 'BaridiMob', 'أخرى', 'رقم الوصل (تلقائي إن تُرك فارغاً)', 'تاريخ الدفع', 'إرسال بريد تأكيد', 'إعادة حساب الجدول', 'ممكن ما دامت لم تُسجَّل أي دفعة.', 'تصدير (Excel)',
+        'هذا التكوين مجاني: لا توجد دفعات للمتابعة.', 'تعليمات الدفع', 'تظهر في التذكيرات وفي صفحة المتكوِّن. مثال: CCP رقم …، BaridiMob …، نقداً في المعهد.', 'لا يوجد مسجَّل مؤكَّد.', 'دفعاتي', 'طباعة الوصل', 'وصل دفع', 'تم تسجيل الدفعة.', 'تمت إعادة حساب الجدول.', 'غير ممكن: توجد دفعة مسجَّلة لهذا الشخص.',
+        'تذكيرات تلقائية بالبريد: قبل 3 أيام من الأجل، ويوم الأجل، وبعد 3 أيام، ثم بعد 10 أيام.', 'وصل رقم', 'استلمنا من', 'عن']
+
 assert len(_K) == len(_FR) == len(_EN) == len(_AR), (len(_K), len(_FR), len(_EN), len(_AR))
 SESSION_TR = {"fr": dict(zip(_K, _FR)), "en": dict(zip(_K, _EN)), "ar": dict(zip(_K, _AR))}
